@@ -512,7 +512,7 @@ export default function PatientForm() {
                             <Dialog>
                                 <DialogTrigger asChild>
                                 <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
-                                    <Dna className="mr-2 h-4 w-4" />
+                                    <Dna />
                                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Add Allergy</span>
                                 </Button>
                                 </DialogTrigger>
@@ -673,7 +673,7 @@ export default function PatientForm() {
                             router.push("/Patients");
                         }}
                         >
-                        <CircleX className="mr-2 h-4 w-4" />
+                        <CircleX />
                         <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Discard</span>
                         </Button>
                         <Button type="submit" disabled={isSubmitting}>
@@ -684,7 +684,7 @@ export default function PatientForm() {
                             </>
                         ) : (
                             <>
-                            <Send className="mr-2 h-4 w-4" />
+                            <Send />
                             Submit Form
                             </>
                         )}
