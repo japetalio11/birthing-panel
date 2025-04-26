@@ -1,0 +1,25 @@
+import { supabase } from '../client';
+import { PatientFormValues } from '@/components/dashboard/person/patients/PatientForm'
+
+export async function createPersonRecord(data: PatientFormValues) {
+    return await supabase
+    .from('person')
+    .insert({
+        first_name: data.firstName,
+        middle_name: data.middleName || null,
+        last_name: data.lastName,
+        birth_date: data.birthDate.toISOString().split('T')[0],
+        age: data.age,
+        contact_number: data.contactNumber,
+        citizenship: data.citizenship || null,
+        address: data.address || null,
+        ec_first_name: data.ecFirstName || null,
+        ec_middle_name: data.ecMiddleName || null,
+        ec_last_name: data.ecLastName || null,
+        ec_contact_number: data.ecContactNumber || null,
+        ec_relationship: data.ecRelationship || null,
+    })
+    .select('id')
+    .single();
+}
+
