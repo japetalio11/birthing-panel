@@ -265,7 +265,7 @@ export default function PatientForm() {
                                 <FormItem>
                                     <FormLabel>Birth Date</FormLabel>
                                     <FormControl>
-                                    <DatePicker date={field.value} onDateChange={field.onChange} />
+                                    <DatePicker value={field.value} onChange={field.onChange}/>
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -406,7 +406,7 @@ export default function PatientForm() {
                             <FormItem>
                                 <FormLabel>Last Menstrual Cycle</FormLabel>
                                 <FormControl>
-                                <DatePicker date={field.value} onDateChange={field.onChange} />
+                                <DatePicker value={field.value} onChange={field.onChange}/>
                                 </FormControl>
                             </FormItem>
                             )}
@@ -418,7 +418,7 @@ export default function PatientForm() {
                             <FormItem>
                                 <FormLabel>Expected Date of Confinement</FormLabel>
                                 <FormControl>
-                                <DatePicker date={field.value} onDateChange={field.onChange} />
+                                <DatePicker value={field.value} onChange={field.onChange}/>
                                 </FormControl>
                             </FormItem>
                             )}
@@ -562,7 +562,7 @@ export default function PatientForm() {
                                         if (!allergy || !severity) {
                                             toast("Error", {
                                                 description: "Please fill in all fields.",
-                                                variant: "destructive",
+                                                style: { color: "red" },
                                             });
                                             return;
                                         }
