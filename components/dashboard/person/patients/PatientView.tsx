@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import Allergy from "../Allergy";
+import SupplementRecommendation from "../SupplementRecommendation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
 Card,
@@ -323,6 +324,14 @@ export default function PatientView() {
                 <div className="pt-8">
                     <Allergy context="patient" id={id} />
                 </div>
+            </TabsContent>
+
+            <TabsContent value="appointments">
+                
+            </TabsContent>
+
+            <TabsContent value="supplements">
+                <SupplementRecommendation context='patient' id={id} />
             </TabsContent>
             </Tabs>
         </div>
