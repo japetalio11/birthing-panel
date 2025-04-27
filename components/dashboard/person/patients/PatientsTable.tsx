@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { createSearchParams, useNavigate } from "react-router-dom";
 import React, { useState, useEffect } from "react";
 import {
     Eye,
@@ -477,56 +478,54 @@ export default function PatientsTable() {
                         </CardHeader>
 
                         <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableCell>
-                                            <Checkbox
-                                                checked={
-                                                    filteredPatients.length > 0 &&
-                                                    selectedPatients.length === filteredPatients.length
-                                                }
-                                                onCheckedChange={(checked) =>
-                                                    setSelectedPatients(
-                                                        checked
-                                                            ? filteredPatients.map((p) => p.id)
-                                                            : []
-                                                    )
-                                                }
-                                            />
-                                        </TableCell>
-                                        <TableHead>Name</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead className="hidden sm:table-cell">
-                                            Last Appointment
-                                        </TableHead>
-                                        <TableHead className="hidden md:table-cell">
-                                            Birth Date
-                                        </TableHead>
-                                        <TableHead className="hidden md:table-cell">
-                                            Age
-                                        </TableHead>
-                                        <TableHead className="hidden md:table-cell">
-                                            Contact Number
-                                        </TableHead>
-                                        <TableHead className="hidden md:table-cell">
-                                            Home Address
-                                        </TableHead>
-                                        <TableHead>
-                                            <span className="sr-only">Actions</span>
-                                        </TableHead>
-                                    </TableRow>
-                                </TableHeader>
-
-                                <TableBody>
-                                    {filteredPatients.length === 0 ? (
+                            {filteredPatients.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                    No patients found.
+                                </p>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
                                         <TableRow>
-                                            <TableCell colSpan={7} className="text-center">
-                                                No patients found.
+                                            <TableCell>
+                                                <Checkbox
+                                                    checked={
+                                                        filteredPatients.length > 0 &&
+                                                        selectedPatients.length === filteredPatients.length
+                                                    }
+                                                    onCheckedChange={(checked) =>
+                                                        setSelectedPatients(
+                                                            checked
+                                                                ? filteredPatients.map((p) => p.id)
+                                                                : []
+                                                        )
+                                                    }
+                                                />
                                             </TableCell>
+                                            <TableHead>Name</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead className="hidden sm:table-cell">
+                                                Last Appointment
+                                            </TableHead>
+                                            <TableHead className="hidden md:table-cell">
+                                                Birth Date
+                                            </TableHead>
+                                            <TableHead className="hidden md:table-cell">
+                                                Age
+                                            </TableHead>
+                                            <TableHead className="hidden md:table-cell">
+                                                Contact Number
+                                            </TableHead>
+                                            <TableHead className="hidden md:table-cell">
+                                                Home Address
+                                            </TableHead>
+                                            <TableHead>
+                                                <span className="sr-only">Actions</span>
+                                            </TableHead>
                                         </TableRow>
-                                    ) : (
-                                        filteredPatients.map((patient) => (
+                                    </TableHeader>
+
+                                    <TableBody>
+                                        {filteredPatients.map((patient) => (
                                             <TableRow key={patient.id}>
                                                 <TableCell>
                                                     <Checkbox
@@ -648,10 +647,10 @@ export default function PatientsTable() {
                                                     </AlertDialog>
                                                 </TableCell>
                                             </TableRow>
-                                        ))
-                                    )}
-                                </TableBody>
-                            </Table>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
                         </CardContent>
                         <CardFooter>
                             <div className="text-xs text-muted-foreground">

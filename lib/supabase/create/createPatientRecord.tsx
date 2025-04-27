@@ -12,5 +12,7 @@ export async function createPatientRecord(data: PatientFormValues, personId: str
         expected_date_of_confinement: data.edc ? data.edc.toISOString().split('T')[0] : null,
         member: data.member || null,
         ssn: data.ssn || null,
+        occupation: data.occupation || null,
+        marital_status: data.maritalStatus || null,
     });
 }

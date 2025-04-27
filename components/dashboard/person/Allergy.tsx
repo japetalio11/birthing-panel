@@ -1,11 +1,11 @@
-"use client";
+    "use client";
 
-import React, { useState, useEffect } from "react";
-import { Dna, FilePenLine, MoreHorizontal, Search, Trash2 } from "lucide-react";
-import { useForm, useFieldArray, FormProvider } from "react-hook-form";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import {
+    import React, { useState, useEffect } from "react";
+    import { Dna, FilePenLine, MoreHorizontal, Search, Trash2 } from "lucide-react";
+    import { useForm, FormProvider } from "react-hook-form";
+    import { Button } from "@/components/ui/button";
+    import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+    import {
     Dialog,
     DialogContent,
     DialogDescription,
@@ -13,357 +13,440 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
-} from "@/components/ui/dialog";
-import {
+    } from "@/components/ui/dialog";
+    import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import {
+    } from "@/components/ui/select";
+    import { Input } from "@/components/ui/input";
+    import { Checkbox } from "@/components/ui/checkbox";
+    import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+    import {
     Table,
     TableBody,
     TableCell,
     TableHead,
     TableHeader,
     TableRow,
-} from "@/components/ui/table";
-import {
+    } from "@/components/ui/table";
+    import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { toast } from "sonner";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { supabase } from "@/lib/supabase/client";
+    } from "@/components/ui/dropdown-menu";
+    import { toast } from "sonner";
+    import { z } from "zod";
+    import { zodResolver } from "@hookform/resolvers/zod";
+    import { supabase } from "@/lib/supabase/client";
 
-type Props = {
+    type Props = {
     context: "patient";
-    id: string;
-};
-    // Define the form schema
-const formSchema = z.object({
+    id: string | null;
+    fields?: any[]; // From useFieldArray or passed from PatientView
+    append?: (allergy: any) => void;
+    remove?: (index: number) => void;
+    update?: (index: number, allergy: any) => void;
+    };
+
+    // Define the form schema for adding/editing allergies
+    const formSchema = z.object({
     name: z.string().min(1, "Allergy name is required"),
-    severity: z.string(),
-    allergies: z.array(
-        z.object({
-        id: z.string(),
-        name: z.string(),
-        severity: z.string()
-        })
-    )
-});
+    severity: z.string().min(1, "Severity is required"),
+    });
 
-type FormValues = z.infer<typeof formSchema>;
+    type FormValues = z.infer<typeof formSchema>;
 
-export default function Allergy({ context, id }: Props) {
+    export default function Allergy({ context, id, fields = [], append, remove, update }: Props) {
     const [openDialog, setOpenDialog] = useState(false);
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [allergiesData, setAllergiesData] = useState<any[]>([]);
+    const [fetchError, setFetchError] = useState<string | null>(null);
 
-    // Initialize form with react-hook-form
+    // Initialize form for adding/editing allergies
     const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
         name: "",
         severity: "",
-        allergies: [],
         },
     });
 
-    const { fields, append, remove, update } = useFieldArray({
-        control: form.control,
-        name: "allergies",
-    });
-
-    // Fetch allergies from Supabase
+    // Fetch allergies from Supabase if id is provided (existing patient)
     useEffect(() => {
         async function fetchAllergies() {
-        let query = supabase
-        .from("allergy")
-        .select("*")
-        .eq("patient_id", id);
-
-        const { data, error } = await query;
-        if (error) {
-            console.error(error);
-            toast("Error", {
-            description: "Failed to fetch allergies.",
-            });
-        } else {
-            setAllergiesData(data);
-            form.setValue("allergies", data.map((allergy: any) => ({
-            id: allergy.id,
-            name: allergy.name,
-            severity: allergy.severity,
-            })));
+        if (!id) {
+            setAllergiesData(fields); // Use passed fields for new patient or view mode
+            setFetchError(null);
+            return;
         }
-    }
+        try {
+            const { data, error } = await supabase
+            .from("allergy")
+            .select("*")
+            .eq("patient_id", id);
+
+            if (error) {
+            console.error("Allergy fetch error:", error);
+            setFetchError("Failed to fetch allergies.");
+            toast("Error", {
+                description: "Failed to fetch allergies.",
+            });
+            setAllergiesData([]);
+            } else {
+            console.log("Fetched allergies for patient_id", id, ":", data);
+            setAllergiesData(data);
+            setFetchError(null);
+            if (append) {
+                data.forEach((allergy: any) => {
+                append({ id: allergy.id, name: allergy.name, severity: allergy.severity });
+                });
+            }
+            }
+        } catch (err) {
+            console.error("Unexpected error fetching allergies:", err);
+            setFetchError("Unexpected error fetching allergies.");
+            toast("Error", {
+            description: "Unexpected error fetching allergies.",
+            });
+            setAllergiesData([]);
+        }
+        }
 
         fetchAllergies();
-    }, [context, id, form]);
+    }, [id, fields, append]);
 
     // Handle form submission for adding/editing allergies
-    const onSubmitAllergy = async (data: { name: string; severity: string }) => {
+    const onSubmitAllergy = async (data: FormValues) => {
+        if (!id && !append) {
+        toast("Error", {
+            description: "Cannot add allergy without form integration.",
+        });
+        return;
+        }
+
+        if (id) {
+        // Existing patient, save to Supabase
         if (editingIndex !== null) {
-        // Update existing allergy
-        const allergyToUpdate = fields[editingIndex];
-        const { error } = await supabase
+            // Update existing allergy
+            const allergyToUpdate = (fields.length > 0 ? fields : allergiesData)[editingIndex];
+            const { error } = await supabase
             .from("allergy")
             .update({
-            name: data.name,
-            severity: data.severity,
+                name: data.name,
+                severity: data.severity,
             })
             .eq("id", allergyToUpdate.id);
 
-        if (error) {
+            if (error) {
+            console.error("Allergy update error:", error);
             toast("Error", {
                 description: "Failed to update allergy.",
             });
             return;
-        }
+            }
 
-        update(editingIndex, {
-            id: allergyToUpdate.id,
-            name: data.name,
-            severity: data.severity
-        });
-        toast("Allergy Updated", {
-            description: "Allergy has been updated successfully.",
-        });
-        } else {
-        // Add new allergy
-        const { data: newAllergy, error } = await supabase
-            .from("allergy")
-            .insert([
-            {
-                patient_id: context === "patient" ? id : null,
+            if (update) {
+            update(editingIndex, {
+                id: allergyToUpdate.id,
                 name: data.name,
                 severity: data.severity,
-            },
+            });
+            } else {
+            setAllergiesData((prev) =>
+                prev.map((allergy, idx) =>
+                idx === editingIndex ? { ...allergy, name: data.name, severity: data.severity } : allergy
+                )
+            );
+            }
+            toast("Allergy Updated", {
+            description: "Allergy has been updated successfully.",
+            });
+        } else {
+            // Add new allergy
+            const { data: newAllergy, error } = await supabase
+            .from("allergy")
+            .insert([
+                {
+                patient_id: id,
+                name: data.name,
+                severity: data.severity,
+                },
             ])
             .select()
             .single();
 
-        if (error) {
+            if (error) {
+            console.error("Allergy insert error:", error);
             toast("Error", {
-            description: "Failed to add allergy.",
+                description: "Failed to add allergy.",
             });
             return;
-        }
+            }
 
-        append({
-            id: newAllergy.id,
-            name: data.name,
-            severity: data.severity
-        });
-        toast("Allergy Added", {
+            if (append) {
+            append({
+                id: newAllergy.id,
+                name: data.name,
+                severity: data.severity,
+            });
+            } else {
+            setAllergiesData((prev) => [...prev, newAllergy]);
+            }
+            toast("Allergy Added", {
             description: "New allergy has been added successfully.",
-        });
+            });
+        }
+        } else if (append) {
+        // New patient, append to form's allergies array
+        if (editingIndex !== null) {
+            // Update existing allergy in form
+            update!(editingIndex, {
+            name: data.name,
+            severity: data.severity,
+            });
+            toast("Allergy Updated", {
+            description: "Allergy has been updated successfully.",
+            });
+        } else {
+            // Add new allergy to form
+            append({
+            name: data.name,
+            severity: data.severity,
+            });
+            toast("Allergy Added", {
+            description: "New allergy has been added successfully.",
+            });
+        }
         }
 
-        form.reset({ name: "", severity: "", allergies: form.getValues("allergies") });
+        form.reset({ name: "", severity: "" });
         setOpenDialog(false);
         setEditingIndex(null);
     };
 
     // Handle allergy deletion
     const handleDelete = async (index: number) => {
-        const allergyToDelete = fields[index];
+        if (id) {
+        // Existing patient, delete from Supabase
+        const allergyToDelete = (fields.length > 0 ? fields : allergiesData)[index];
         const { error } = await supabase
-        .from("allergy")
-        .delete()
-        .eq("id", allergyToDelete.id);
+            .from("allergy")
+            .delete()
+            .eq("id", allergyToDelete.id);
 
         if (error) {
-        toast("Error", {
+            console.error("Allergy delete error:", error);
+            toast("Error", {
             description: "Failed to delete allergy.",
-        });
-        return;
+            });
+            return;
         }
 
+        setAllergiesData((prev) => prev.filter((_, idx) => idx !== index));
+        }
+
+        if (remove) {
         remove(index);
+        }
         toast("Allergy Deleted", {
         description: "Allergy has been removed from the list.",
         });
     };
 
+    // Handle edit action
+    const handleEdit = (index: number) => {
+        const allergy = (fields.length > 0 ? fields : allergiesData)[index];
+        form.setValue("name", allergy.name);
+        form.setValue("severity", allergy.severity);
+        setEditingIndex(index);
+        setOpenDialog(true);
+    };
+
+    // Determine which data to display
+    const displayAllergies = fields.length > 0 ? fields : allergiesData;
+
     return (
         <Card>
-            <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div className="space-y-1">
-                <CardTitle>Allergies</CardTitle>
-                <CardDescription>Identify your patient&apos;s allergies before it&apos;s too late</CardDescription>
-                </div>
-                <div className="relative flex items-center w-full max-w-sm md:w-auto">
-                <Search className="absolute left-2.5 top-2.5 mr-2 h-4 w-4 text-muted-foreground" />
-                <Input
-                    type="search"
-                    placeholder="Search allergies..."
-                    className="w-full pl-8 rounded-lg bg-background"
-                    onChange={(e) => {
-                    // Implement search logic if needed
-                    }}
-                />
-                <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                    <DialogTrigger asChild>
-                    <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
-                        <Dna className="mr-2 h-4 w-4" />
-                        <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Add Allergy</span>
-                    </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle>{editingIndex !== null ? "Edit Allergy" : "Add Allergy"}</DialogTitle>
-                        <DialogDescription>
-                        {editingIndex !== null
-                            ? "Edit the allergy details. Click save when you're done!"
-                            : "Add a new allergy to your patient. Click save when you're done!"}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <FormProvider {...form}>
-                        <Form {...form}>
-                        <form
-                            onSubmit={form.handleSubmit(onSubmitAllergy)}
-                            className="grid gap-4 py-4"
-                        >
-                            <FormField
-                            control={form.control}
-                            name="name"
-                            render={({ field }) => (
-                                <FormItem className="grid grid-cols-4 items-center gap-4">
-                                <FormLabel htmlFor="allergy" className="text-right">
-                                    Allergy
-                                </FormLabel>
+        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1">
+            <CardTitle>Allergies</CardTitle>
+            <CardDescription>Identify your patient's allergies before it's too late</CardDescription>
+            </div>
+            <div className="relative flex items-center w-full max-w-sm md:w-auto">
+            <Search className="absolute left-2.5 top-2.5 mr-2 h-4 w-4 text-muted-foreground" />
+            <Input
+                type="search"
+                placeholder="Search allergies..."
+                className="w-full pl-8 rounded-lg bg-background"
+                onChange={(e) => {
+                // Implement search logic if needed
+                }}
+            />
+            <Dialog
+                open={openDialog}
+                onOpenChange={(open) => {
+                setOpenDialog(open);
+                if (!open) {
+                    form.reset({ name: "", severity: "" });
+                    setEditingIndex(null);
+                }
+                }}
+            >
+                <DialogTrigger asChild>
+                <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
+                    <Dna className="mr-2 h-4 w-4" />
+                    <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Add Allergy</span>
+                </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>{editingIndex !== null ? "Edit Allergy" : "Add Allergy"}</DialogTitle>
+                    <DialogDescription>
+                    {editingIndex !== null
+                        ? "Edit the allergy details. Click save when you're done!"
+                        : "Add a new allergy to your patient. Click save when you're done!"}
+                    </DialogDescription>
+                    
+                </DialogHeader>
+                <FormProvider {...form}>
+                    <Form {...form}>
+                    <form
+                        onSubmit={form.handleSubmit(onSubmitAllergy)}
+                        className="grid gap-4 py-4"
+                    >
+                        <FormField
+                        control={form.control}
+                        name="name"
+                        render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-4">
+                            <FormLabel htmlFor="allergy" className="text-right">
+                                Allergy
+                            </FormLabel>
+                            <FormControl>
+                                <Input
+                                id="allergy"
+                                placeholder="Enter allergy"
+                                className="col-span-3"
+                                {...field}
+                                />
+                            </FormControl>
+                            <FormMessage className="col-span-4" />
+                            </FormItem>
+                        )}
+                        />
+                        <FormField
+                        control={form.control}
+                        name="severity"
+                        render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-4">
+                            <FormLabel htmlFor="severity" className="text-right">
+                                Severity
+                            </FormLabel>
+                            <Select
+                                onValueChange={field.onChange}
+                                value={field.value}
+                            >
                                 <FormControl>
-                                    <Input
-                                    id="allergy"
-                                    placeholder="Enter allergy"
-                                    className="col-span-3"
-                                    {...field}
-                                    />
+                                <SelectTrigger id="severity" className="col-span-3">
+                                    <SelectValue placeholder="Select severity" />
+                                </SelectTrigger>
                                 </FormControl>
-                                <FormMessage className="col-span-4" />
-                                </FormItem>
-                            )}
-                            />
-                            <FormField
-                            control={form.control}
-                            name="severity"
-                            render={({ field }) => (
-                                <FormItem className="grid grid-cols-4 items-center gap-4">
-                                <FormLabel htmlFor="severity" className="text-right">
-                                    Severity
-                                </FormLabel>
-                                <Select
-                                    onValueChange={field.onChange}
-                                    value={field.value}
-                                >
-                                    <FormControl>
-                                    <SelectTrigger id="severity" className="col-span-3">
-                                        <SelectValue placeholder="Select severity" />
-                                    </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                    <SelectItem value="mild">Mild</SelectItem>
-                                    <SelectItem value="moderate">Moderate</SelectItem>
-                                    <SelectItem value="severe">Severe</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <FormMessage className="col-span-4" />
-                                </FormItem>
-                            )}
-                            />
-                            <DialogFooter>
-                            <Button type="submit">Save allergy</Button>
-                            </DialogFooter>
-                        </form>
-                        </Form>
-                    </FormProvider>
-                    </DialogContent>
-                </Dialog>
-                </div>
-            </CardHeader>
+                                <SelectContent>
+                                <SelectItem value="Mild">Mild</SelectItem>
+                                <SelectItem value="Moderate">Moderate</SelectItem>
+                                <SelectItem value="Severe">Severe</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <FormMessage className="col-span-4" />
+                            </FormItem>
+                        )}
+                        />
+                        <DialogFooter>
+                        <Button type="submit">Save allergy</Button>
+                        </DialogFooter>
+                    </form>
+                    </Form>
+                </FormProvider>
+                </DialogContent>
+            </Dialog>
+            </div>
+        </CardHeader>
 
-            <CardContent>
-                <Table>
+        <CardContent>
+            {fetchError ? (
+            <p className="text-sm text-red-600">{fetchError}</p>
+            ) : displayAllergies.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No allergies recorded for this patient.</p>
+            ) : (
+            <Table>
                 <TableHeader>
-                    <TableRow>
+                <TableRow>
                     <TableCell>
-                        <Checkbox
+                    <Checkbox
                         id="select-all"
                         onCheckedChange={(checked) => {
-                            // Implement select all logic if needed
+                        // Implement select all logic if needed
                         }}
-                        />
+                    />
                     </TableCell>
                     <TableHead>Allergy</TableHead>
                     <TableHead>Severity</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
+                </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {fields.map((allergy, index) => (
-                    <TableRow key={allergy.id}>
-                        <TableCell>
-                        <Checkbox id={`allergy-${allergy.id}`} />
-                        </TableCell>
-                        <TableCell className="font-medium">{allergy.name}</TableCell>
-                        <TableCell>{allergy.severity}</TableCell>
-                        <TableCell className="text-right">
+                {displayAllergies.map((allergy, index) => (
+                    <TableRow key={allergy.id || index}>
+                    <TableCell>
+                        <Checkbox id={`allergy-${allergy.id || index}`} />
+                    </TableCell>
+                    <TableCell className="font-medium">{allergy.name}</TableCell>
+                    <TableCell>{allergy.severity}</TableCell>
+                    <TableCell className="text-right">
                         <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
+                        <DropdownMenuTrigger asChild>
                             <Button aria-haspopup="true" size="icon" variant="ghost">
-                                <MoreHorizontal className="h-4 w-4" />
-                                <span className="sr-only">Toggle menu</span>
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Toggle menu</span>
                             </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                                onClick={() => {
-                                setEditingIndex(index);
-                                form.setValue("name", allergy.name);
-                                form.setValue("severity", allergy.severity);
-                                setOpenDialog(true);
-                                }}
+                            onClick={() => handleEdit(index)}
                             >
-                                <FilePenLine className="mr-2 h-4 w-4" />
-                                <span>Edit</span>
+                            <FilePenLine className="mr-2 h-4 w-4" />
+                            Edit
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                                <div className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground text-red-600">
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                <span
-                                    onClick={() => handleDelete(index)}
-                                >
-                                    Delete
-                                </span>
-                                </div>
+                            <DropdownMenuItem
+                            className="text-red-600"
+                            onClick={() => handleDelete(index)}
+                            >
+                            <Trash2 className="mr-2 h-4 w-4 text-red-600" />
+                            Delete
                             </DropdownMenuItem>
-                            </DropdownMenuContent>
+                        </DropdownMenuContent>
                         </DropdownMenu>
-                        </TableCell>
+                    </TableCell>
                     </TableRow>
-                    ))}
+                ))}
                 </TableBody>
-                </Table>
-            </CardContent>
+            </Table>
+            )}
+        </CardContent>
 
-            <CardFooter>
-                <div className="text-xs text-muted-foreground">
-                Showing <strong>{fields.length}</strong> of <strong>{fields.length}</strong> Allergies
-                </div>
-            </CardFooter>
+        <CardFooter>
+            <div className="text-xs text-muted-foreground">
+            Showing <strong>{displayAllergies.length}</strong> of <strong>{displayAllergies.length}</strong> Allergies
+            </div>
+        </CardFooter>
         </Card>
     );
-}
+    }

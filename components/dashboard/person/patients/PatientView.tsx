@@ -1,57 +1,58 @@
-    "use client";
+"use client";
 
-    import { useRouter } from "next/navigation";
-    import { File } from "lucide-react";
-    import React, { useEffect, useState } from "react";
-    import { supabase } from "@/lib/supabase/client";
-    import { Download, Mail, Trash2 } from "lucide-react";
-    import { Button } from "@/components/ui/button";
-    import { Switch } from "@/components/ui/switch";
-    import { Label } from "@/components/ui/label";
-    import { toast } from "sonner";
-    import Allergy from "../Allergy";
-    import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-    import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-    } from "@/components/ui/card";
+import { useRouter, useSearchParams } from "next/navigation";
+import React, { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase/client";
+import { Download, Mail, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import Allergy from "../Allergy";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+Card,
+CardContent,
+CardDescription,
+CardHeader,
+CardTitle,
+} from "@/components/ui/card";
 
-    // Define combined patient data type
-    interface Patient {
-        id: number;
-        first_name: string;
-        middle_name: string | null;
-        last_name: string;
-        birth_date: string;
-        age: string | null;
-        contact_number: string | null;
-        citizenship: string | null;
-        address: string | null;
-        profile_image_url: string | null;
-        religion: string | null;
-        status: string | null;
-        ec_first_name: string | null;
-        ec_middle_name: string | null;
-        ec_last_name: string | null;
-        ec_contact_number: string | null;
-        ec_relationship: string | null;
-        expected_date_of_confinement: string | null;
-        last_menstrual_cycle: string | null;
-        gravidity: string | null;
-        parity: string | null;
-        occupation: string | null;
-        ssn: string | null;
-        member: string | null;
-        allergy_id: number | null;
-    }
+// Define combined patient data type
+interface Patient {
+    id: number;
+    first_name: string;
+    middle_name: string | null;
+    last_name: string;
+    birth_date: string;
+    age: string | null;
+    contact_number: string | null;
+    citizenship: string | null;
+    address: string | null;
+    profile_image_url: string | null;
+    religion: string | null;
+    status: string | null;
+    ec_first_name: string | null;
+    ec_middle_name: string | null;
+    ec_last_name: string | null;
+    ec_contact_number: string | null;
+    ec_relationship: string | null;
+    expected_date_of_confinement: string | null;
+    last_menstrual_cycle: string | null;
+    gravidity: string | null;
+    parity: string | null;
+    occupation: string | null;
+    ssn: string | null;
+    member: string | null;
+    allergy_id: number | null;
+}
 
-    export default function PatientView() {
+export default function PatientView() {
     const router = useRouter();
     const [patient, setPatient] = useState<Patient | null>(null);
     const [loading, setLoading] = useState(true);
+    const searchParams = useSearchParams();
+    const id = searchParams.get("id");
 
     // Fetch patient data from Supabase for person.id = 2
     useEffect(() => {
@@ -67,7 +68,7 @@
                 )
             `
             )
-            .eq("id") // Filter for person.id = 2
+            .eq("person_id", id)
             .single();
 
             if (error) {
@@ -155,19 +156,19 @@
                 <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                    <Label className="font-semibold">Patient Status</Label>
+                    <Label className="font-semibol mb-2">Patient Status</Label>
                     <p className="text-sm">{patient.status || "Not specified"}</p>
                     </div>
                     <div>
-                    <Label className="font-semibold">Estimated Date of Confinement</Label>
+                    <Label className="font-semibold mb-2">Estimated Date of Confinement</Label>
                     <p className="text-sm">{patient.expected_date_of_confinement || "Not specified"}</p>
                     </div>
                     <div>
-                    <Label className="font-semibold">Next Appointment</Label>
+                    <Label className="font-semibold mb-2">Next Appointment</Label>
                     <p className="text-sm">{patient.next_appointment || "Not scheduled"}</p>
                     </div>
                     <div>
-                    <Label className="font-semibold">Last Visit</Label>
+                    <Label className="font-semibold mb-2">Last Visit</Label>
                     <p className="text-sm">{patient.last_visit || "No record"}</p>
                     </div>
                 </div>
@@ -320,11 +321,11 @@
                 </div>
 
                 <div className="pt-8">
-                    <Allergy context="patient" id={patient.allergy_id?.toString() || ""} />
+                    <Allergy context="patient" id={id} />
                 </div>
             </TabsContent>
             </Tabs>
         </div>
         </main>
     );
-    }
+}
