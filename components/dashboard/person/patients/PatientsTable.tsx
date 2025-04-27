@@ -70,6 +70,8 @@ interface Patient {
     id: number;
     name: string;
     status: string;
+    birth_date: string | null;
+    age: string | null;
     last_appointment: string | null;
     contact_number: string | null;
     address: string | null;
@@ -82,7 +84,10 @@ export default function PatientsTable() {
     const [filteredPatients, setFilteredPatients] = useState<Patient[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
     const [advancedSearch, setAdvancedSearch] = useState({
-        phone: "",
+        last_appointment: "",
+        birth_date: "",
+        age: "",
+        contact: "",
         address: "",
     });
     const [sortOption, setSortOption] = useState("name-asc");
@@ -101,7 +106,10 @@ export default function PatientsTable() {
                         person (
                             id,
                             first_name,
+                            middle_name,
                             last_name,
+                            birth_date,
+                            age,
                             status,
                             contact_number,
                             address
@@ -146,9 +154,17 @@ export default function PatientsTable() {
                     return {
                         id: patient.id,
                         name: person.first_name
-                            ? `${person.first_name} ${person.last_name || ""}`
+                            ? `${person.first_name} ${person.middle_name} ${person.last_name || ""}`
                             : "Unknown",
                         status: person.status || "Unknown",
+                        birth_date: person.birth_date
+                            ? new Date(person.birth_date).toLocaleDateString("en-US", {
+                                  month: "long",
+                                  day: "numeric",
+                                  year: "numeric",
+                              })
+                            : null,
+                        age: person.age || null,
                         last_appointment: lastAppointment
                             ? new Date(lastAppointment).toLocaleString("en-US", {
                                   month: "long",
@@ -186,9 +202,19 @@ export default function PatientsTable() {
         }
 
         // Apply advanced search
-        if (advancedSearch.phone) {
+        if (advancedSearch.birth_date) {
             result = result.filter((patient) =>
-                patient.contact_number?.toLowerCase().includes(advancedSearch.phone.toLowerCase())
+                patient.birth_date?.toLowerCase().includes(advancedSearch.birth_date.toLowerCase())
+            );
+        }
+        if (advancedSearch.age) {
+            result = result.filter((patient) =>
+                patient.age?.toLowerCase().includes(advancedSearch.age.toLowerCase())
+            );
+        }
+        if (advancedSearch.contact) {
+            result = result.filter((patient) =>
+                patient.contact_number?.toLowerCase().includes(advancedSearch.contact.toLowerCase())
             );
         }
         if (advancedSearch.address) {
@@ -236,10 +262,12 @@ export default function PatientsTable() {
 
     // Handle export
     const handleExport = () => {
-        const headers = ["Name", "Status", "Last Appointment", "Phone Number", "Home Address"];
+        const headers = ["Name", "Status", "Last Appointment", "Birth Date", "Age", "Contact Number", "Home Address"];
         const rows = filteredPatients.map((patient) => [
             patient.name,
             patient.status,
+            patient.birth_date || "",
+            patient.age || "",
             patient.last_appointment || "",
             patient.contact_number || "",
             patient.address || "",
@@ -311,12 +339,45 @@ export default function PatientsTable() {
                                 <DropdownMenuSeparator />
                                 <div className="p-2">
                                     <Input
-                                        placeholder="Phone number..."
-                                        value={advancedSearch.phone}
+                                        placeholder="Last appointment..."
+                                        value={advancedSearch.last_appointment}
                                         onChange={(e) =>
                                             setAdvancedSearch({
                                                 ...advancedSearch,
-                                                phone: e.target.value,
+                                                last_appointment: e.target.value,
+                                            })
+                                        }
+                                        className="mb-2"
+                                    />
+                                    <Input
+                                        placeholder="Birth Date..."
+                                        value={advancedSearch.birth_date}
+                                        onChange={(e) =>
+                                            setAdvancedSearch({
+                                                ...advancedSearch,
+                                                birth_date: e.target.value,
+                                            })
+                                        }
+                                        className="mb-2"
+                                    />
+                                    <Input
+                                        placeholder="Age..."
+                                        value={advancedSearch.age}
+                                        onChange={(e) =>
+                                            setAdvancedSearch({
+                                                ...advancedSearch,
+                                                age: e.target.value,
+                                            })
+                                        }
+                                        className="mb-2"
+                                    />
+                                    <Input
+                                        placeholder="Phone number..."
+                                        value={advancedSearch.contact}
+                                        onChange={(e) =>
+                                            setAdvancedSearch({
+                                                ...advancedSearch,
+                                                contact: e.target.value,
                                             })
                                         }
                                         className="mb-2"
@@ -440,7 +501,13 @@ export default function PatientsTable() {
                                             Last Appointment
                                         </TableHead>
                                         <TableHead className="hidden md:table-cell">
-                                            Phone Number
+                                            Birth Date
+                                        </TableHead>
+                                        <TableHead className="hidden md:table-cell">
+                                            Age
+                                        </TableHead>
+                                        <TableHead className="hidden md:table-cell">
+                                            Contact Number
                                         </TableHead>
                                         <TableHead className="hidden md:table-cell">
                                             Home Address
@@ -492,6 +559,12 @@ export default function PatientsTable() {
                                                 </TableCell>
                                                 <TableCell className="hidden sm:table-cell">
                                                     {patient.last_appointment || "-"}
+                                                </TableCell>
+                                                <TableCell className="hidden md:table-cell">
+                                                    {patient.birth_date || "-"}
+                                                </TableCell>
+                                                <TableCell className="hidden md:table-cell">
+                                                    {patient.age || "-"}
                                                 </TableCell>
                                                 <TableCell className="hidden md:table-cell">
                                                     {patient.contact_number || "-"}
