@@ -67,7 +67,7 @@
                 )
             `
             )
-            .eq("id", 2) // Filter for person.id = 2
+            .eq("id") // Filter for person.id = 2
             .single();
 
             if (error) {
@@ -320,7 +320,7 @@
                 </div>
 
                 <div className="pt-8">
-                    <Allergy context="patient" id={patient.allergy_id?.toString() || "2"} />
+                    <Allergy context="patient" id={patient.allergy_id?.toString() || ""} />
                 </div>
             </TabsContent>
             </Tabs>
