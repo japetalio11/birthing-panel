@@ -121,7 +121,7 @@ export default function PatientForm() {
                                         name="profileImage"
                                         render={({ field }) => (
                                             <FormItem className="flex flex-col items-center">
-                                                <div className="relative w-40 mr-2 h-40 rounded-full overflow-hidden border">
+                                                <div className="relative w-40  h-40 rounded-full overflow-hidden border">
                                                     <div className="w-full h-full bg-gray-200 flex items-center justify-center">
                                                         <div className="w-full h-3/4 flex flex-col items-center justify-center">
                                                             <div className="w-12 h-12 bg-gray-500 rounded-full mb-1"></div>
@@ -475,7 +475,7 @@ export default function PatientForm() {
                         <Button type="submit" disabled={isSubmitting}>
                             {isSubmitting ? (
                                 <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    <Loader2 className=" h-4 w-4 animate-spin" />
                                     Submitting...
                                 </>
                             ) : (

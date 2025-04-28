@@ -210,11 +210,11 @@ export default function PatientView() {
 
                     <div className="flex flex-col gap-2">
                     <Button variant="outline">
-                        <Mail className="mr-2 h-4 w-4" />
+                        <Mail className=" h-4 w-4" />
                         Set Appointment
                     </Button>
                     <Button variant="destructive">
-                        <Trash2 className="mr-2 h-4 w-4" />
+                        <Trash2 className=" h-4 w-4" />
                         Delete Patient
                     </Button>
                     </div>
@@ -234,7 +234,7 @@ export default function PatientView() {
                 </TabsList>
                 <div className="ml-auto flex items-center gap-2">
                 <Button size="sm" variant="outline" className="h-8 gap-1">
-                    <Download className="mr-2 h-4 w-4" />
+                    <Download className=" h-4 w-4" />
                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Export</span>
                 </Button>
                 </div>

@@ -279,7 +279,7 @@
             <CardDescription>Identify your patient's allergies before it's too late</CardDescription>
             </div>
             <div className="relative flex items-center w-full max-w-sm md:w-auto">
-            <Search className="absolute left-2.5 top-2.5 mr-2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-2.5  h-4 w-4 text-muted-foreground" />
             <Input
                 type="search"
                 placeholder="Search allergies..."
@@ -300,7 +300,7 @@
             >
                 <DialogTrigger asChild>
                 <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
-                    <Dna className="mr-2 h-4 w-4" />
+                    <Dna className=" h-4 w-4" />
                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Add Allergy</span>
                 </Button>
                 </DialogTrigger>
@@ -320,11 +320,12 @@
                         onSubmit={form.handleSubmit(onSubmitAllergy)}
                         className="grid gap-4 py-4"
                     >
+                    <div className="grid grid-col-2">
                         <FormField
                         control={form.control}
                         name="name"
                         render={({ field }) => (
-                            <FormItem className="grid grid-cols-4 items-center gap-4">
+                            <FormItem className="grid grid-cols-4 items-center gap-2">
                             <FormLabel htmlFor="allergy" className="text-right">
                                 Allergy
                             </FormLabel>
@@ -332,7 +333,7 @@
                                 <Input
                                 id="allergy"
                                 placeholder="Enter allergy"
-                                className="col-span-3"
+                                className="col-span-4"
                                 {...field}
                                 />
                             </FormControl>
@@ -344,7 +345,7 @@
                         control={form.control}
                         name="severity"
                         render={({ field }) => (
-                            <FormItem className="grid grid-cols-4 items-center gap-4">
+                            <FormItem className="grid grid-cols-4 items-center gap-2">
                             <FormLabel htmlFor="severity" className="text-right">
                                 Severity
                             </FormLabel>
@@ -353,7 +354,7 @@
                                 value={field.value}
                             >
                                 <FormControl>
-                                <SelectTrigger id="severity" className="col-span-3">
+                                <SelectTrigger id="severity" className="col-span-4">
                                     <SelectValue placeholder="Select severity" />
                                 </SelectTrigger>
                                 </FormControl>
@@ -367,6 +368,7 @@
                             </FormItem>
                         )}
                         />
+                    </div>
                         <DialogFooter>
                         <Button type="submit">Save allergy</Button>
                         </DialogFooter>
@@ -422,14 +424,14 @@
                             <DropdownMenuItem
                             onClick={() => handleEdit(index)}
                             >
-                            <FilePenLine className="mr-2 h-4 w-4" />
+                            <FilePenLine className=" h-4 w-4" />
                             Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
                             className="text-red-600"
                             onClick={() => handleDelete(index)}
                             >
-                            <Trash2 className="mr-2 h-4 w-4 text-red-600" />
+                            <Trash2 className=" h-4 w-4 text-red-600" />
                             Delete
                             </DropdownMenuItem>
                         </DropdownMenuContent>
