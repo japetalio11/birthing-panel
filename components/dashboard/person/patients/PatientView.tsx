@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import Allergy from "../Allergy";
 import SupplementRecommendation from "../SupplementRecommendation";
+import LaboratoryRecords from "../patients/LaboratoryRecords";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
 Card,
@@ -33,6 +34,7 @@ interface Patient {
     profile_image_url: string | null;
     religion: string | null;
     status: string | null;
+    marital_status: string | null;
     ec_first_name: string | null;
     ec_middle_name: string | null;
     ec_last_name: string | null;
@@ -104,6 +106,7 @@ export default function PatientView() {
                 profile_image_url: data.person.profile_image_url,
                 religion: data.person.religion,
                 status: data.person.status,
+                marital_status: data.marital_status,
                 ec_first_name: data.person.ec_first_name,
                 ec_middle_name: data.person.ec_middle_name,
                 ec_last_name: data.person.ec_last_name,
@@ -139,6 +142,22 @@ export default function PatientView() {
         return null; // Redirect already handled in fetchPatient
     }
 
+    // const handleDelete = async (id: number) => {
+    //     try {
+    //         const { error } = await supabase.from("patients").delete().eq("id", id);
+    //         if (error) {
+    //             toast.error(`Failed to delete patient: ${error.message}`);
+    //             return;
+    //         }
+    //         setPatients(patients.filter((patient) => patient.id !== id));
+    //         setFilteredPatients(filteredPatients.filter((patient) => patient.id !== id));
+    //         setOpenDialog(false);
+    //         toast.success("Patient deleted successfully.");
+    //     } catch (err: any) {
+    //         toast.error(`Error deleting patient: ${err.message}`);
+    //     }
+    // };
+
     const fullName = `${patient.first_name} ${patient.middle_name ? patient.middle_name + " " : ""}${patient.last_name}`;
     const ecFullName = patient.ec_first_name
         ? `${patient.ec_first_name} ${patient.ec_middle_name ? patient.ec_middle_name + " " : ""}${patient.ec_last_name}`
@@ -152,7 +171,23 @@ export default function PatientView() {
             {/* Basic Information Card */}
             <Card className="flex-1 md:flex-[2]">
                 <CardHeader>
-                <CardTitle className="text-2xl">{fullName}</CardTitle>
+                <div className="relative w-40 h-40 rounded-full overflow-hidden border">
+                    {patient.profile_image_url ? (
+                        <img
+                            src={patient.profile_image_url}
+                            alt={`${patient.first_name}'s profile`}
+                            className="w-full h-full object-cover"
+                        />
+                    ) : (
+                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                            <div className="w-full h-3/4 flex flex-col items-center justify-center">
+                                <div className="w-12 h-12 bg-gray-500 rounded-full mb-1"></div>
+                                <div className="w-20 h-10 bg-gray-500 rounded-t-full"></div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <CardTitle className="text-2xl pt-2">{fullName}</CardTitle>
                 </CardHeader>
                 <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -213,7 +248,7 @@ export default function PatientView() {
                         <Mail className=" h-4 w-4" />
                         Set Appointment
                     </Button>
-                    <Button variant="destructive">
+                    <Button variant="default">
                         <Trash2 className=" h-4 w-4" />
                         Delete Patient
                     </Button>
@@ -244,8 +279,8 @@ export default function PatientView() {
                 <Card x-chunk="dashboard-06-chunk-0">
                 <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div className="space-y-1">
-                    <CardTitle>{fullName}</CardTitle>
-                    <CardDescription>Basic Information</CardDescription>
+                    <CardTitle>Patient Information</CardTitle>
+                    <CardDescription>All gathered patient information</CardDescription>
                     </div>
                 </CardHeader>
                 <CardContent className="text-sm">
@@ -266,10 +301,10 @@ export default function PatientView() {
                             <Label className="text-right">Address</Label>
                             <div className="col-span-3">{patient.address || "Not provided"}</div>
                         </div>
-                        {/* <div className="grid grid-cols-4 items-center gap-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
                             <Label className="text-right">Marital Status</Label>
                             <div className="col-span-3">{patient.marital_status || "Not provided"}</div>
-                        </div> */}
+                        </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label className="text-right">Citizenship</Label>
                             <div className="col-span-3">{patient.citizenship || "Not specified"}</div>
@@ -332,6 +367,13 @@ export default function PatientView() {
 
             <TabsContent value="supplements">
                 <SupplementRecommendation context='patient' id={id} />
+            </TabsContent>
+
+            <TabsContent value="prescriptions">
+            </TabsContent>
+
+            <TabsContent value="records">
+                <LaboratoryRecords context="patient" id={id} />
             </TabsContent>
             </Tabs>
         </div>

@@ -287,23 +287,6 @@ export default function PatientsTable() {
         toast.success("Data exported successfully.");
     };
 
-    // Handle delete
-    const handleDelete = async (id: number) => {
-        try {
-            const { error } = await supabase.from("patients").delete().eq("id", id);
-            if (error) {
-                toast.error(`Failed to delete patient: ${error.message}`);
-                return;
-            }
-            setPatients(patients.filter((patient) => patient.id !== id));
-            setFilteredPatients(filteredPatients.filter((patient) => patient.id !== id));
-            setOpenDialog(false);
-            toast.success("Patient deleted successfully.");
-        } catch (err: any) {
-            toast.error(`Error deleting patient: ${err.message}`);
-        }
-    };
-
     return (
         <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
             <Tabs value={tab} onValueChange={setTab}>
@@ -572,50 +555,19 @@ export default function PatientsTable() {
                                                     {patient.address || "-"}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button
-                                                                aria-haspopup="true"
-                                                                size="icon"
-                                                                variant="ghost"
-                                                            >
-                                                                <MoreHorizontal className="h-4 w-4" />
-                                                                <span className="sr-only">
-                                                                    Toggle menu
-                                                                </span>
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuLabel>
-                                                                Actions
-                                                            </DropdownMenuLabel>
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem
-                                                                onSelect={() =>
-                                                                    router.push(
-                                                                        `/Patients/Patient-View?id=${patient.id}`
-                                                                    )
-                                                                }
-                                                            >
-                                                                <Eye style={{ color: "black" }} />
-                                                                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                                                                    View
-                                                                </span>
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                style={{ color: "red" }}
-                                                                onSelect={(e) => {
-                                                                    e.preventDefault();
-                                                                    setOpenDialog(true);
-                                                                }}
-                                                            >
-                                                                <Trash2 style={{ color: "red" }} />
-                                                                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                                                                    Delete
-                                                                </span>
-                                                            </DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
+                                                    <Button
+                                                        aria-haspopup="true"
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        onClick={() => router.push(
+                                                            `/Patients/Patient-View?id=${patient.id}`
+                                                        )}
+                                                    >
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                        <span className="sr-only">
+                                                            Toggle menu
+                                                        </span>
+                                                    </Button>
 
                                                     <AlertDialog
                                                         open={openDialog}

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { PillBottle, FilePenLine, MoreHorizontal, Search, Trash2 } from "lucide-react";
+import { PillBottle, MoreHorizontal, Search, Trash2 } from "lucide-react";
 import { useForm, FormProvider } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,20 +62,18 @@ import { supabase } from "@/lib/supabase/client";
 type Props = {
     context: "patient";
     id: string | null;
-    fields?: any[]; // From useFieldArray or passed from PatientView
+    fields?: any[];
     append?: (supplement: any) => void;
     remove?: (index: number) => void;
     update?: (index: number, supplement: any) => void;
 };
 
-// Define the form schema for adding/editing supplements
 const formSchema = z.object({
     name: z.string().min(1, "Supplement name is required"),
     strength: z.string().min(1, "Strength is required"),
     amount: z.string().min(1, "Amount is required"),
     frequency: z.string().min(1, "Frequency is required"),
     route: z.string().min(1, "Route is required"),
-    doctor: z.string().min(1, "Doctor is required")
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -93,7 +91,6 @@ export default function SupplementRecommendation({
     const [supplementsData, setSupplementsData] = useState<any[]>([]);
     const [fetchError, setFetchError] = useState<string | null>(null);
 
-    // Initialize form for adding/editing supplements
     const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
@@ -102,15 +99,13 @@ export default function SupplementRecommendation({
             amount: "",
             frequency: "",
             route: "",
-            doctor: "",
         },
     });
 
-    // Fetch supplements from Supabase if id is provided (existing patient)
     useEffect(() => {
         async function fetchSupplements() {
             if (!id) {
-                setSupplementsData(fields); // Use passed fields for new patient or view mode
+                setSupplementsData(fields);
                 setFetchError(null);
                 return;
             }
@@ -128,12 +123,7 @@ export default function SupplementRecommendation({
                     });
                     setSupplementsData([]);
                 } else {
-                    console.log(
-                        "Fetched supplements for patient_id",
-                        id,
-                        ":",
-                        data,
-                    );
+                    console.log("Fetched supplements for patient_id", id, ":", data);
                     setSupplementsData(data);
                     setFetchError(null);
                     if (append) {
@@ -162,7 +152,6 @@ export default function SupplementRecommendation({
         fetchSupplements();
     }, [id, fields, append]);
 
-    // Handle form submission for adding/editing supplements
     const onSubmitSupplement = async (data: FormValues) => {
         if (!id && !append) {
             toast("Error", {
@@ -171,190 +160,167 @@ export default function SupplementRecommendation({
             return;
         }
 
-        if (id) {
-            // Existing patient, save to Supabase
-            if (editingIndex !== null) {
-                // Update existing supplement
-                const supplementToUpdate = (
-                    fields.length > 0 ? fields : supplementsData
-                )[editingIndex];
-                const { error } = await supabase
-                    .from("supplement")
-                    .update({
-                        name: data.name,
-                        strength: data.strength,
-                        amount: data.amount,
-                        frequency: data.frequency,
-                        route: data.route,
-                    })
-                    .eq("id", supplementToUpdate.id);
-
-                if (error) {
-                    console.error("Supplement update error:", error);
-                    toast("Error", {
-                        description: "Failed to update supplement.",
-                    });
-                    return;
-                }
-
-                if (update) {
-                    update(editingIndex, {
-                        id: supplementToUpdate.id,
-                        name: data.name,
-                        strength: data.strength,
-                        amount: data.amount,
-                        frequency: data.frequency,
-                        route: data.route,
-                    });
-                } else {
-                    setSupplementsData((prev) =>
-                        prev.map((supplement, idx) =>
-                            idx === editingIndex
-                                ? {
-                                      ...supplement,
-                                      name: data.name,
-                                      strength: data.strength,
-                                      amount: data.amount,
-                                      frequency: data.frequency,
-                                      route: data.route,
-                                  }
-                                : supplement,
-                        ),
-                    );
-                }
-                toast("Supplement Updated", {
-                    description: "Supplement has been updated successfully.",
-                });
-            } else {
-                // Add new supplement
-                const { data: newSupplement, error } = await supabase
-                    .from("supplement")
-                    .insert([
-                        {
-                            patient_id: id,
+        try {
+            if (id) {
+                if (editingIndex !== null) {
+                    const supplementToUpdate = (fields.length > 0 ? fields : supplementsData)[editingIndex];
+                    const { error } = await supabase
+                        .from("supplement")
+                        .update({
                             name: data.name,
                             strength: data.strength,
                             amount: data.amount,
                             frequency: data.frequency,
                             route: data.route,
-                        },
-                    ])
-                    .select()
-                    .single();
+                        })
+                        .eq("id", supplementToUpdate.id);
 
-                if (error) {
-                    console.error("Supplement insert error:", error);
-                    toast("Error", {
-                        description: "Failed to add supplement.",
+                    if (error) {
+                        console.error("Supplement update error:", error);
+                        toast("Error", {
+                            description: `Failed to update supplement: ${error.message}`,
+                        });
+                        return;
+                    }
+
+                    if (update) {
+                        update(editingIndex, {
+                            id: supplementToUpdate.id,
+                            name: data.name,
+                            strength: data.strength,
+                            amount: data.amount,
+                            frequency: data.frequency,
+                            route: data.route,
+                        });
+                    } else {
+                        setSupplementsData((prev) =>
+                            prev.map((supplement, idx) =>
+                                idx === editingIndex
+                                    ? { ...supplement, ...data }
+                                    : supplement,
+                            ),
+                        );
+                    }
+                    toast("Supplement Updated", {
+                        description: "Supplement has been updated successfully.",
                     });
-                    return;
-                }
+                } else {
+                    const { data: newSupplement, error } = await supabase
+                        .from("supplement")
+                        .insert([
+                            {
+                                patient_id: id,
+                                name: data.name,
+                                strength: data.strength,
+                                amount: data.amount,
+                                frequency: data.frequency,
+                                route: data.route,
+                            },
+                        ])
+                        .select()
+                        .single();
 
-                if (append) {
-                    append({
-                        id: newSupplement.id,
+                    if (error) {
+                        console.error("Supplement insert error:", error);
+                        toast("Error", {
+                            description: `Failed to add supplement: ${error.message}`,
+                        });
+                        return;
+                    }
+
+                    if (append) {
+                        append({
+                            id: newSupplement.id,
+                            name: data.name,
+                            strength: data.strength,
+                            amount: data.amount,
+                            frequency: data.frequency,
+                            route: data.route,
+                        });
+                    } else {
+                        setSupplementsData((prev) => [...prev, newSupplement]);
+                    }
+                    toast("Supplement Added", {
+                        description: "New supplement has been added successfully.",
+                    });
+                }
+            } else if (append) {
+                if (editingIndex !== null) {
+                    update!(editingIndex, {
                         name: data.name,
                         strength: data.strength,
                         amount: data.amount,
                         frequency: data.frequency,
                         route: data.route,
-
+                    });
+                    toast("Supplement Updated", {
+                        description: "Supplement has been updated successfully.",
                     });
                 } else {
-                    setSupplementsData((prev) => [...prev, newSupplement]);
+                    append({
+                        name: data.name,
+                        strength: data.strength,
+                        amount: data.amount,
+                        frequency: data.frequency,
+                        route: data.route,
+                    });
+                    toast("Supplement Added", {
+                        description: "New supplement has been added successfully.",
+                    });
                 }
-                toast("Supplement Added", {
-                    description: "New supplement has been added successfully.",
-                });
             }
-        } else if (append) {
-            // New patient, append to form's supplements array
-            if (editingIndex !== null) {
-                // Update existing supplement in form
-                update!(editingIndex, {
-                    name: data.name,
-                    strength: data.strength,
-                    amount: data.amount,
-                    frequency: data.frequency,
-                    route: data.route,
-                });
-                toast("Supplement Updated", {
-                    description: "Supplement has been updated successfully.",
-                });
-            } else {
-                // Add new supplement to form
-                append({
-                    name: data.name,
-                    strength: data.strength,
-                    amount: data.amount,
-                    frequency: data.frequency,
-                    route: data.route,
-                });
-                toast("Supplement Added", {
-                    description: "New supplement has been added successfully.",
-                });
-            }
-        }
 
-        form.reset({
-            name: "",
-            strength: "",
-            amount: "",
-            frequency: "",
-            route: "",
-        });
-        setOpenDialog(false);
-        setEditingIndex(null);
+            form.reset({
+                name: "",
+                strength: "",
+                amount: "",
+                frequency: "",
+                route: "",
+            });
+            setOpenDialog(false);
+            setEditingIndex(null);
+        } catch (err) {
+            console.error("Unexpected error:", err);
+            toast("Error", {
+                description: "An unexpected error occurred while saving the supplement.",
+            });
+        }
     };
 
-    // Handle supplement deletion
     const handleDelete = async (index: number) => {
-        if (id) {
-            // Existing patient, delete from Supabase
-            const supplementToDelete = (
-                fields.length > 0 ? fields : supplementsData
-            )[index];
-            const { error } = await supabase
-                .from("supplement")
-                .delete()
-                .eq("id", supplementToDelete.id);
+        try {
+            if (id) {
+                const supplementToDelete = (fields.length > 0 ? fields : supplementsData)[index];
+                const { error } = await supabase
+                    .from("supplement")
+                    .delete()
+                    .eq("id", supplementToDelete.id);
 
-            if (error) {
-                console.error("Supplement delete error:", error);
-                toast("Error", {
-                    description: "Failed to delete supplement.",
-                });
-                return;
+                if (error) {
+                    console.error("Supplement delete error:", error);
+                    toast("Error", {
+                        description: `Failed to delete supplement: ${error.message}`,
+                    });
+                    return;
+                }
+
+                setSupplementsData((prev) => prev.filter((_, idx) => idx !== index));
             }
 
-            setSupplementsData((prev) =>
-                prev.filter((_, idx) => idx !== index),
-            );
+            if (remove) {
+                remove(index);
+            }
+            toast("Supplement Deleted", {
+                description: "Supplement has been removed from the list.",
+            });
+        } catch (err) {
+            console.error("Unexpected error deleting supplement:", err);
+            toast("Error", {
+                description: "An unexpected error occurred while deleting the supplement.",
+            });
         }
-
-        if (remove) {
-            remove(index);
-        }
-        toast("Supplement Deleted", {
-            description: "Supplement has been removed from the list.",
-        });
     };
 
-    // Handle edit action
-    const handleEdit = (index: number) => {
-        const supplement = (fields.length > 0 ? fields : supplementsData)[
-            index
-        ];
-        form.setValue("name", supplement.name);
-        form.setValue("strength", supplement.strength);
-        form.setValue("amount", supplement.amount);
-        form.setValue("frequency", supplement.frequency);
-        form.setValue("route", supplement.route);
-        setEditingIndex(index);
-        setOpenDialog(true);
-    };
-
-    // Determine which data to display
     const displaySupplements = fields.length > 0 ? fields : supplementsData;
 
     return (
@@ -367,7 +333,7 @@ export default function SupplementRecommendation({
                     </CardDescription>
                 </div>
                 <div className="relative flex items-center w-full max-w-sm md:w-auto">
-                    <Search className="absolute left-2.5 top-2.5  h-4 w-4 text-muted-foreground" />
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                         type="search"
                         placeholder="Search supplements..."
@@ -381,7 +347,7 @@ export default function SupplementRecommendation({
                         onOpenChange={(open) => {
                             setOpenDialog(open);
                             if (!open) {
-                                form.reset({ 
+                                form.reset({
                                     name: "",
                                     strength: "",
                                     amount: "",
@@ -393,11 +359,8 @@ export default function SupplementRecommendation({
                         }}
                     >
                         <DialogTrigger asChild>
-                            <Button
-                                size="sm"
-                                className="h-8 ml-2 flex items-center gap-1"
-                            >
-                                <PillBottle className=" h-4 w-4" />
+                            <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
+                                <PillBottle className="h-4 w-4" />
                                 <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
                                     Add Supplement
                                 </span>
@@ -405,191 +368,147 @@ export default function SupplementRecommendation({
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-[1000px]">
                             <DialogHeader>
-                                <DialogTitle>
-                                    {editingIndex !== null
-                                        ? "Edit Supplement"
-                                        : "Add Supplement"}
-                                </DialogTitle>
+                                <DialogTitle>Add Supplement</DialogTitle>
                                 <DialogDescription>
-                                    {editingIndex !== null
-                                        ? "Edit the supplement details. Click save when you're done!"
-                                        : "Add a new supplement to your patient. Click save when you're done!"}
+                                    Add a new supplement to your patient. Click save when you're done!
                                 </DialogDescription>
                             </DialogHeader>
                             <FormProvider {...form}>
                                 <Form {...form}>
                                     <form
-                                        onSubmit={form.handleSubmit(
-                                            onSubmitSupplement,
-                                        )}
+                                        onSubmit={form.handleSubmit(onSubmitSupplement)}
                                         className="grid gap-4 py-4"
                                     >
-                                    <div className= "grid grid-cols-3 gap-4">
-                                        <FormField
-                                            control={form.control}
-                                            name="name"
-                                            render={({ field }) => (
-                                                <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                    <FormLabel
-                                                        htmlFor="supplement"
-                                                        className="text-right"
-                                                    >
-                                                        Supplement
-                                                    </FormLabel>
-                                                    <FormControl>
-                                                        <Input
-                                                            id="supplement"
-                                                            placeholder="Enter supplement"
-                                                            className="col-span-4"
-                                                            {...field}
-                                                        />
-                                                    </FormControl>
-                                                    <FormMessage className="col-span-4" />
-                                                </FormItem>
-                                            )}
-                                        />
-                                        <FormField
-                                            control={form.control}
-                                            name="strength"
-                                            render={({ field }) => (
-                                                <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                    <FormLabel
-                                                        htmlFor="strength"
-                                                        className="text-right"
-                                                    >
-                                                        Strength
-                                                    </FormLabel>
-                                                    <FormControl>
-                                                        <Input
-                                                            id="strength"
-                                                            placeholder="Enter strength"
-                                                            className="col-span-4"
-                                                            {...field}
-                                                        />
-                                                    </FormControl>
-                                                    <FormMessage className="col-span-4" />
-                                                </FormItem>
-                                            )}
-                                        />
-                                        <FormField
-                                            control={form.control}
-                                            name="amount"
-                                            render={({ field }) => (
-                                                <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                    <FormLabel
-                                                        htmlFor="amount"
-                                                        className="text-right"
-                                                    >
-                                                        Amount
-                                                    </FormLabel>
-                                                    <FormControl>
-                                                        <Input
-                                                            id="amount"
-                                                            placeholder="Enter amount"
-                                                            className="col-span-4"
-                                                            {...field}
-                                                        />
-                                                    </FormControl>
-                                                    <FormMessage className="col-span-4" />
-                                                </FormItem>
-                                            )}
-                                        />
-                                    </div>
-
-                                    <div className= "grid grid-cols-3 gap-4">
-                                        <FormField
-                                            control={form.control}
-                                            name="frequency"
-                                            render={({ field }) => (
-                                                <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                    <FormLabel
-                                                        htmlFor="frequency"
-                                                        className="text-right"
-                                                    >
-                                                        Frequency
-                                                    </FormLabel>
-                                                    <FormControl>
-                                                        <Input
-                                                            id="frequency"
-                                                            placeholder="Enter frequency"
-                                                            className="col-span-4"
-                                                            {...field}
-                                                        />
-                                                    </FormControl>
-                                                    <FormMessage className="col-span-4" />
-                                                </FormItem>
-                                            )}
-                                        />
-                                        <FormField
-                                            control={form.control}
-                                            name="route"
-                                            render={({ field }) => (
-                                                <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                    <FormLabel
-                                                        htmlFor="route"
-                                                        className="text-right"
-                                                    >
-                                                        Route
-                                                    </FormLabel>
-                                                    <FormControl>
-                                                        <Input
-                                                            id="route"
-                                                            placeholder="Enter route"
-                                                            className="col-span-4"
-                                                            {...field}
-                                                        />
-                                                    </FormControl>
-                                                    <FormMessage className="col-span-4" />
-                                                </FormItem>
-                                            )}
-                                        />
-                                        
-                                        <FormField
-                                            control={form.control}
-                                            name="doctor"
-                                            render={({ field }) => (
-                                                <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                    <FormLabel
-                                                        htmlFor="doctor"
-                                                        className="text-right"
-                                                    >
-                                                        Doctor
-                                                    </FormLabel>
-                                                    <Select
-                                                        onValueChange={
-                                                            field.onChange
-                                                        }
-                                                        value={field.value}
-                                                    >
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <FormField
+                                                control={form.control}
+                                                name="name"
+                                                render={({ field }) => (
+                                                    <FormItem className="grid grid-cols-4 items-center gap-2">
+                                                        <FormLabel htmlFor="supplement" className="text-right">
+                                                            Supplement
+                                                        </FormLabel>
                                                         <FormControl>
-                                                            <SelectTrigger
-                                                                id="doctor"
+                                                            <Input
+                                                                id="supplement"
+                                                                placeholder="Enter supplement"
                                                                 className="col-span-4"
-                                                            >
-                                                                <SelectValue placeholder="Select doctor" />
-                                                            </SelectTrigger>
+                                                                {...field}
+                                                            />
                                                         </FormControl>
-                                                        <SelectContent>
-                                                            <SelectItem value="Mild">
-                                                                Mild
-                                                            </SelectItem>
-                                                            <SelectItem value="Moderate">
-                                                                Moderate
-                                                            </SelectItem>
-                                                            <SelectItem value="Severe">
-                                                                Severe
-                                                            </SelectItem>
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <FormMessage className="col-span-4" />
-                                                </FormItem>
-                                            )}
-                                        />
-                                    </div>
+                                                        <FormMessage className="col-span-4" />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="strength"
+                                                render={({ field }) => (
+                                                    <FormItem className="grid grid-cols-4 items-center gap-2">
+                                                        <FormLabel htmlFor="strength" className="text-right">
+                                                            Strength
+                                                        </FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                id="strength"
+                                                                placeholder="Enter strength"
+                                                                className="col-span-4"
+                                                                {...field}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage className="col-span-4" />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="amount"
+                                                render={({ field }) => (
+                                                    <FormItem className="grid grid-cols-4 items-center gap-2">
+                                                        <FormLabel htmlFor="amount" className="text-right">
+                                                            Amount
+                                                        </FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                id="amount"
+                                                                placeholder="Enter amount"
+                                                                className="col-span-4"
+                                                                {...field}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage className="col-span-4" />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <FormField
+                                                control={form.control}
+                                                name="frequency"
+                                                render={({ field }) => (
+                                                    <FormItem className="grid grid-cols-4 items-center gap-2">
+                                                        <FormLabel htmlFor="frequency" className="text-right">
+                                                            Frequency
+                                                        </FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                id="frequency"
+                                                                placeholder="Enter frequency"
+                                                                className="col-span-4"
+                                                                {...field}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage className="col-span-4" />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="route"
+                                                render={({ field }) => (
+                                                    <FormItem className="grid grid-cols-4 items-center gap-2">
+                                                        <FormLabel htmlFor="route" className="text-right">
+                                                            Route
+                                                        </FormLabel>
+                                                        <FormControl>
+                                                            <Input
+                                                                id="route"
+                                                                placeholder="Enter route"
+                                                                className="col-span-4"
+                                                                {...field}
+                                                            />
+                                                        </FormControl>
+                                                        <FormMessage className="col-span-4" />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="clinician"
+                                                render={({ field }) => (
+                                                    <FormItem className="grid grid-cols-4 items-center gap-2">
+                                                        <FormLabel htmlFor="clinician" className="text-right">
+                                                            Clinician
+                                                        </FormLabel>
+                                                        <Select onValueChange={field.onChange} value={field.value}>
+                                                            <FormControl>
+                                                                <SelectTrigger id="clinician" className="col-span-4">
+                                                                    <SelectValue placeholder="Select clinician" />
+                                                                </SelectTrigger>
+                                                            </FormControl>
+                                                            <SelectContent>
+                                                                <SelectItem value="Dr. Smith">Dr. Smith</SelectItem>
+                                                                <SelectItem value="Dr. Johnson">Dr. Johnson</SelectItem>
+                                                                <SelectItem value="Dr. Lee">Dr. Lee</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <FormMessage className="col-span-4" />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                        </div>
                                         <DialogFooter>
-                                            <Button type="submit">
-                                                Save supplement
-                                            </Button>
+                                            <Button type="submit">Save supplement</Button>
                                         </DialogFooter>
                                     </form>
                                 </Form>
@@ -598,7 +517,6 @@ export default function SupplementRecommendation({
                     </Dialog>
                 </div>
             </CardHeader>
-
             <CardContent>
                 {fetchError ? (
                     <p className="text-sm text-red-600">{fetchError}</p>
@@ -623,66 +541,30 @@ export default function SupplementRecommendation({
                                 <TableHead>Amount</TableHead>
                                 <TableHead>Frequency</TableHead>
                                 <TableHead>Route</TableHead>
-                                <TableHead>Doctor</TableHead>
-                                <TableHead className="text-right">
-                                    Actions
-                                </TableHead>
+                                <TableHead>Clinician</TableHead>
+                                <TableHead>Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {displaySupplements.map((supplement, index) => (
                                 <TableRow key={supplement.id || index}>
                                     <TableCell>
-                                        <Checkbox
-                                            id={`supplement-${supplement.id || index}`}
-                                        />
+                                        <Checkbox id={`supplement-${supplement.id || index}`} />
                                     </TableCell>
-                                    <TableCell className="font-medium">
-                                        {supplement.name}
-                                    </TableCell>
+                                    <TableCell className="font-medium">{supplement.name}</TableCell>
                                     <TableCell>{supplement.strength}</TableCell>
                                     <TableCell>{supplement.amount}</TableCell>
                                     <TableCell>{supplement.frequency}</TableCell>
                                     <TableCell>{supplement.route}</TableCell>
-                                    <TableCell>{supplement.doctor}</TableCell>
-                                    <TableCell className="text-right">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button
-                                                    aria-haspopup="true"
-                                                    size="icon"
-                                                    variant="ghost"
-                                                >
-                                                    <MoreHorizontal className="h-4 w-4" />
-                                                    <span className="sr-only">
-                                                        Toggle menu
-                                                    </span>
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuLabel>
-                                                    Actions
-                                                </DropdownMenuLabel>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem
-                                                    onClick={() =>
-                                                        handleEdit(index)
-                                                    }
-                                                >
-                                                    <FilePenLine className=" h-4 w-4" />
-                                                    Edit
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                    className="text-red-600"
-                                                    onClick={() =>
-                                                        handleDelete(index)
-                                                    }
-                                                >
-                                                    <Trash2 className=" h-4 w-4 text-red-600" />
-                                                    Delete
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
+                                    <TableCell>{supplement.clinician}</TableCell>
+                                    <TableCell>
+                                        <Button 
+                                            variant="outline"    
+                                            onClick={() => handleDelete(index)}
+                                        >
+                                            <Trash2/>
+                                            Delete
+                                        </Button>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -690,7 +572,6 @@ export default function SupplementRecommendation({
                     </Table>
                 )}
             </CardContent>
-
             <CardFooter>
                 <div className="text-xs text-muted-foreground">
                     Showing <strong>{displaySupplements.length}</strong> of{" "}
