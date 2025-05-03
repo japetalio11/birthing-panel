@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import React, { useState, useEffect } from "react"
-import { MonitorUp, MoreHorizontal, Search, Trash2, FileDown } from "lucide-react"
+import { MonitorUp, MoreHorizontal, Search, Trash2, FileDown, Eye, FilePenLine } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
@@ -373,19 +373,49 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
     }
   }
 
-  const handleDownload = (fileurl: string, filename: string) => {
+  const handleDownload = async (fileurl: string, filename: string) => {
     if (!fileurl) {
-      toast.error("No file available for download")
-      return
+      toast.error("No file available for download");
+      return;
     }
+  
+    try {
+      const urlParts = fileurl.split('/storage/v1/object/public/laboratory-files/');
+      if (urlParts.length < 2) {
+        throw new Error("Invalid file URL format");
+      }
+      
+      const filePath = urlParts[1];
+      const { data, error } = await supabase.storage
+        .from("laboratory-files")
+        .download(filePath);
+  
+      if (error) {
+        throw error;
+      }
+  
+      if (!data) {
+        throw new Error("No file data received");
+      }
+  
+      const url = window.URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename || 'download';
+      document.body.appendChild(link);
+      link.click();
 
-    const link = document.createElement('a')
-    link.href = fileurl
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+  
+      toast.success("Download started");
+    } catch (error) {
+      console.error("Download error:", error);
+      toast.error(`Failed to download file: ${(error as any).message}`);
+    }
+  };
 
   const displayRecords = fields.length > 0 ? fields : recordsData
 
@@ -448,204 +478,221 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
               </DialogHeader>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmitRecord)} className="grid gap-4 py-4">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="col-span-3">
-                      <FormItem>
+                <div className="grid grid-cols-4 gap-4">
+                    {/* File Upload and File Name in 2-column layout */}
+                    <div className="col-span-2">
+                        <FormItem>
                         <FormLabel>File Upload</FormLabel>
                         <FormControl>
-                          <Input
+                            <Input
                             type="file"
                             onChange={handleFileChange}
                             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                             disabled={isUploading}
-                          />
+                            />
                         </FormControl>
                         {filePreview && (
-                          <div className="mt-2">
+                            <div className="mt-2">
                             <img
-                              src={filePreview}
-                              alt="File preview"
-                              className="max-h-40 object-contain"
+                                src={filePreview}
+                                alt="File preview"
+                                className="max-h-40 object-contain"
                             />
-                          </div>
+                            </div>
                         )}
                         {selectedFile && !filePreview && (
-                          <div className="mt-2 text-sm text-muted-foreground">
+                            <div className="text-sm text-muted-foreground">
                             Selected file: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(2)} KB)
-                          </div>
+                            </div>
                         )}
-                      </FormItem>
+                        </FormItem>
                     </div>
-                    <FormField
-                      control={form.control}
-                      name="filename"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>File Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Enter file name" {...field} disabled={isUploading} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="type"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Record Type</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value} disabled={isUploading}>
+                    <div className="col-span-2">
+                        <FormField
+                        control={form.control}
+                        name="filename"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>File Name</FormLabel>
                             <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select record type" />
-                              </SelectTrigger>
+                                <Input placeholder="Enter file name" {...field} disabled={isUploading} />
                             </FormControl>
-                            <SelectContent>
-                              <SelectItem value="Blood Test">Blood Test</SelectItem>
-                              <SelectItem value="X-Ray">X-Ray</SelectItem>
-                              <SelectItem value="MRI">MRI</SelectItem>
-                              <SelectItem value="CT Scan">CT Scan</SelectItem>
-                              <SelectItem value="Ultrasound">Ultrasound</SelectItem>
-                              <SelectItem value="EKG/ECG">EKG/ECG</SelectItem>
-                              <SelectItem value="Pathology">Pathology</SelectItem>
-                              <SelectItem value="Other">Other</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                    </div>
+
+                    {/* Record Type, Doctor, Company in 3-column layout */}
+                    <div className="col-span-4">
+                        <div className="grid grid-cols-3 gap-4">
+                        <FormField
+                            control={form.control}
+                            name="type"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Record Type</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value} disabled={isUploading}>
+                                <FormControl>
+                                    <SelectTrigger>
+                                    <SelectValue placeholder="Select record type" />
+                                    </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    <SelectItem value="Blood Test">Blood Test</SelectItem>
+                                    <SelectItem value="X-Ray">X-Ray</SelectItem>
+                                    <SelectItem value="MRI">MRI</SelectItem>
+                                    <SelectItem value="CT Scan">CT Scan</SelectItem>
+                                    <SelectItem value="Ultrasound">Ultrasound</SelectItem>
+                                    <SelectItem value="EKG/ECG">EKG/ECG</SelectItem>
+                                    <SelectItem value="Pathology">Pathology</SelectItem>
+                                    <SelectItem value="Other">Other</SelectItem>
+                                </SelectContent>
+                                </Select>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="doctor"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Doctor</FormLabel>
+                                <FormControl>
+                                <Input placeholder="Enter doctor name" {...field} disabled={isUploading} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="company"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Company</FormLabel>
+                                <FormControl>
+                                <Input placeholder="Enter laboratory company" {...field} disabled={isUploading} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        </div>
+                    </div>
+
+                    {/* Ordered Date, Received Date, Reported Date in 3-column layout */}
+                    <div className="col-span-4">
+                        <div className="grid grid-cols-3 gap-4">
+                        <FormField
+                            control={form.control}
+                            name="ordered_date"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Ordered Date</FormLabel>
+                                <FormControl>
+                                <DatePicker
+                                    value={field.value}
+                                    onChange={(value) => handleDateChange("ordered_date", value)}
+                                    disabled={isUploading}
+                                />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="received_date"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Received Date</FormLabel>
+                                <FormControl>
+                                <DatePicker
+                                    value={field.value}
+                                    onChange={(value) => handleDateChange("received_date", value)}
+                                    disabled={isUploading}
+                                />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="reported_date"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Reported Date</FormLabel>
+                                <FormControl>
+                                <DatePicker
+                                    value={field.value}
+                                    onChange={(value) => handleDateChange("reported_date", value)}
+                                    disabled={isUploading}
+                                />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                        </div>
+                    </div>
+
+                    {/* Full-width fields */}
                     <FormField
-                      control={form.control}
-                      name="doctor"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Doctor</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Enter doctor name" {...field} disabled={isUploading} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="company"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Company</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Enter laboratory company" {...field} disabled={isUploading} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="ordered_date"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Ordered Date</FormLabel>
-                          <FormControl>
-                            <DatePicker 
-                              value={field.value} 
-                              onChange={(value) => handleDateChange("ordered_date", value)} 
-                              disabled={isUploading}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="received_date"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Received Date</FormLabel>
-                          <FormControl>
-                            <DatePicker 
-                              value={field.value} 
-                              onChange={(value) => handleDateChange("received_date", value)} 
-                              disabled={isUploading}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="reported_date"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Reported Date</FormLabel>
-                          <FormControl>
-                            <DatePicker 
-                              value={field.value} 
-                              onChange={(value) => handleDateChange("reported_date", value)} 
-                              disabled={isUploading}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="impressions"
-                      render={({ field }) => (
-                        <FormItem className="col-span-3">
-                          <FormLabel>Impressions</FormLabel>
-                          <FormControl>
+                        control={form.control}
+                        name="impressions"
+                        render={({ field }) => (
+                        <FormItem className="col-span-4">
+                            <FormLabel>Impressions</FormLabel>
+                            <FormControl>
                             <Input placeholder="Enter impressions" {...field} disabled={isUploading} />
-                          </FormControl>
-                          <FormMessage />
+                            </FormControl>
+                            <FormMessage />
                         </FormItem>
-                      )}
+                        )}
                     />
                     <FormField
-                      control={form.control}
-                      name="remarks"
-                      render={({ field }) => (
-                        <FormItem className="col-span-3">
-                          <FormLabel>Remarks</FormLabel>
-                          <FormControl>
+                        control={form.control}
+                        name="remarks"
+                        render={({ field }) => (
+                        <FormItem className="col-span-4">
+                            <FormLabel>Remarks</FormLabel>
+                            <FormControl>
                             <Input placeholder="Enter remarks" {...field} disabled={isUploading} />
-                          </FormControl>
-                          <FormMessage />
+                            </FormControl>
+                            <FormMessage />
                         </FormItem>
-                      )}
+                        )}
                     />
                     <FormField
-                      control={form.control}
-                      name="recommendations"
-                      render={({ field }) => (
-                        <FormItem className="col-span-3">
-                          <FormLabel>Recommendations</FormLabel>
-                          <FormControl>
+                        control={form.control}
+                        name="recommendations"
+                        render={({ field }) => (
+                        <FormItem className="col-span-4">
+                            <FormLabel>Recommendations</FormLabel>
+                            <FormControl>
                             <Input placeholder="Enter recommendations" {...field} disabled={isUploading} />
-                          </FormControl>
-                          <FormMessage />
+                            </FormControl>
+                            <FormMessage />
                         </FormItem>
-                      )}
+                        )}
                     />
                     <FormField
-                      control={form.control}
-                      name="notes"
-                      render={({ field }) => (
-                        <FormItem className="col-span-3">
-                          <FormLabel>Notes</FormLabel>
-                          <FormControl>
+                        control={form.control}
+                        name="notes"
+                        render={({ field }) => (
+                        <FormItem className="col-span-4">
+                            <FormLabel>Notes</FormLabel>
+                            <FormControl>
                             <Input placeholder="Enter additional notes" {...field} disabled={isUploading} />
-                          </FormControl>
-                          <FormMessage />
+                            </FormControl>
+                            <FormMessage />
                         </FormItem>
-                      )}
+                        )}
                     />
-                  </div>
+                    </div>
                   <DialogFooter>
                     <Button type="submit" disabled={isUploading}>
                       {isUploading ? "Uploading..." : "Save Record"}
@@ -680,7 +727,7 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                 <TableHead>Doctor</TableHead>
                 <TableHead>Company</TableHead>
                 <TableHead>Ordered Date</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -695,25 +742,36 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                   <TableCell>{record.company}</TableCell>
                   <TableCell>{record.ordered_date}</TableCell>
                   <TableCell className="flex gap-2">
-                    {record.fileurl && (
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => handleDownload(record.fileurl, record.filename)}
-                        title="Download file"
-                      >
-                        <FileDown className="h-4 w-4" />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="icon" variant="ghost">
+                        <MoreHorizontal />
                       </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => handleDelete(index)}
-                      title="Delete record"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {record.fileurl && (
+                        <DropdownMenuItem onClick={() => handleDownload(record.fileurl, record.filename)}>
+                          <FileDown className="mr-2 h-4 w-4" />
+                          Download
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem onClick={() => {}}>
+                        <Eye className="mr-2 h-4 w-4" />
+                        Preview
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => {}}>
+                        <FilePenLine className="mr-2 h-4 w-4" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDelete(index)}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
                 </TableRow>
               ))}
             </TableBody>
