@@ -13,18 +13,26 @@ import {
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import DynamicBreadcrumb from "@/components/custom-ui/dynamic-breadcrumb"
+import { cn } from "@/lib/utils";
 
-export default function NavigationBar() {
+interface NavigationBarProps {
+    className?: string;
+}
+
+export default function NavigationBar({ className }: NavigationBarProps) {
     return (
-        <header className="flex h-14 items-center gap-4 px-4 lg:h-[60px] lg:px-6 md:justify-between border-b">
+        <header className={cn(
+            "flex h-14 items-center gap-4 px-4 lg:h-[60px] lg:px-6 md:justify-between border-b bg-white",
+            className
+        )}>
             <Sheet>
                 <SheetTrigger asChild>
                     <Button variant="outline" size="icon" className="md:hidden">
-                    <Menu className="h-5 w-5" />
-                    <span className="sr-only">Toggle navigation menu</span>
+                        <Menu className="h-5 w-5" />
+                        <span className="sr-only">Toggle navigation menu</span>
                     </Button>
                 </SheetTrigger>
-                    <SheetContent side="left" className="w-[240px] sm:w-[280px]">
+                <SheetContent side="left" className="w-[240px] sm:w-[280px]">
                     <Sidebar />
                 </SheetContent>
             </Sheet>

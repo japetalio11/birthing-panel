@@ -92,7 +92,7 @@ export default function PatientForm() {
         try {
             setIsSubmitting(true);
             await createPatient(data); // Assumes createPatient handles allergies
-            toast("Patient Added Successfully", {
+            toast.success("Patient Added Successfully", {
                 description: `${data.firstName} ${data.middleName || ""} ${data.lastName} has been added.`,
             });
             form.reset();

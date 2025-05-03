@@ -3,7 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
-import { Download, Mail, Trash2 } from "lucide-react";
+import { Download, Mail, Trash2, RefreshCcw} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,15 @@ import Allergy from "../Allergy";
 import SupplementRecommendation from "../SupplementRecommendation";
 import LaboratoryRecords from "../patients/LaboratoryRecords";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
 import {
 Card,
 CardContent,
@@ -54,6 +63,7 @@ export default function PatientView() {
     const router = useRouter();
     const [patient, setPatient] = useState<Patient | null>(null);
     const [loading, setLoading] = useState(true);
+    const [openDialog, setOpenDialog] = React.useState(false);
     const searchParams = useSearchParams();
     const id = searchParams.get("id");
 
@@ -142,21 +152,35 @@ export default function PatientView() {
         return null; // Redirect already handled in fetchPatient
     }
 
-    // const handleDelete = async (id: number) => {
-    //     try {
-    //         const { error } = await supabase.from("patients").delete().eq("id", id);
-    //         if (error) {
-    //             toast.error(`Failed to delete patient: ${error.message}`);
-    //             return;
-    //         }
-    //         setPatients(patients.filter((patient) => patient.id !== id));
-    //         setFilteredPatients(filteredPatients.filter((patient) => patient.id !== id));
-    //         setOpenDialog(false);
-    //         toast.success("Patient deleted successfully.");
-    //     } catch (err: any) {
-    //         toast.error(`Error deleting patient: ${err.message}`);
-    //     }
-    // };
+    const handleDelete = async (id: number) => {
+        try {
+            // Delete from patients table first
+            const { error: patientError } = await supabase
+                .from("patients")
+                .delete()
+                .eq("person_id", id);
+
+            if (patientError) throw patientError;
+
+            // Then delete from person table
+            const { error: personError } = await supabase
+                .from("person")
+                .delete()
+                .eq("id", id);
+
+            if (personError) throw personError;
+
+            const error = patientError || personError;
+            if (error) {
+                toast.error(`Failed to delete patient: ${error.message}`);
+                return;
+            }
+            setOpenDialog(false);
+            toast.success("Patient deleted successfully.");
+        } catch (err: any) {
+            toast.error(`Error deleting patient: ${err.message}`);
+        }
+    };
 
     const fullName = `${patient.first_name} ${patient.middle_name ? patient.middle_name + " " : ""}${patient.last_name}`;
     const ecFullName = patient.ec_first_name
@@ -248,10 +272,39 @@ export default function PatientView() {
                         <Mail className=" h-4 w-4" />
                         Set Appointment
                     </Button>
-                    <Button variant="default">
-                        <Trash2 className=" h-4 w-4" />
-                        Delete Patient
+                    <Button variant="outline">
+                        <RefreshCcw className=" h-4 w-4" />
+                        Update Patient
                     </Button>
+                    <Dialog>
+                        <DialogTrigger asChild>
+                            <Button 
+                                variant="outline"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                                Delete Patient
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Delete Patient</DialogTitle>
+                                <DialogDescription>
+                                    Are you sure you want to delete this patient? This action cannot be undone.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => {}}>
+                                    Cancel
+                                </Button>
+                                <Button 
+                                    variant="destructive" 
+                                    onClick={() => handleDelete(patient.id)}
+                                >
+                                    Delete
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                     </div>
                 </div>
                 </CardContent>

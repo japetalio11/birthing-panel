@@ -37,7 +37,7 @@ export default function RootLayout({
 
                 <Sidebar className="sticky top-0 h-screen"/>
                 <div className="flex flex-col">
-                    <NavigationBar />
+                    <NavigationBar className="sticky top-0 z-50 w-full" />
 
                     <main className="flex-1 p-4 lg:p-6">
                     {children}
