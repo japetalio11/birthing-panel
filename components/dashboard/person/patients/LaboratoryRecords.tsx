@@ -47,6 +47,7 @@ import { toast } from "sonner"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { supabase } from "@/lib/supabase/client"
+import { Separator } from "@radix-ui/react-dropdown-menu"
 
 const formSchema = z.object({
   filename: z.string().min(1, "File name is required"),
@@ -766,91 +767,79 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
       <div
         className={`fixed right-0 top-0 h-full w-100 bg-background shadow-lg transform transition-transform duration-300 ${
           isSidebarOpen ? 'translate-x-0' : 'translate-x-full'
-        } z-50`}
+        } z-50 border-l`}
       >
         {selectedRecord && (
           <div className="flex flex-col h-full">
-            <div className="p-4 border-b flex justify-between items-center">
-              <h2 className="text-lg font-semibold">Record Details</h2>
-              <Button variant="ghost" size="icon" onClick={closeSidebar}>
-                <X className="h-5 w-5" />
+            <div className="p-4 flex justify-between items-center">
+              <h2 className="font-semibold">Record Details</h2>
+              <Button variant="outline" size="icon" onClick={closeSidebar}>
+                <X />
               </Button>
             </div>
             <div className="p-4 flex-1 overflow-y-auto">
-              <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label>File Name</Label>
-                  <div className="text-base">{selectedRecord.filename}</div>
+                  <Label className="font-semibold mb-2">File Name</Label>
+                  <p className="text-sm">{selectedRecord.filename}</p>
                 </div>
                 <div>
-                  <Label>Record Type</Label>
-                  <div className="text-base">{selectedRecord.type}</div>
+                  <Label className="font-semibold mb-2">Record Type</Label>
+                  <p className="text-sm">{selectedRecord.type}</p>
                 </div>
                 <div>
-                  <Label>Doctor</Label>
-                  <div className="text-base">{selectedRecord.doctor}</div>
+                  <Label className="font-semibold mb-2">Doctor</Label>
+                  <p className="text-sm">{selectedRecord.doctor}</p>
                 </div>
                 <div>
-                  <Label>Company</Label>
-                  <div className="text-base">{selectedRecord.company || 'N/A'}</div>
+                  <Label className="font-semibold mb-2">Company</Label>
+                  <p className="text-sm">{selectedRecord.company || 'N/A'}</p>
                 </div>
                 <div>
-                  <Label>Ordered Date</Label>
-                  <div className="text-base">{selectedRecord.ordered_date}</div>
+                  <Label className="font-semibold mb-2">Ordered Date</Label>
+                  <p className="text-sm">{selectedRecord.ordered_date}</p>
                 </div>
                 <div>
-                  <Label>Received Date</Label>
-                  <div className="text-base">{selectedRecord.received_date}</div>
+                  <Label className="font-semibold mb-2">Received Date</Label>
+                  <p className="text-sm">{selectedRecord.received_date}</p>
                 </div>
                 <div>
-                  <Label>Reported Date</Label>
-                  <div className="text-base">{selectedRecord.reported_date}</div>
+                  <Label className="font-semibold mb-2">Reported Date</Label>
+                  <p className="text-sm">{selectedRecord.reported_date}</p>
+                </div>
+            </div>
+
+            <div className="col-span-2 my-4">
+                <Separator className="border-t" />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+                <div>
+                  <Label className="font-semibold mb-2">Remarks</Label>
+                  <p className="text-sm">{selectedRecord.remarks || 'N/A'}</p>
                 </div>
                 <div>
-                  <Label>Impressions</Label>
-                  <div className="text-base">{selectedRecord.impressions}</div>
+                  <Label className="font-semibold mb-2">Impressions</Label>
+                  <p className="text-sm">{selectedRecord.impressions}</p>
                 </div>
                 <div>
-                  <Label>Remarks</Label>
-                  <div className="text-base">{selectedRecord.remarks || 'N/A'}</div>
+                  <Label className="font-semibold mb-2">Recommendations</Label>
+                  <p className="text-sm">{selectedRecord.recommendations || 'N/A'}</p>
                 </div>
                 <div>
-                  <Label>Recommendations</Label>
-                  <div className="text-base">{selectedRecord.recommendations || 'N/A'}</div>
+                  <Label className="font-semibold mb-2">Notes</Label>
+                  <p className="text-sm">{selectedRecord.notes || 'N/A'}</p>
                 </div>
-                <div>
-                  <Label>Notes</Label>
-                  <div className="text-base">{selectedRecord.notes || 'N/A'}</div>
-                </div>
-                {selectedRecord.fileurl && (
-                  <div>
-                    <h3>Attachment</h3>
-                    {selectedRecord.fileurl.match(/\.(jpg|jpeg|png)$/i) ? (
-                      <img
-                        src={selectedRecord.fileurl}
-                        alt="Attachment"
-                        className="max-w-full h-auto mt-2"
-                      />
-                    ) : (
-                      <a
-                        href={selectedRecord.fileurl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline"
-                      >
-                        View Attachment
-                      </a>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
-            <div className="p-4 border-t">
+            
+            <div className="p-4">
               <Button
                 className="w-full"
                 onClick={() => handleDownload(selectedRecord.fileurl, selectedRecord.filename)}
                 disabled={!selectedRecord.fileurl}
               >
+                <FileDown />
                 Download File
               </Button>
             </div>
