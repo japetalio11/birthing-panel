@@ -2,11 +2,10 @@
 
 import { useRouter } from "next/navigation"
 import React, { useState, useEffect } from "react"
-import { MonitorUp, MoreHorizontal, Search, Trash2, FileDown, Eye, FilePenLine, XIcon } from "lucide-react"
+import { MonitorUp, MoreHorizontal, Search, Trash2, FileDown, Eye, FilePenLine } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
@@ -47,7 +46,6 @@ import { toast } from "sonner"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { supabase } from "@/lib/supabase/client"
-import { Separator } from "@radix-ui/react-dropdown-menu"
 
 const formSchema = z.object({
   filename: z.string().min(1, "File name is required"),
@@ -81,8 +79,6 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [filePreview, setFilePreview] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [selectedRecord, setSelectedRecord] = useState<any | null>(null)
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -239,22 +235,24 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
       if (id) {
         const { data: newRecord, error } = await supabase
           .from("laboratory_records")
-          .insert([{
-            patient_id: id,
-            filename: formattedData.filename,
-            type: formattedData.type,
-            doctor: formattedData.doctor,
-            ordered_date: formattedData.ordered_date,
-            received_date: formattedData.received_date,
-            reported_date: formattedData.reported_date,
-            impressions: formattedData.impressions,
-            remarks: formattedData.remarks,
-            recommendations: formattedData.recommendations,
-            company: formattedData.company,
-            notes: formattedData.notes,
-            fileurl: fileurl,
-            attachment: fileurl,
-          }])
+          .insert([
+            {
+              patient_id: id,
+              filename: formattedData.filename,
+              type: formattedData.type,
+              doctor: formattedData.doctor,
+              ordered_date: formattedData.ordered_date,
+              received_date: formattedData.received_date,
+              reported_date: formattedData.reported_date,
+              impressions: formattedData.impressions,
+              remarks: formattedData.remarks,
+              recommendations: formattedData.recommendations,
+              company: formattedData.company,
+              notes: formattedData.notes,
+              fileurl: fileurl, 
+              attachment: fileurl, 
+            },
+          ])
           .select()
           .single()
 
@@ -336,16 +334,16 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
         const recordToDelete = (fields.length > 0 ? fields : recordsData)[index]
         
         if (recordToDelete.fileurl) {
-          const fileurl = recordToDelete.fileurl
-          const fileName = fileurl.substring(fileurl.lastIndexOf('/') + 1)
+          const fileurl = recordToDelete.fileurl;
+          const fileName = fileurl.substring(fileurl.lastIndexOf('/') + 1);
           
           if (fileName) {
             const { error: storageError } = await supabase.storage
               .from("laboratory-files")
-              .remove([fileName])
+              .remove([fileName]);
               
             if (storageError) {
-              console.error("File deletion error:", storageError)
+              console.error("File deletion error:", storageError);
             }
           }
         }
@@ -375,477 +373,417 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
     }
   }
 
-  const handleDownload = (fileurl: string, filename: string) => {
+  const handleDownload = async (fileurl: string, filename: string) => {
     if (!fileurl) {
-      toast.error("No file available for download")
-      return
+      toast.error("No file available for download");
+      return;
     }
+  
+    try {
+      const urlParts = fileurl.split('/storage/v1/object/public/laboratory-files/');
+      if (urlParts.length < 2) {
+        throw new Error("Invalid file URL format");
+      }
+      
+      const filePath = urlParts[1];
+      const { data, error } = await supabase.storage
+        .from("laboratory-files")
+        .download(filePath);
+  
+      if (error) {
+        throw error;
+      }
+  
+      if (!data) {
+        throw new Error("No file data received");
+      }
+  
+      const url = window.URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename || 'download';
+      document.body.appendChild(link);
+      link.click();
 
-    const link = document.createElement('a')
-    link.href = fileurl
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  const handlePreview = (record: any) => {
-    setSelectedRecord(record)
-    setIsSidebarOpen(true)
-  }
-
-  const closeSidebar = () => {
-    setIsSidebarOpen(false)
-    setSelectedRecord(null)
-  }
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+  
+      toast.success("Download started");
+    } catch (error) {
+      console.error("Download error:", error);
+      toast.error(`Failed to download file: ${(error as any).message}`);
+    }
+  };
 
   const displayRecords = fields.length > 0 ? fields : recordsData
 
   const handleDateChange = (name: "ordered_date" | "received_date" | "reported_date", value: string) => {
-    form.setValue(name, value, { shouldValidate: true })
+      form.setValue(name, value, { shouldValidate: true })
   }
 
   return (
-    <div className="relative flex">
-      <Card className="w-full">
-        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <CardTitle>Laboratory Records</CardTitle>
-            <CardDescription>Store your patient's records for safe keeping</CardDescription>
-          </div>
-          <div className="relative flex items-center w-full max-w-sm md:w-auto">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search records..."
-              className="w-full pl-8 rounded-lg bg-background"
-              onChange={(e) => {
-                // Implement search logic if needed
-              }}
-            />
-            <Dialog
-              open={openDialog}
-              onOpenChange={(open) => {
-                setOpenDialog(open)
-                if (!open) {
-                  form.reset({
-                    filename: "",
-                    type: "",
-                    doctor: "",
-                    ordered_date: today,
-                    received_date: today,
-                    reported_date: today,
-                    impressions: "",
-                    remarks: "",
-                    recommendations: "",
-                    company: "",
-                    notes: "",
-                  })
-                  setSelectedFile(null)
-                  setFilePreview(null)
-                }
-              }}
-            >
-              <DialogTrigger asChild>
-                <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
-                  <MonitorUp className="h-4 w-4" />
-                  <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Add Record</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[1000px]">
-                <DialogHeader>
-                  <DialogTitle>Add Laboratory Record</DialogTitle>
-                  <DialogDescription>
-                    Upload a file and fill in the details for the laboratory record.
-                  </DialogDescription>
-                </DialogHeader>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmitRecord)} className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 gap-4">
-                      <div className="col-span-2">
+    <Card>
+      <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <CardTitle>Laboratory Records</CardTitle>
+          <CardDescription>Store your patient's records for safe keeping</CardDescription>
+        </div>
+        <div className="relative flex items-center w-full max-w-sm md:w-auto">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Search records..."
+            className="w-full pl-8 rounded-lg bg-background"
+            onChange={(e) => {
+              // Implement search logic if needed
+            }}
+          />
+          <Dialog
+            open={openDialog}
+            onOpenChange={(open) => {
+              setOpenDialog(open)
+              if (!open) {
+                form.reset({
+                  filename: "",
+                  type: "",
+                  doctor: "",
+                  ordered_date: today,
+                  received_date: today,
+                  reported_date: today,
+                  impressions: "",
+                  remarks: "",
+                  recommendations: "",
+                  company: "",
+                  notes: "",
+                })
+                setSelectedFile(null)
+                setFilePreview(null)
+              }
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
+                <MonitorUp className="h-4 w-4" />
+                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Add Record</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[1000px]">
+              <DialogHeader>
+                <DialogTitle>Add Laboratory Record</DialogTitle>
+                <DialogDescription>
+                  Upload a file and fill in the details for the laboratory record.
+                </DialogDescription>
+              </DialogHeader>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmitRecord)} className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 gap-4">
+                    {/* File Upload and File Name in 2-column layout */}
+                    <div className="col-span-2">
                         <FormItem>
-                          <FormLabel>File Upload</FormLabel>
-                          <FormControl>
+                        <FormLabel>File Upload</FormLabel>
+                        <FormControl>
                             <Input
-                              type="file"
-                              onChange={handleFileChange}
-                              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                              disabled={isUploading}
+                            type="file"
+                            onChange={handleFileChange}
+                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                            disabled={isUploading}
                             />
-                          </FormControl>
-                          {filePreview && (
+                        </FormControl>
+                        {filePreview && (
                             <div className="mt-2">
-                              <img
+                            <img
                                 src={filePreview}
                                 alt="File preview"
                                 className="max-h-40 object-contain"
-                              />
+                            />
                             </div>
-                          )}
-                          {selectedFile && !filePreview && (
+                        )}
+                        {selectedFile && !filePreview && (
                             <div className="text-sm text-muted-foreground">
-                              Selected file: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(2)} KB)
+                            Selected file: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(2)} KB)
                             </div>
-                          )}
+                        )}
                         </FormItem>
-                      </div>
-                      <div className="col-span-2">
+                    </div>
+                    <div className="col-span-2">
                         <FormField
-                          control={form.control}
-                          name="filename"
-                          render={({ field }) => (
+                        control={form.control}
+                        name="filename"
+                        render={({ field }) => (
                             <FormItem>
-                              <FormLabel>File Name</FormLabel>
-                              <FormControl>
+                            <FormLabel>File Name</FormLabel>
+                            <FormControl>
                                 <Input placeholder="Enter file name" {...field} disabled={isUploading} />
-                              </FormControl>
-                              <FormMessage />
+                            </FormControl>
+                            <FormMessage />
                             </FormItem>
-                          )}
+                        )}
                         />
-                      </div>
-                      <div className="col-span-4">
+                    </div>
+
+                    {/* Record Type, Doctor, Company in 3-column layout */}
+                    <div className="col-span-4">
                         <div className="grid grid-cols-3 gap-4">
-                          <FormField
+                        <FormField
                             control={form.control}
                             name="type"
                             render={({ field }) => (
-                              <FormItem>
+                            <FormItem>
                                 <FormLabel>Record Type</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value} disabled={isUploading}>
-                                  <FormControl>
+                                <FormControl>
                                     <SelectTrigger>
-                                      <SelectValue placeholder="Select record type" />
+                                    <SelectValue placeholder="Select record type" />
                                     </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
+                                </FormControl>
+                                <SelectContent>
                                     <SelectItem value="Blood Test">Blood Test</SelectItem>
-                                    <SelectItem value="XIcon-Ray">XIcon-Ray</SelectItem>
+                                    <SelectItem value="X-Ray">X-Ray</SelectItem>
                                     <SelectItem value="MRI">MRI</SelectItem>
                                     <SelectItem value="CT Scan">CT Scan</SelectItem>
                                     <SelectItem value="Ultrasound">Ultrasound</SelectItem>
                                     <SelectItem value="EKG/ECG">EKG/ECG</SelectItem>
                                     <SelectItem value="Pathology">Pathology</SelectItem>
                                     <SelectItem value="Other">Other</SelectItem>
-                                  </SelectContent>
+                                </SelectContent>
                                 </Select>
                                 <FormMessage />
-                              </FormItem>
+                            </FormItem>
                             )}
-                          />
-                          <FormField
+                        />
+                        <FormField
                             control={form.control}
                             name="doctor"
                             render={({ field }) => (
-                              <FormItem>
+                            <FormItem>
                                 <FormLabel>Doctor</FormLabel>
                                 <FormControl>
-                                  <Input placeholder="Enter doctor name" {...field} disabled={isUploading} />
+                                <Input placeholder="Enter doctor name" {...field} disabled={isUploading} />
                                 </FormControl>
                                 <FormMessage />
-                              </FormItem>
+                            </FormItem>
                             )}
-                          />
-                          <FormField
+                        />
+                        <FormField
                             control={form.control}
                             name="company"
                             render={({ field }) => (
-                              <FormItem>
+                            <FormItem>
                                 <FormLabel>Company</FormLabel>
                                 <FormControl>
-                                  <Input placeholder="Enter laboratory company" {...field} disabled={isUploading} />
+                                <Input placeholder="Enter laboratory company" {...field} disabled={isUploading} />
                                 </FormControl>
                                 <FormMessage />
-                              </FormItem>
+                            </FormItem>
                             )}
-                          />
+                        />
                         </div>
-                      </div>
-                      <div className="col-span-4">
+                    </div>
+
+                    {/* Ordered Date, Received Date, Reported Date in 3-column layout */}
+                    <div className="col-span-4">
                         <div className="grid grid-cols-3 gap-4">
-                          <FormField
+                        <FormField
                             control={form.control}
                             name="ordered_date"
                             render={({ field }) => (
-                              <FormItem>
+                            <FormItem>
                                 <FormLabel>Ordered Date</FormLabel>
                                 <FormControl>
-                                  <DatePicker
+                                <DatePicker
                                     value={field.value}
                                     onChange={(value) => handleDateChange("ordered_date", value)}
                                     disabled={isUploading}
-                                  />
+                                />
                                 </FormControl>
                                 <FormMessage />
-                              </FormItem>
+                            </FormItem>
                             )}
-                          />
-                          <FormField
+                        />
+                        <FormField
                             control={form.control}
                             name="received_date"
                             render={({ field }) => (
-                              <FormItem>
+                            <FormItem>
                                 <FormLabel>Received Date</FormLabel>
                                 <FormControl>
-                                  <DatePicker
+                                <DatePicker
                                     value={field.value}
                                     onChange={(value) => handleDateChange("received_date", value)}
                                     disabled={isUploading}
-                                  />
+                                />
                                 </FormControl>
                                 <FormMessage />
-                              </FormItem>
+                            </FormItem>
                             )}
-                          />
-                          <FormField
+                        />
+                        <FormField
                             control={form.control}
                             name="reported_date"
                             render={({ field }) => (
-                              <FormItem>
+                            <FormItem>
                                 <FormLabel>Reported Date</FormLabel>
                                 <FormControl>
-                                  <DatePicker
+                                <DatePicker
                                     value={field.value}
                                     onChange={(value) => handleDateChange("reported_date", value)}
                                     disabled={isUploading}
-                                  />
+                                />
                                 </FormControl>
                                 <FormMessage />
-                              </FormItem>
+                            </FormItem>
                             )}
-                          />
+                        />
                         </div>
-                      </div>
-                      <FormField
+                    </div>
+
+                    {/* Full-width fields */}
+                    <FormField
                         control={form.control}
                         name="impressions"
                         render={({ field }) => (
-                          <FormItem className="col-span-4">
+                        <FormItem className="col-span-4">
                             <FormLabel>Impressions</FormLabel>
                             <FormControl>
-                              <Input placeholder="Enter impressions" {...field} disabled={isUploading} />
+                            <Input placeholder="Enter impressions" {...field} disabled={isUploading} />
                             </FormControl>
                             <FormMessage />
-                          </FormItem>
+                        </FormItem>
                         )}
-                      />
-                      <FormField
+                    />
+                    <FormField
                         control={form.control}
                         name="remarks"
                         render={({ field }) => (
-                          <FormItem className="col-span-4">
+                        <FormItem className="col-span-4">
                             <FormLabel>Remarks</FormLabel>
                             <FormControl>
-                              <Input placeholder="Enter remarks" {...field} disabled={isUploading} />
+                            <Input placeholder="Enter remarks" {...field} disabled={isUploading} />
                             </FormControl>
                             <FormMessage />
-                          </FormItem>
+                        </FormItem>
                         )}
-                      />
-                      <FormField
+                    />
+                    <FormField
                         control={form.control}
                         name="recommendations"
                         render={({ field }) => (
-                          <FormItem className="col-span-4">
+                        <FormItem className="col-span-4">
                             <FormLabel>Recommendations</FormLabel>
                             <FormControl>
-                              <Input placeholder="Enter recommendations" {...field} disabled={isUploading} />
+                            <Input placeholder="Enter recommendations" {...field} disabled={isUploading} />
                             </FormControl>
                             <FormMessage />
-                          </FormItem>
+                        </FormItem>
                         )}
-                      />
-                      <FormField
+                    />
+                    <FormField
                         control={form.control}
                         name="notes"
                         render={({ field }) => (
-                          <FormItem className="col-span-4">
+                        <FormItem className="col-span-4">
                             <FormLabel>Notes</FormLabel>
                             <FormControl>
-                              <Input placeholder="Enter additional notes" {...field} disabled={isUploading} />
+                            <Input placeholder="Enter additional notes" {...field} disabled={isUploading} />
                             </FormControl>
                             <FormMessage />
-                          </FormItem>
+                        </FormItem>
                         )}
-                      />
-                    </div>
-                    <DialogFooter>
-                      <Button type="submit" disabled={isUploading}>
-                        {isUploading ? "Uploading..." : "Save Record"}
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </Form>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardHeader>
-
-        <CardContent>
-          {fetchError ? (
-            <p className="text-sm text-red-600">{fetchError}</p>
-          ) : displayRecords.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No laboratory records for this patient.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableCell>
-                    <Checkbox
-                      id="select-all"
-                      onCheckedChange={(checked) => {
-                        // Implement select all logic if needed
-                      }}
                     />
+                    </div>
+                  <DialogFooter>
+                    <Button type="submit" disabled={isUploading}>
+                      {isUploading ? "Uploading..." : "Save Record"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </CardHeader>
+
+      <CardContent>
+        {fetchError ? (
+          <p className="text-sm text-red-600">{fetchError}</p>
+        ) : displayRecords.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No laboratory records for this patient.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableCell>
+                  <Checkbox
+                    id="select-all"
+                    onCheckedChange={(checked) => {
+                      // Implement select all logic if needed
+                    }}
+                  />
+                </TableCell>
+                <TableHead>File Name</TableHead>
+                <TableHead>Record Type</TableHead>
+                <TableHead>Doctor</TableHead>
+                <TableHead>Company</TableHead>
+                <TableHead>Ordered Date</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {displayRecords.map((record, index) => (
+                <TableRow key={record.id || index}>
+                  <TableCell>
+                    <Checkbox id={`record-${record.id || index}`} />
                   </TableCell>
-                  <TableHead>File Name</TableHead>
-                  <TableHead>Record Type</TableHead>
-                  <TableHead>Doctor</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Ordered Date</TableHead>
-                  <TableHead></TableHead>
+                  <TableCell className="font-medium">{record.filename}</TableCell>
+                  <TableCell>{record.type}</TableCell>
+                  <TableCell>{record.doctor}</TableCell>
+                  <TableCell>{record.company}</TableCell>
+                  <TableCell>{record.ordered_date}</TableCell>
+                  <TableCell className="flex gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="icon" variant="ghost">
+                        <MoreHorizontal />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {record.fileurl && (
+                        <DropdownMenuItem onClick={() => handleDownload(record.fileurl, record.filename)}>
+                          <FileDown className="mr-2 h-4 w-4" />
+                          Download
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem onClick={() => {}}>
+                        <Eye className="mr-2 h-4 w-4" />
+                        Preview
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => {}}>
+                        <FilePenLine className="mr-2 h-4 w-4" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDelete(index)}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {displayRecords.map((record, index) => (
-                  <TableRow key={record.id || index}>
-                    <TableCell>
-                      <Checkbox id={`record-${record.id || index}`} />
-                    </TableCell>
-                    <TableCell className="font-medium">{record.filename}</TableCell>
-                    <TableCell>{record.type}</TableCell>
-                    <TableCell>{record.doctor}</TableCell>
-                    <TableCell>{record.company}</TableCell>
-                    <TableCell>{record.ordered_date}</TableCell>
-                    <TableCell className="flex gap-2">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                          >
-                            <MoreHorizontal />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                          <DropdownMenuLabel>Toggle Actions</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleDownload(record.fileurl, record.filename)}>
-                            <FileDown className="mr-2 h-4 w-4" />
-                            Download
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handlePreview(record)}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            Preview
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <FilePenLine className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDelete(index)}>
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-
-        <CardFooter>
-          <div className="text-xs text-muted-foreground">
-            Showing <strong>{displayRecords.length}</strong> of <strong>{displayRecords.length}</strong> Records
-          </div>
-        </CardFooter>
-      </Card>
-
-      {/* Right Sidebar for Preview */}
-      <div
-        className={`fixed right-0 top-0 h-full w-100 bg-background shadow-lg transform transition-transform duration-300 ${
-          isSidebarOpen ? 'translate-x-0' : 'translate-x-full'
-        } z-50 border-l`}
-      >
-        {selectedRecord && (
-          <div className="flex flex-col h-full">
-            <div className="p-4 flex justify-between items-center">
-              <h2 className="font-semibold">Record Details</h2>
-              <Button variant="ghost" size="icon" onClick={closeSidebar}>
-                <XIcon />
-              </Button>
-            </div>
-            <div className="p-4 flex-1 overflow-y-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label className="font-semibold mb-2">File Name</Label>
-                  <p className="text-sm">{selectedRecord.filename}</p>
-                </div>
-                <div>
-                  <Label className="font-semibold mb-2">Record Type</Label>
-                  <p className="text-sm">{selectedRecord.type}</p>
-                </div>
-                <div>
-                  <Label className="font-semibold mb-2">Doctor</Label>
-                  <p className="text-sm">{selectedRecord.doctor}</p>
-                </div>
-                <div>
-                  <Label className="font-semibold mb-2">Company</Label>
-                  <p className="text-sm">{selectedRecord.company || 'N/A'}</p>
-                </div>
-                <div>
-                  <Label className="font-semibold mb-2">Ordered Date</Label>
-                  <p className="text-sm">{selectedRecord.ordered_date}</p>
-                </div>
-                <div>
-                  <Label className="font-semibold mb-2">Received Date</Label>
-                  <p className="text-sm">{selectedRecord.received_date}</p>
-                </div>
-                <div>
-                  <Label className="font-semibold mb-2">Reported Date</Label>
-                  <p className="text-sm">{selectedRecord.reported_date}</p>
-                </div>
-            </div>
-
-            <div className="col-span-2 my-4">
-                <Separator className="border-t" />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
-                <div>
-                  <Label className="font-semibold mb-2">Remarks</Label>
-                  <p className="text-sm">{selectedRecord.remarks || 'N/A'}</p>
-                </div>
-                <div>
-                  <Label className="font-semibold mb-2">Impressions</Label>
-                  <p className="text-sm">{selectedRecord.impressions}</p>
-                </div>
-                <div>
-                  <Label className="font-semibold mb-2">Recommendations</Label>
-                  <p className="text-sm">{selectedRecord.recommendations || 'N/A'}</p>
-                </div>
-                <div>
-                  <Label className="font-semibold mb-2">Notes</Label>
-                  <p className="text-sm">{selectedRecord.notes || 'N/A'}</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="p-4">
-              <Button
-                className="w-full"
-                onClick={() => handleDownload(selectedRecord.fileurl, selectedRecord.filename)}
-                disabled={!selectedRecord.fileurl}
-              >
-                <FileDown />
-                Download File
-              </Button>
-            </div>
-          </div>
+              ))}
+            </TableBody>
+          </Table>
         )}
-      </div>
-    </div>
+      </CardContent>
+
+      <CardFooter>
+        <div className="text-xs text-muted-foreground">
+          Showing <strong>{displayRecords.length}</strong> of <strong>{displayRecords.length}</strong> Records
+        </div>
+      </CardFooter>
+    </Card>
   )
 }
