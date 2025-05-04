@@ -1,8 +1,7 @@
 "use client";
 
+import * as React from "react";
 import { useRouter } from "next/navigation";
-import { createSearchParams, useNavigate } from "react-router-dom";
-import React, { useState, useEffect } from "react";
 import {
     Eye,
     Download,
@@ -13,6 +12,7 @@ import {
     UserRoundPlus,
     ChevronDownIcon,
     TextSearch,
+    ArrowUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -66,7 +66,14 @@ import {
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabase/client";
-
+import {
+    ColumnDef,
+    SortingState,
+    getCoreRowModel,
+    getSortedRowModel,
+    useReactTable,
+    flexRender
+} from "@tanstack/react-table";
 interface Patient {
     id: number;
     name: string;
@@ -78,28 +85,171 @@ interface Patient {
     address: string | null;
 }
 
+const columns: ColumnDef<Patient>[] = [
+    {
+        id: "select",
+        header: ({ table }) => (
+            <Checkbox
+                checked={
+                    table.getIsAllPageRowsSelected() ||
+                    (table.getIsSomePageRowsSelected() && "indeterminate")
+                }
+                onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+                aria-label="Select all"
+            />
+        ),
+        cell: ({ row }) => (
+            <Checkbox
+                checked={row.getIsSelected()}
+                onCheckedChange={(value) => row.toggleSelected(!!value)}
+                aria-label="Select row"
+            />
+        ),
+        enableSorting: false,
+    },
+    {
+        accessorKey: "name",
+        header: ({ column }) => (
+            <Button
+                variant="ghost"
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            >
+                Name
+                <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+        ),
+        cell: ({ row }) => <div className="font-medium">{row.getValue("name")}</div>,
+    },
+    {
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ row }) => {
+            const status = row.getValue("status") as string;
+            return (
+                <Badge
+                    variant="outline"
+                    className="flex gap-1 px-1.5 text-muted-foreground [&_svg]:size-3"
+                >
+                    <div
+                        className={`w-2 h-2 rounded-full ${
+                            status.toLowerCase() === "active" ? "bg-green-400" : "bg-red-400"
+                        }`}
+                    />
+                    <span className="hidden sm:inline">{status}</span>
+                </Badge>
+            );
+        },
+        enableSorting: false,
+    },
+    {
+        accessorKey: "last_appointment",
+        header: ({ column }) => (
+            <Button
+                variant="ghost"
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="hidden sm:flex"
+            >
+                Last Appointment
+                <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+        ),
+        cell: ({ row }) => (
+            <div className="hidden sm:block">{row.getValue("last_appointment") || "-"}</div>
+        ),
+    },
+    {
+        accessorKey: "birth_date",
+        header: ({ column }) => (
+            <Button
+                variant="ghost"
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="hidden md:flex"
+            >
+                Birth Date
+                <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+        ),
+        cell: ({ row }) => (
+            <div className="hidden md:block">{row.getValue("birth_date") || "-"}</div>
+        ),
+    },
+    {
+        accessorKey: "age",
+        header: ({ column }) => (
+            <Button
+                variant="ghost"
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="hidden md:flex"
+            >
+                Age
+                <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+        ),
+        cell: ({ row }) => <div className="hidden md:block">{row.getValue("age") || "-"}</div>,
+    },
+    {
+        accessorKey: "contact_number",
+        header: () => <div className="hidden md:block">Contact Number</div>,
+        cell: ({ row }) => (
+            <div className="hidden md:block">{row.getValue("contact_number") || "-"}</div>
+        ),
+        enableSorting: false,
+    },
+    {
+        accessorKey: "address",
+        header: ({ column }) => (
+            <Button
+                variant="ghost"
+                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+                className="hidden md:flex"
+            >
+                Home Address
+                <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+        ),
+        cell: ({ row }) => (
+            <div className="hidden md:block">{row.getValue("address") || "-"}</div>
+        ),
+    },
+    {
+        id: "actions",
+        cell: ({ row }) => {
+            const patient = row.original;
+            const router = useRouter();
+            return (
+                <Button
+                    aria-haspopup="true"
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => router.push(`/Patients/Patient-View?id=${patient.id}`)}
+                >
+                    <MoreHorizontal className="h-4 w-4" />
+                </Button>
+            );
+        },
+        enableSorting: false,
+    },
+];
+
 export default function PatientsTable() {
     const router = useRouter();
-    const [openDialog, setOpenDialog] = useState(false);
-    const [patients, setPatients] = useState<Patient[]>([]);
-    const [filteredPatients, setFilteredPatients] = useState<Patient[]>([]);
-    const [searchTerm, setSearchTerm] = useState("");
-    const [advancedSearch, setAdvancedSearch] = useState({
+    const [patients, setPatients] = React.useState<Patient[]>([]);
+    const [searchTerm, setSearchTerm] = React.useState("");
+    const [advancedSearch, setAdvancedSearch] = React.useState({
         last_appointment: "",
         birth_date: "",
         age: "",
         contact: "",
         address: "",
     });
-    const [sortOption, setSortOption] = useState("name-asc");
-    const [tab, setTab] = useState("all");
-    const [selectedPatients, setSelectedPatients] = useState<number[]>([]);
+    const [tab, setTab] = React.useState("all");
+    const [sorting, setSorting] = React.useState<SortingState>([]);
+    const [rowSelection, setRowSelection] = React.useState({});
 
     // Fetch patients from Supabase
-    useEffect(() => {
+    React.useEffect(() => {
         async function fetchPatients() {
             try {
-                // Fetch patients with related person data
                 const { data: patientsData, error: patientsError } = await supabase
                     .from("patients")
                     .select(`
@@ -125,20 +275,17 @@ export default function PatientsTable() {
                 if (!patientsData || patientsData.length === 0) {
                     toast.info("No patients found.");
                     setPatients([]);
-                    setFilteredPatients([]);
                     return;
                 }
 
-                // Fetch appointments separately to get the latest appointment
                 const patientIds = patientsData.map((p: any) => p.id);
                 const { data: appointmentsData, error: appointmentsError } = await supabase
-                    .from("appointment")
+                    .from("appointments")
                     .select("patient_id, date")
                     .in("patient_id", patientIds);
 
                 if (appointmentsError) {
                     toast.warning(`Failed to fetch appointments: ${appointmentsError.message}`);
-                    // Continue without appointments if error occurs
                 }
 
                 const formattedPatients: Patient[] = patientsData.map((patient: any) => {
@@ -181,9 +328,8 @@ export default function PatientsTable() {
                 });
 
                 setPatients(formattedPatients);
-                setFilteredPatients(formattedPatients);
                 toast.success("Patients fetched successfully.");
-            } catch (err: unknown) {
+            } catch (err: any) {
                 toast.error(`Error fetching patients: ${err.message}`);
             }
         }
@@ -192,7 +338,7 @@ export default function PatientsTable() {
     }, []);
 
     // Handle search and filtering
-    useEffect(() => {
+    const filteredPatients = React.useMemo(() => {
         let result = [...patients];
 
         // Apply search term
@@ -231,45 +377,40 @@ export default function PatientsTable() {
             result = result.filter((patient) => patient.status.toLowerCase() === "inactive");
         }
 
-        // Apply sorting
-        result.sort((a, b) => {
-            if (sortOption === "name-asc") {
-                return a.name.localeCompare(b.name);
-            } else if (sortOption === "name-desc") {
-                return b.name.localeCompare(a.name);
-            } else if (sortOption === "date-asc") {
-                return (
-                    (a.last_appointment ? new Date(a.last_appointment).getTime() : Infinity) -
-                    (b.last_appointment ? new Date(b.last_appointment).getTime() : Infinity)
-                );
-            } else if (sortOption === "date-desc") {
-                return (
-                    (b.last_appointment ? new Date(b.last_appointment).getTime() : -Infinity) -
-                    (a.last_appointment ? new Date(a.last_appointment).getTime() : -Infinity)
-                );
-            }
-            return 0;
-        });
+        return result;
+    }, [searchTerm, advancedSearch, tab, patients]);
 
-        setFilteredPatients(result);
-    }, [searchTerm, advancedSearch, tab, sortOption, patients]);
-
-    // Handle checkbox selection
-    const handleSelectPatient = (id: number) => {
-        setSelectedPatients((prev) =>
-            prev.includes(id) ? prev.filter((pid) => pid !== id) : [...prev, id]
-        );
-    };
+    // Initialize table
+    const table = useReactTable({
+        data: filteredPatients,
+        columns,
+        onSortingChange: setSorting,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        onRowSelectionChange: setRowSelection,
+        state: {
+            sorting,
+            rowSelection,
+        },
+    });
 
     // Handle export
     const handleExport = () => {
-        const headers = ["Name", "Status", "Last Appointment", "Birth Date", "Age", "Contact Number", "Home Address"];
+        const headers = [
+            "Name",
+            "Status",
+            "Last Appointment",
+            "Birth Date",
+            "Age",
+            "Contact Number",
+            "Home Address",
+        ];
         const rows = filteredPatients.map((patient) => [
             patient.name,
             patient.status,
+            patient.last_appointment || "",
             patient.birth_date || "",
             patient.age || "",
-            patient.last_appointment || "",
             patient.contact_number || "",
             patient.address || "",
         ]);
@@ -380,35 +521,6 @@ export default function PatientsTable() {
                             </DropdownMenuContent>
                         </DropdownMenu>
 
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm">
-                                    <ListFilter />
-                                    <span className="hidden lg:inline">Sort</span>
-                                    <ChevronDownIcon />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48">
-                                <DropdownMenuRadioGroup
-                                    value={sortOption}
-                                    onValueChange={setSortOption}
-                                >
-                                    <DropdownMenuRadioItem value="name-asc">
-                                        Name (A-Z)
-                                    </DropdownMenuRadioItem>
-                                    <DropdownMenuRadioItem value="name-desc">
-                                        Name (Z-A)
-                                    </DropdownMenuRadioItem>
-                                    <DropdownMenuRadioItem value="date-asc">
-                                        Date (Oldest)
-                                    </DropdownMenuRadioItem>
-                                    <DropdownMenuRadioItem value="date-desc">
-                                        Date (Newest)
-                                    </DropdownMenuRadioItem>
-                                </DropdownMenuRadioGroup>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-
                         <Dialog>
                             <DialogTrigger asChild>
                                 <Button size="sm" variant="outline" className="h-8 gap-1">
@@ -468,138 +580,45 @@ export default function PatientsTable() {
                             ) : (
                                 <Table>
                                     <TableHeader>
-                                        <TableRow>
-                                            <TableCell>
-                                                <Checkbox
-                                                    checked={
-                                                        filteredPatients.length > 0 &&
-                                                        selectedPatients.length === filteredPatients.length
-                                                    }
-                                                    onCheckedChange={(checked) =>
-                                                        setSelectedPatients(
-                                                            checked
-                                                                ? filteredPatients.map((p) => p.id)
-                                                                : []
-                                                        )
-                                                    }
-                                                />
-                                            </TableCell>
-                                            <TableHead>Name</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead className="hidden sm:table-cell">
-                                                Last Appointment
-                                            </TableHead>
-                                            <TableHead className="hidden md:table-cell">
-                                                Birth Date
-                                            </TableHead>
-                                            <TableHead className="hidden md:table-cell">
-                                                Age
-                                            </TableHead>
-                                            <TableHead className="hidden md:table-cell">
-                                                Contact Number
-                                            </TableHead>
-                                            <TableHead className="hidden md:table-cell">
-                                                Home Address
-                                            </TableHead>
-                                            <TableHead>
-                                                <span className="sr-only">Actions</span>
-                                            </TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-
-                                    <TableBody>
-                                        {filteredPatients.map((patient) => (
-                                            <TableRow key={patient.id}>
-                                                <TableCell>
-                                                    <Checkbox
-                                                        checked={selectedPatients.includes(patient.id)}
-                                                        onCheckedChange={() =>
-                                                            handleSelectPatient(patient.id)
-                                                        }
-                                                    />
-                                                </TableCell>
-                                                <TableCell className="font-medium">
-                                                    {patient.name}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge
-                                                        variant="outline"
-                                                        className="flex gap-1 px-1.5 text-muted-foreground [&_svg]:size-3"
-                                                    >
-                                                        <div
-                                                            className={`w-2 h-2 rounded-full ${
-                                                                patient.status.toLowerCase() ===
-                                                                "active"
-                                                                    ? "bg-green-400"
-                                                                    : "bg-red-400"
-                                                            }`}
-                                                        />
-                                                        <span className="hidden sm:inline">
-                                                            {patient.status}
-                                                        </span>
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="hidden sm:table-cell">
-                                                    {patient.last_appointment || "-"}
-                                                </TableCell>
-                                                <TableCell className="hidden md:table-cell">
-                                                    {patient.birth_date || "-"}
-                                                </TableCell>
-                                                <TableCell className="hidden md:table-cell">
-                                                    {patient.age || "-"}
-                                                </TableCell>
-                                                <TableCell className="hidden md:table-cell">
-                                                    {patient.contact_number || "-"}
-                                                </TableCell>
-                                                <TableCell className="hidden md:table-cell">
-                                                    {patient.address || "-"}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Button
-                                                        aria-haspopup="true"
-                                                        size="icon"
-                                                        variant="ghost"
-                                                        onClick={() => router.push(
-                                                            `/Patients/Patient-View?id=${patient.id}`
-                                                        )}
-                                                    >
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                        <span className="sr-only">
-                                                            Toggle menu
-                                                        </span>
-                                                    </Button>
-
-                                                    <AlertDialog
-                                                        open={openDialog}
-                                                        onOpenChange={setOpenDialog}
-                                                    >
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>
-                                                                    Are you absolutely sure?
-                                                                </AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    This action cannot be undone. This will
-                                                                    permanently delete this record and remove
-                                                                    it from the system.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>
-                                                                    Cancel
-                                                                </AlertDialogCancel>
-                                                                <AlertDialogAction
-                                                                    className="bg-red-600 hover:bg-red-700"
-                                                                    onClick={() => handleDelete(patient.id)}
-                                                                >
-                                                                    Delete
-                                                                </AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </TableCell>
+                                        {table.getHeaderGroups().map((headerGroup) => (
+                                            <TableRow key={headerGroup.id}>
+                                                {headerGroup.headers.map((header) => (
+                                                    <TableHead key={header.id}>
+                                                        {header.isPlaceholder
+                                                            ? null
+                                                            : flexRender(
+                                                                  header.column.columnDef.header,
+                                                                  header.getContext()
+                                                              )}
+                                                    </TableHead>
+                                                ))}
                                             </TableRow>
                                         ))}
+                                    </TableHeader>
+                                    <TableBody>
+                                        {table.getRowModel().rows?.length ? (
+                                            table.getRowModel().rows.map((row) => (
+                                                <TableRow
+                                                    key={row.id}
+                                                    data-state={row.getIsSelected() && "selected"}
+                                                >
+                                                    {row.getVisibleCells().map((cell) => (
+                                                        <TableCell key={cell.id}>
+                                                            {flexRender(
+                                                                cell.column.columnDef.cell,
+                                                                cell.getContext()
+                                                            )}
+                                                        </TableCell>
+                                                    ))}
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={columns.length} className="h-24 text-center">
+                                                    No results.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
                                     </TableBody>
                                 </Table>
                             )}
