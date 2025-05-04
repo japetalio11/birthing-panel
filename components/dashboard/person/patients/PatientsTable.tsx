@@ -280,7 +280,7 @@ export default function PatientsTable() {
 
                 const patientIds = patientsData.map((p: any) => p.id);
                 const { data: appointmentsData, error: appointmentsError } = await supabase
-                    .from("appointment")
+                    .from("appointments")
                     .select("patient_id, date")
                     .in("patient_id", patientIds);
 
