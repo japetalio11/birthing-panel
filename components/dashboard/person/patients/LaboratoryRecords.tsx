@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import React, { useState, useEffect } from "react"
-import { MonitorUp, MoreHorizontal, Search, Trash2, FileDown, Eye, FilePenLine, X } from "lucide-react"
+import { MonitorUp, MoreHorizontal, Search, Trash2, FileDown, Eye, FilePenLine, XIcon } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
@@ -520,7 +520,7 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                                   </FormControl>
                                   <SelectContent>
                                     <SelectItem value="Blood Test">Blood Test</SelectItem>
-                                    <SelectItem value="X-Ray">X-Ray</SelectItem>
+                                    <SelectItem value="XIcon-Ray">XIcon-Ray</SelectItem>
                                     <SelectItem value="MRI">MRI</SelectItem>
                                     <SelectItem value="CT Scan">CT Scan</SelectItem>
                                     <SelectItem value="Ultrasound">Ultrasound</SelectItem>
@@ -773,8 +773,8 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
           <div className="flex flex-col h-full">
             <div className="p-4 flex justify-between items-center">
               <h2 className="font-semibold">Record Details</h2>
-              <Button variant="outline" size="icon" onClick={closeSidebar}>
-                <X />
+              <Button variant="ghost" size="icon" onClick={closeSidebar}>
+                <XIcon />
               </Button>
             </div>
             <div className="p-4 flex-1 overflow-y-auto">

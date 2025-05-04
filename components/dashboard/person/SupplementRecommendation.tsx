@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { PillBottle, MoreHorizontal, Search, Trash2 } from "lucide-react";
+import { PillBottle, Trash2, Search } from "lucide-react";
 import { useForm, FormProvider } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,14 +46,6 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -74,9 +66,15 @@ const formSchema = z.object({
     amount: z.string().min(1, "Amount is required"),
     frequency: z.string().min(1, "Frequency is required"),
     route: z.string().min(1, "Route is required"),
+    clinician_id: z.string().min(1, "Clinician is required"), // Changed to clinician_id
 });
 
 type FormValues = z.infer<typeof formSchema>;
+
+type Clinician = {
+    id: string;
+    full_name: string;
+};
 
 export default function SupplementRecommendation({
     context,
@@ -90,6 +88,7 @@ export default function SupplementRecommendation({
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [supplementsData, setSupplementsData] = useState<any[]>([]);
     const [fetchError, setFetchError] = useState<string | null>(null);
+    const [clinicians, setClinicians] = useState<Clinician[]>([]); // State for clinicians
 
     const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
@@ -99,9 +98,51 @@ export default function SupplementRecommendation({
             amount: "",
             frequency: "",
             route: "",
+            clinician_id: "", // Added clinician_id
         },
     });
 
+    // Fetch clinicians
+    useEffect(() => {
+        async function fetchClinicians() {
+            try {
+                const { data, error } = await supabase
+                    .from("clinicians")
+                    .select(`
+                        id,
+                        person (
+                            first_name,
+                            middle_name,
+                            last_name
+                        )
+                    `);
+
+                if (error) {
+                    console.error("Clinician fetch error:", error);
+                    toast("Error", {
+                        description: "Failed to fetch clinicians.",
+                    });
+                    return;
+                }
+
+                const clinicianList: Clinician[] = data.map((clinician: any) => ({
+                    id: clinician.id.toString(),
+                    full_name: `${clinician.person.first_name} ${clinician.person.middle_name} ${clinician.person.last_name}`,
+                }));
+
+                setClinicians(clinicianList);
+            } catch (err) {
+                console.error("Unexpected error fetching clinicians:", err);
+                toast("Error", {
+                    description: "Unexpected error fetching clinicians.",
+                });
+            }
+        }
+
+        fetchClinicians();
+    }, []);
+
+    // Fetch supplements
     useEffect(() => {
         async function fetchSupplements() {
             if (!id) {
@@ -112,7 +153,17 @@ export default function SupplementRecommendation({
             try {
                 const { data, error } = await supabase
                     .from("supplements")
-                    .select("*")
+                    .select(`
+                        *,
+                        clinicians (
+                            id,
+                            person (
+                                first_name,
+                                middle_name,
+                                last_name
+                            )
+                        )
+                    `)
                     .eq("patient_id", id);
 
                 if (error) {
@@ -123,11 +174,16 @@ export default function SupplementRecommendation({
                     });
                     setSupplementsData([]);
                 } else {
-                    console.log("Fetched supplements for patient_id", id, ":", data);
-                    setSupplementsData(data);
+                    const formattedData = data.map((supplement: any) => ({
+                        ...supplement,
+                        clinician: supplement.clinicians
+                            ? `${supplement.clinicians.person.first_name} ${supplement.clinicians.middle_name} ${supplement.clinicians.person.last_name}`
+                            : "Unknown",
+                    }));
+                    setSupplementsData(formattedData);
                     setFetchError(null);
                     if (append) {
-                        data.forEach((supplement: any) => {
+                        formattedData.forEach((supplement: any) => {
                             append({
                                 id: supplement.id,
                                 name: supplement.name,
@@ -135,6 +191,8 @@ export default function SupplementRecommendation({
                                 amount: supplement.amount,
                                 frequency: supplement.frequency,
                                 route: supplement.route,
+                                clinician_id: supplement.clinician_id?.toString(),
+                                clinician: supplement.clinician,
                             });
                         });
                     }
@@ -172,6 +230,7 @@ export default function SupplementRecommendation({
                             amount: data.amount,
                             frequency: data.frequency,
                             route: data.route,
+                            clinician_id: parseInt(data.clinician_id), // Save clinician_id
                         })
                         .eq("id", supplementToUpdate.id);
 
@@ -191,12 +250,18 @@ export default function SupplementRecommendation({
                             amount: data.amount,
                             frequency: data.frequency,
                             route: data.route,
+                            clinician_id: data.clinician_id,
+                            clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown",
                         });
                     } else {
                         setSupplementsData((prev) =>
                             prev.map((supplement, idx) =>
                                 idx === editingIndex
-                                    ? { ...supplement, ...data }
+                                    ? {
+                                          ...supplement,
+                                          ...data,
+                                          clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown",
+                                      }
                                     : supplement,
                             ),
                         );
@@ -215,6 +280,7 @@ export default function SupplementRecommendation({
                                 amount: data.amount,
                                 frequency: data.frequency,
                                 route: data.route,
+                                clinician_id: parseInt(data.clinician_id), // Save clinician_id
                             },
                         ])
                         .select()
@@ -236,9 +302,17 @@ export default function SupplementRecommendation({
                             amount: data.amount,
                             frequency: data.frequency,
                             route: data.route,
+                            clinician_id: data.clinician_id,
+                            clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown",
                         });
                     } else {
-                        setSupplementsData((prev) => [...prev, newSupplement]);
+                        setSupplementsData((prev) => [
+                            ...prev,
+                            {
+                                ...newSupplement,
+                                clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown",
+                            },
+                        ]);
                     }
                     toast("Supplement Added", {
                         description: "New supplement has been added successfully.",
@@ -252,6 +326,8 @@ export default function SupplementRecommendation({
                         amount: data.amount,
                         frequency: data.frequency,
                         route: data.route,
+                        clinician_id: data.clinician_id,
+                        clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown",
                     });
                     toast("Supplement Updated", {
                         description: "Supplement has been updated successfully.",
@@ -263,6 +339,8 @@ export default function SupplementRecommendation({
                         amount: data.amount,
                         frequency: data.frequency,
                         route: data.route,
+                        clinician_id: data.clinician_id,
+                        clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown",
                     });
                     toast("Supplement Added", {
                         description: "New supplement has been added successfully.",
@@ -276,6 +354,7 @@ export default function SupplementRecommendation({
                 amount: "",
                 frequency: "",
                 route: "",
+                clinician_id: "",
             });
             setOpenDialog(false);
             setEditingIndex(null);
@@ -318,7 +397,21 @@ export default function SupplementRecommendation({
             toast("Error", {
                 description: "An unexpected error occurred while deleting the supplement.",
             });
-        }
+        };
+    };
+
+    const handleEdit = (index: number) => {
+        const supplement = (fields.length > 0 ? fields : supplementsData)[index];
+        form.reset({
+            name: supplement.name,
+            strength: supplement.strength,
+            amount: supplement.amount,
+            frequency: supplement.frequency,
+            route: supplement.route,
+            clinician_id: supplement.clinician_id?.toString() || "",
+        });
+        setEditingIndex(index);
+        setOpenDialog(true);
     };
 
     const displaySupplements = fields.length > 0 ? fields : supplementsData;
@@ -353,6 +446,7 @@ export default function SupplementRecommendation({
                                     amount: "",
                                     frequency: "",
                                     route: "",
+                                    clinician_id: "",
                                 });
                                 setEditingIndex(null);
                             }
@@ -368,9 +462,11 @@ export default function SupplementRecommendation({
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-[1000px]">
                             <DialogHeader>
-                                <DialogTitle>Add Supplement</DialogTitle>
+                                <DialogTitle>{editingIndex !== null ? "Edit Supplement" : "Add Supplement"}</DialogTitle>
                                 <DialogDescription>
-                                    Add a new supplement to your patient. Click save when you're done!
+                                    {editingIndex !== null
+                                        ? "Edit the supplement details. Click save when you're done!"
+                                        : "Add a new supplement to your patient. Click save when you're done!"}
                                 </DialogDescription>
                             </DialogHeader>
                             <FormProvider {...form}>
@@ -484,22 +580,24 @@ export default function SupplementRecommendation({
                                             />
                                             <FormField
                                                 control={form.control}
-                                                name="clinician"
+                                                name="clinician_id"
                                                 render={({ field }) => (
                                                     <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                        <FormLabel htmlFor="clinician" className="text-right">
+                                                        <FormLabel htmlFor="clinician_id" className="text-right">
                                                             Clinician
                                                         </FormLabel>
                                                         <Select onValueChange={field.onChange} value={field.value}>
                                                             <FormControl>
-                                                                <SelectTrigger id="clinician" className="col-span-4">
+                                                                <SelectTrigger id="clinician_id" className="col-span-4">
                                                                     <SelectValue placeholder="Select clinician" />
                                                                 </SelectTrigger>
                                                             </FormControl>
                                                             <SelectContent>
-                                                                <SelectItem value="Dr. Smith">Dr. Smith</SelectItem>
-                                                                <SelectItem value="Dr. Johnson">Dr. Johnson</SelectItem>
-                                                                <SelectItem value="Dr. Lee">Dr. Lee</SelectItem>
+                                                                {clinicians.map((clinician) => (
+                                                                    <SelectItem key={clinician.id} value={clinician.id}>
+                                                                        {clinician.full_name}
+                                                                    </SelectItem>
+                                                                ))}
                                                             </SelectContent>
                                                         </Select>
                                                         <FormMessage className="col-span-4" />
@@ -556,13 +654,20 @@ export default function SupplementRecommendation({
                                     <TableCell>{supplement.amount}</TableCell>
                                     <TableCell>{supplement.frequency}</TableCell>
                                     <TableCell>{supplement.route}</TableCell>
-                                    <TableCell>{supplement.clinician}</TableCell>
+                                    <TableCell SOMEONE="{supplement.clinician}">{supplement.clinician}</TableCell>
                                     <TableCell>
-                                        <Button 
-                                            variant="outline"    
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => handleEdit(index)}
+                                            className="mr-2"
+                                        >
+                                            Edit
+                                        </Button>
+                                        <Button
+                                            variant="outline"
                                             onClick={() => handleDelete(index)}
                                         >
-                                            <Trash2/>
+                                            <Trash2 />
                                             Delete
                                         </Button>
                                     </TableCell>

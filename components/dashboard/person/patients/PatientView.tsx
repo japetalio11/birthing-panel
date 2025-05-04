@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
+import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { Download, Mail, Trash2, RefreshCcw} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -12,6 +13,8 @@ import Allergy from "../Allergy";
 import SupplementRecommendation from "../SupplementRecommendation";
 import LaboratoryRecords from "../patients/LaboratoryRecords";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input"
+import { FormField } from "@/components/ui/form";
 import {
     Dialog,
     DialogContent,
@@ -291,16 +294,26 @@ export default function PatientView() {
                                 <DialogDescription>
                                     Are you sure you want to delete this patient? This action cannot be undone.
                                 </DialogDescription>
+                                <div className="grid gap-2 py-4">
+                                    <Label htmlFor="reason">Confirm Deletion</Label>
+                                    <Input 
+                                        id="reason" 
+                                        className="focus:border-red-500 focus:ring-red-500" 
+                                        placeholder="Enter full patient name to confirm deletion" 
+                                    />
+                                </div>
                             </DialogHeader>
                             <DialogFooter>
-                                <Button variant="outline" onClick={() => {}}>
-                                    Cancel
-                                </Button>
+                                <DialogPrimitive.Close>
+                                    <Button variant="outline">
+                                        Cancel
+                                    </Button>
+                                </DialogPrimitive.Close>
                                 <Button 
                                     variant="destructive" 
                                     onClick={() => handleDelete(patient.id)}
                                 >
-                                    Delete
+                                    Yes, delete this patient.
                                 </Button>
                             </DialogFooter>
                         </DialogContent>
