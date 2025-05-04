@@ -55,10 +55,10 @@ export default function Sidebar({ className, user }: SidebarProps) {
               </Link>
 
               <Link
-                href="/appointments"
+                href="/Appointments"
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
-                  isRouteActive("/appointments")
+                  isRouteActive("/Appointments")
                     ? "bg-muted text-primary"
                     : "text-muted-foreground hover:text-primary"
                 )}
@@ -81,10 +81,10 @@ export default function Sidebar({ className, user }: SidebarProps) {
               </Link>
 
               <Link
-                href="/clinicians"
+                href="/Clinicians"
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
-                  isRouteActive("/clinicians")
+                  isRouteActive("/Clinicians")
                     ? "bg-muted text-primary"
                     : "text-muted-foreground hover:text-primary"
                 )}
@@ -98,10 +98,10 @@ export default function Sidebar({ className, user }: SidebarProps) {
           <div className="flex h-14 items-center border-t">
             <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
               <Link
-                href="/settings"
+                href="/Settings"
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
-                  isRouteActive("/settings")
+                  isRouteActive("/Settings")
                     ? "bg-muted text-primary"
                     : "text-muted-foreground hover:text-primary"
                 )}

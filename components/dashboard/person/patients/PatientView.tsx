@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import Allergy from "../Allergy";
 import SupplementRecommendation from "../SupplementRecommendation";
+import Prescriptions from "../Prescriptions";
 import LaboratoryRecords from "../patients/LaboratoryRecords";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input"
@@ -436,6 +437,7 @@ export default function PatientView() {
             </TabsContent>
 
             <TabsContent value="prescriptions">
+                <Prescriptions context="patient" id={id} />
             </TabsContent>
 
             <TabsContent value="records">

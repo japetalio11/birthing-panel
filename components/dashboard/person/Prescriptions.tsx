@@ -55,12 +55,12 @@ type Props = {
     context: "patient";
     id: string | null;
     fields?: any[];
-    append?: (supplement: any) => void;
+    append?: (prescription: any) => void;
     remove?: (index: number) => void;
 };
 
 const formSchema = z.object({
-    name: z.string().min(1, "Supplement name is required"),
+    name: z.string().min(1, "Prescription name is required"),
     strength: z.string().min(1, "Strength is required"),
     amount: z.string().min(1, "Amount is required"),
     frequency: z.string().min(1, "Frequency is required"),
@@ -75,7 +75,7 @@ type Clinician = {
     full_name: string;
 };
 
-export default function SupplementRecommendation({
+export default function Prescriptions({
     context,
     id,
     fields = [],
@@ -83,7 +83,7 @@ export default function SupplementRecommendation({
     remove,
 }: Props) {
     const [openDialog, setOpenDialog] = useState(false);
-    const [supplementsData, setSupplementsData] = useState<any[]>([]);
+    const [prescriptionsData, setPrescriptionsData] = useState<any[]>([]);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [clinicians, setClinicians] = useState<Clinician[]>([]);
 
@@ -115,15 +115,14 @@ export default function SupplementRecommendation({
                     `);
 
                 if (error) {
-                    console.error("Clinician fetch error:", error);
+                    console.error("Clinician fetch error:", error.code, error.message, error.details);
                     toast("Error", {
-                        description: "Failed to fetch clinicians.",
+                        description: "Failed to fetch clinicians: " + error.message,
                     });
                     return;
                 }
 
                 const clinicianList: Clinician[] = data.map((clinician: any) => {
-                    // Safely construct full_name, filtering out null/undefined values
                     const nameParts = [
                         clinician.person?.first_name,
                         clinician.person?.middle_name,
@@ -153,20 +152,32 @@ export default function SupplementRecommendation({
         fetchClinicians();
     }, []);
 
-    // Fetch supplements
+    // Fetch prescriptions
     useEffect(() => {
-        async function fetchSupplements() {
+        async function fetchPrescriptions() {
             if (!id) {
-                setSupplementsData(fields);
+                setPrescriptionsData(fields);
                 setFetchError(null);
                 return;
             }
+
             try {
                 const { data, error } = await supabase
-                    .from("supplements")
+                    .from("prescriptions")
                     .select(`
-                        *,
-                        clinicians (
+                        id,
+                        clinician_id,
+                        patient_id,
+                        appointment_id,
+                        status,
+                        appointments (
+                            name,
+                            strength,
+                            amount,
+                            frequency,
+                            route
+                        ),
+                        clinicians!clinician_id (
                             id,
                             person (
                                 first_name,
@@ -178,122 +189,176 @@ export default function SupplementRecommendation({
                     .eq("patient_id", id);
 
                 if (error) {
-                    console.error("Supplement fetch error:", error);
-                    setFetchError("Failed to fetch supplements.");
+                    console.error("Prescription fetch error:", error.code, error.message, error.details);
+                    setFetchError(`Failed to fetch prescriptions: ${error.message}`);
                     toast("Error", {
-                        description: "Failed to fetch supplements.",
+                        description: `Failed to fetch prescriptions: ${error.message}`,
                     });
-                    setSupplementsData([]);
+                    setPrescriptionsData([]);
                 } else {
-                    const formattedData = data.map((supplement: any) => {
-                        // Safely construct clinician name
-                        const clinicianName = supplement.clinicians?.person
+                    const formattedData = data.map((prescription: any) => {
+                        const clinicianName = prescription.clinicians?.person
                             ? [
-                                  supplement.clinicians.person.first_name,
-                                  supplement.clinicians.person.middle_name,
-                                  supplement.clinicians.person.last_name,
+                                  prescription.clinicians.person.first_name,
+                                  prescription.clinicians.person.middle_name,
+                                  prescription.clinicians.person.last_name,
                               ]
                                   .filter((part) => part != null && part !== "")
                                   .join(" ") || "Unknown Clinician"
                             : "Unknown Clinician";
 
-                        if (!supplement.clinicians?.person?.first_name) {
-                            console.warn(`Missing clinician name for supplement ID ${supplement.id}:`, supplement.clinicians);
+                        if (!prescription.clinicians?.person?.first_name) {
+                            console.warn(`Missing clinician name for prescription ID ${prescription.id}:`, prescription.clinicians);
+                        }
+
+                        if (!prescription.appointments) {
+                            console.warn(`Missing appointment data for prescription ID ${prescription.id}:`, prescription);
                         }
 
                         return {
-                            ...supplement,
+                            id: prescription.id,
+                            name: prescription.appointments?.name || "N/A",
+                            strength: prescription.appointments?.strength || "N/A",
+                            amount: prescription.appointments?.amount || "N/A",
+                            frequency: prescription.appointments?.frequency || "N/A",
+                            route: prescription.appointments?.route || "N/A",
+                            clinician_id: prescription.clinician_id?.toString(),
                             clinician: clinicianName,
+                            appointment_id: prescription.appointment_id,
+                            status: prescription.status,
                         };
                     });
-                    setSupplementsData(formattedData);
+                    setPrescriptionsData(formattedData);
                     setFetchError(null);
                     if (append) {
-                        formattedData.forEach((supplement: any) => {
+                        formattedData.forEach((prescription: any) => {
                             append({
-                                id: supplement.id,
-                                name: supplement.name,
-                                strength: supplement.strength,
-                                amount: supplement.amount,
-                                frequency: supplement.frequency,
-                                route: supplement.route,
-                                clinician_id: supplement.clinician_id?.toString(),
-                                clinician: supplement.clinician,
+                                id: prescription.id,
+                                name: prescription.name,
+                                strength: prescription.strength,
+                                amount: prescription.amount,
+                                frequency: prescription.frequency,
+                                route: prescription.route,
+                                clinician_id: prescription.clinician_id,
+                                clinician: prescription.clinician,
+                                appointment_id: prescription.appointment_id,
+                                status: prescription.status,
                             });
                         });
                     }
                 }
             } catch (err) {
-                console.error("Unexpected error fetching supplements:", err);
-                setFetchError("Unexpected error fetching supplements.");
+                console.error("Unexpected error fetching prescriptions:", err);
+                setFetchError("Unexpected error fetching prescriptions.");
                 toast("Error", {
-                    description: "Unexpected error fetching supplements.",
+                    description: "Unexpected error fetching prescriptions.",
                 });
-                setSupplementsData([]);
+                setPrescriptionsData([]);
             }
         }
 
-        fetchSupplements();
+        fetchPrescriptions();
     }, [id, fields, append]);
 
-    const onSubmitSupplement = async (data: FormValues) => {
+    const onSubmitPrescription = async (data: FormValues) => {
         if (!id && !append) {
             toast("Error", {
-                description: "Cannot add supplement without form integration.",
+                description: "Cannot add prescription without form integration.",
             });
             return;
         }
 
         try {
             if (id) {
-                const { data: newSupplement, error } = await supabase
-                    .from("supplements")
+                // First, insert into appointments to get an appointment_id
+                const { data: newAppointment, error: appointmentError } = await supabase
+                    .from("appointments")
                     .insert([
                         {
-                            patient_id: id,
                             name: data.name,
                             strength: data.strength,
                             amount: data.amount,
                             frequency: data.frequency,
                             route: data.route,
-                            clinician_id: parseInt(data.clinician_id),
                         },
                     ])
                     .select()
                     .single();
 
-                if (error) {
-                    console.error("Supplement insert error:", error);
+                if (appointmentError) {
+                    console.error("Appointment insert error:", appointmentError.code, appointmentError.message, appointmentError.details);
                     toast("Error", {
-                        description: `Failed to add supplement: ${error.message}`,
+                        description: `Failed to create appointment for prescription: ${appointmentError.message}`,
                     });
                     return;
                 }
 
+                // Then, insert into prescriptions with the appointment_id
+                const { data: newPrescription, error: prescriptionError } = await supabase
+                    .from("prescriptions")
+                    .insert([
+                        {
+                            patient_id: id,
+                            clinician_id: parseInt(data.clinician_id),
+                            appointment_id: newAppointment.id,
+                            status: "active", // Assuming a default status
+                        },
+                    ])
+                    .select()
+                    .single();
+
+                if (prescriptionError) {
+                    console.error("Prescription insert error:", prescriptionError.code, prescriptionError.message, prescriptionError.details);
+                    toast("Error", {
+                        description: `Failed to add prescription: ${prescriptionError.message}`,
+                    });
+                    return;
+                }
+
+                const clinicianName = clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown Clinician";
+                if (clinicianName === "Unknown Clinician") {
+                    console.warn(`No clinician found for clinician_id ${data.clinician_id} during prescription insert`);
+                }
+
                 if (append) {
                     append({
-                        id: newSupplement.id,
+                        id: newPrescription.id,
                         name: data.name,
                         strength: data.strength,
                         amount: data.amount,
                         frequency: data.frequency,
                         route: data.route,
                         clinician_id: data.clinician_id,
-                        clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown Clinician",
+                        clinician: clinicianName,
+                        appointment_id: newPrescription.appointment_id,
+                        status: newPrescription.status,
                     });
                 } else {
-                    setSupplementsData((prev) => [
+                    setPrescriptionsData((prev) => [
                         ...prev,
                         {
-                            ...newSupplement,
-                            clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown Clinician",
+                            id: newPrescription.id,
+                            name: data.name,
+                            strength: data.strength,
+                            amount: data.amount,
+                            frequency: data.frequency,
+                            route: data.route,
+                            clinician_id: data.clinician_id,
+                            clinician: clinicianName,
+                            appointment_id: newPrescription.appointment_id,
+                            status: newPrescription.status,
                         },
                     ]);
                 }
-                toast("Supplement Added", {
-                    description: "New supplement has been added successfully.",
+                toast("Prescription Added", {
+                    description: "New prescription has been added successfully.",
                 });
             } else if (append) {
+                const clinicianName = clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown Clinician";
+                if (clinicianName === "Unknown Clinician") {
+                    console.warn(`No clinician found for clinician_id ${data.clinician_id} during prescription append`);
+                }
+
                 append({
                     name: data.name,
                     strength: data.strength,
@@ -301,10 +366,12 @@ export default function SupplementRecommendation({
                     frequency: data.frequency,
                     route: data.route,
                     clinician_id: data.clinician_id,
-                    clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown Clinician",
+                    clinician: clinicianName,
+                    appointment_id: null, // No appointment_id when id is null
+                    status: "active",
                 });
-                toast("Supplement Added", {
-                    description: "New supplement has been added successfully.",
+                toast("Prescription Added", {
+                    description: "New prescription has been added successfully.",
                 });
             }
 
@@ -318,9 +385,9 @@ export default function SupplementRecommendation({
             });
             setOpenDialog(false);
         } catch (err) {
-            console.error("Unexpected error:", err);
+            console.error("Unexpected error saving prescription:", err);
             toast("Error", {
-                description: "An unexpected error occurred while saving the supplement.",
+                description: "An unexpected error occurred while saving the prescription.",
             });
         }
     };
@@ -328,57 +395,68 @@ export default function SupplementRecommendation({
     const handleDelete = async (index: number) => {
         try {
             if (id) {
-                const supplementToDelete = (fields.length > 0 ? fields : supplementsData)[index];
-                const { error } = await supabase
-                    .from("supplements")
+                const prescriptionToDelete = (fields.length > 0 ? fields : prescriptionsData)[index];
+                const { error: prescriptionError } = await supabase
+                    .from("prescriptions")
                     .delete()
-                    .eq("id", supplementToDelete.id);
+                    .eq("id", prescriptionToDelete.id);
 
-                if (error) {
-                    console.error("Supplement delete error:", error);
+                if (prescriptionError) {
+                    console.error("Prescription delete error:", prescriptionError.code, prescriptionError.message, prescriptionError.details);
                     toast("Error", {
-                        description: `Failed to delete supplement: ${error.message}`,
+                        description: `Failed to delete prescription: ${prescriptionError.message}`,
                     });
                     return;
                 }
 
-                setSupplementsData((prev) => prev.filter((_, idx) => idx !== index));
+                // Optionally delete the associated appointment
+                if (prescriptionToDelete.appointment_id) {
+                    const { error: appointmentError } = await supabase
+                        .from("appointments")
+                        .delete()
+                        .eq("id", prescriptionToDelete.appointment_id);
+
+                    if (appointmentError) {
+                        console.warn("Appointment delete error:", appointmentError.code, appointmentError.message, appointmentError.details);
+                    }
+                }
+
+                setPrescriptionsData((prev) => prev.filter((_, idx) => idx !== index));
             }
 
             if (remove) {
                 remove(index);
             }
-            toast("Supplement Deleted", {
-                description: "Supplement has been removed from the list.",
+            toast("Prescription Deleted", {
+                description: "Prescription has been removed from the list.",
             });
         } catch (err) {
-            console.error("Unexpected error deleting supplement:", err);
+            console.error("Unexpected error deleting prescription:", err);
             toast("Error", {
-                description: "An unexpected error occurred while deleting the supplement.",
+                description: "An unexpected error occurred while deleting the prescription.",
             });
-        };
+        }
     };
 
-    const displaySupplements = fields.length > 0 ? fields : supplementsData;
+    const displayPrescriptions = fields.length > 0 ? fields : prescriptionsData;
 
     return (
         <Card>
             <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div className="space-y-1">
-                    <CardTitle>Supplements</CardTitle>
+                    <CardTitle>Prescriptions</CardTitle>
                     <CardDescription>
-                        Identify your patient's supplements before it's too late
+                        Identify your patient's prescriptions before it's too late
                     </CardDescription>
                 </div>
                 <div className="relative flex items-center w-full max-w-sm md:w-auto">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
                         type="search"
-                        placeholder="Search supplements..."
+                        placeholder="Search prescriptions..."
                         className="w-full pl-8 rounded-lg bg-background"
                         onChange={(e) => {
                             // Implement search logic if needed
-
                         }}
                     />
                     <Dialog
@@ -401,21 +479,21 @@ export default function SupplementRecommendation({
                             <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
                                 <PillBottle className="h-4 w-4" />
                                 <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                                    Add Supplement
+                                    Add Prescription
                                 </span>
                             </Button>
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-[1000px]">
                             <DialogHeader>
-                                <DialogTitle>Add Supplement</DialogTitle>
+                                <DialogTitle>Add Prescription</DialogTitle>
                                 <DialogDescription>
-                                    Add a new supplement to your patient. Click save when you're done!
+                                    Add a new prescription to your patient. Click save when you're done!
                                 </DialogDescription>
                             </DialogHeader>
                             <FormProvider {...form}>
                                 <Form {...form}>
                                     <form
-                                        onSubmit={form.handleSubmit(onSubmitSupplement)}
+                                        onSubmit={form.handleSubmit(onSubmitPrescription)}
                                         className="grid gap-4 py-4"
                                     >
                                         <div className="grid grid-cols-3 gap-4">
@@ -424,13 +502,13 @@ export default function SupplementRecommendation({
                                                 name="name"
                                                 render={({ field }) => (
                                                     <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                        <FormLabel htmlFor="supplement" className="text-right">
-                                                            Supplement
+                                                        <FormLabel htmlFor="prescription" className="text-right">
+                                                            Prescription
                                                         </FormLabel>
                                                         <FormControl>
                                                             <Input
-                                                                id="supplement"
-                                                                placeholder="Enter supplement"
+                                                                id="prescription"
+                                                                placeholder="Enter prescription"
                                                                 className="col-span-4"
                                                                 {...field}
                                                             />
@@ -549,7 +627,7 @@ export default function SupplementRecommendation({
                                             />
                                         </div>
                                         <DialogFooter>
-                                            <Button type="submit">Save supplement</Button>
+                                            <Button type="submit">Save prescription</Button>
                                         </DialogFooter>
                                     </form>
                                 </Form>
@@ -561,9 +639,9 @@ export default function SupplementRecommendation({
             <CardContent>
                 {fetchError ? (
                     <p className="text-sm text-red-600">{fetchError}</p>
-                ) : displaySupplements.length === 0 ? (
+                ) : displayPrescriptions.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                        No supplements recorded for this patient.
+                        No prescriptions recorded for this patient.
                     </p>
                 ) : (
                     <Table>
@@ -577,27 +655,29 @@ export default function SupplementRecommendation({
                                         }}
                                     />
                                 </TableCell>
-                                <TableHead>Supplement</TableHead>
+                                <TableHead>Prescription</TableHead>
                                 <TableHead>Strength</TableHead>
                                 <TableHead>Amount</TableHead>
                                 <TableHead>Frequency</TableHead>
                                 <TableHead>Route</TableHead>
                                 <TableHead>Clinician</TableHead>
+                                <TableHead>Status</TableHead>
                                 <TableHead>Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {displaySupplements.map((supplement, index) => (
-                                <TableRow key={supplement.id || index}>
+                            {displayPrescriptions.map((prescription, index) => (
+                                <TableRow key={prescription.id || index}>
                                     <TableCell>
-                                        <Checkbox id={`supplement-${supplement.id || index}`} />
+                                        <Checkbox id={`prescription-${prescription.id || index}`} />
                                     </TableCell>
-                                    <TableCell className="font-medium">{supplement.name}</TableCell>
-                                    <TableCell>{supplement.strength}</TableCell>
-                                    <TableCell>{supplement.amount}</TableCell>
-                                    <TableCell>{supplement.frequency}</TableCell>
-                                    <TableCell>{supplement.route}</TableCell>
-                                    <TableCell>{supplement.clinician || "Unknown Clinician"}</TableCell>
+                                    <TableCell className="font-medium">{prescription.name}</TableCell>
+                                    <TableCell>{prescription.strength}</TableCell>
+                                    <TableCell>{prescription.amount}</TableCell>
+                                    <TableCell>{prescription.frequency}</TableCell>
+                                    <TableCell>{prescription.route}</TableCell>
+                                    <TableCell>{prescription.clinician || "Unknown Clinician"}</TableCell>
+                                    <TableCell>{prescription.status}</TableCell>
                                     <TableCell>
                                         <Button
                                             variant="outline"
@@ -615,8 +695,8 @@ export default function SupplementRecommendation({
             </CardContent>
             <CardFooter>
                 <div className="text-xs text-muted-foreground">
-                    Showing <strong>{displaySupplements.length}</strong> of{" "}
-                    <strong>{displaySupplements.length}</strong> Supplements
+                    Showing <strong>{displayPrescriptions.length}</strong> of{" "}
+                    <strong>{displayPrescriptions.length}</strong> Prescriptions
                 </div>
             </CardFooter>
         </Card>
