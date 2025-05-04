@@ -111,7 +111,7 @@ export default function SupplementRecommendation({
             }
             try {
                 const { data, error } = await supabase
-                    .from("supplement")
+                    .from("supplements")
                     .select("*")
                     .eq("patient_id", id);
 
@@ -165,7 +165,7 @@ export default function SupplementRecommendation({
                 if (editingIndex !== null) {
                     const supplementToUpdate = (fields.length > 0 ? fields : supplementsData)[editingIndex];
                     const { error } = await supabase
-                        .from("supplement")
+                        .from("supplements")
                         .update({
                             name: data.name,
                             strength: data.strength,
@@ -206,7 +206,7 @@ export default function SupplementRecommendation({
                     });
                 } else {
                     const { data: newSupplement, error } = await supabase
-                        .from("supplement")
+                        .from("supplements")
                         .insert([
                             {
                                 patient_id: id,
@@ -292,7 +292,7 @@ export default function SupplementRecommendation({
             if (id) {
                 const supplementToDelete = (fields.length > 0 ? fields : supplementsData)[index];
                 const { error } = await supabase
-                    .from("supplement")
+                    .from("supplements")
                     .delete()
                     .eq("id", supplementToDelete.id);
 

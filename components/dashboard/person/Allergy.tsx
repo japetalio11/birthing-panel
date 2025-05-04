@@ -81,7 +81,7 @@ export default function Allergy({ context, id, fields = [], append, remove }: Pr
       if (!id) return
       try {
         const { data, error } = await supabase
-          .from("allergy")
+          .from("allergies")
           .select("*")
           .eq("patient_id", id)
 
@@ -138,7 +138,7 @@ export default function Allergy({ context, id, fields = [], append, remove }: Pr
     if (id) {
       // Existing patient, save to Supabase
       const { data: newAllergy, error } = await supabase
-        .from("allergy")
+        .from("allergies")
         .insert([
           {
             patient_id: id,
@@ -190,7 +190,7 @@ export default function Allergy({ context, id, fields = [], append, remove }: Pr
       // Existing patient, delete from Supabase
       const allergyToDelete = (fields.length > 0 ? fields : allergiesData)[index]
       const { error } = await supabase
-        .from("allergy")
+        .from("allergies")
         .delete()
         .eq("id", allergyToDelete.id)
 
@@ -280,7 +280,7 @@ export default function Allergy({ context, id, fields = [], append, remove }: Pr
                       control={form.control}
                       name="severity"
                       render={({ field }) => (
-                        <FormItem className="grid grid-cols-4 items-center gap-2">
+                        <FormItem className="grid grid-cols-4 items-center gap-2 ml-5">
                           <FormLabel htmlFor="severity" className="text-right">
                             Severity
                           </FormLabel>
