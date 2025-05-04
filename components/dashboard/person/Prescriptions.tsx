@@ -169,14 +169,12 @@ export default function Prescriptions({
                         clinician_id,
                         patient_id,
                         appointment_id,
+                        name,
+                        strength,
+                        amount,
+                        frequency,
+                        route,
                         status,
-                        appointments (
-                            name,
-                            strength,
-                            amount,
-                            frequency,
-                            route
-                        ),
                         clinicians!clinician_id (
                             id,
                             person (
@@ -211,17 +209,13 @@ export default function Prescriptions({
                             console.warn(`Missing clinician name for prescription ID ${prescription.id}:`, prescription.clinicians);
                         }
 
-                        if (!prescription.appointments) {
-                            console.warn(`Missing appointment data for prescription ID ${prescription.id}:`, prescription);
-                        }
-
                         return {
                             id: prescription.id,
-                            name: prescription.appointments?.name || "N/A",
-                            strength: prescription.appointments?.strength || "N/A",
-                            amount: prescription.appointments?.amount || "N/A",
-                            frequency: prescription.appointments?.frequency || "N/A",
-                            route: prescription.appointments?.route || "N/A",
+                            name: prescription.name || "N/A",
+                            strength: prescription.strength || "N/A",
+                            amount: prescription.amount || "N/A",
+                            frequency: prescription.frequency || "N/A",
+                            route: prescription.route || "N/A",
                             clinician_id: prescription.clinician_id?.toString(),
                             clinician: clinicianName,
                             appointment_id: prescription.appointment_id,
@@ -270,16 +264,13 @@ export default function Prescriptions({
 
         try {
             if (id) {
-                // First, insert into appointments to get an appointment_id
+                // Insert into appointments to get an appointment_id
                 const { data: newAppointment, error: appointmentError } = await supabase
                     .from("appointments")
                     .insert([
                         {
-                            name: data.name,
-                            strength: data.strength,
-                            amount: data.amount,
-                            frequency: data.frequency,
-                            route: data.route,
+                            patient_id: id,
+                            clinician_id: parseInt(data.clinician_id),
                         },
                     ])
                     .select()
@@ -293,7 +284,7 @@ export default function Prescriptions({
                     return;
                 }
 
-                // Then, insert into prescriptions with the appointment_id
+                // Insert into prescriptions with prescription details
                 const { data: newPrescription, error: prescriptionError } = await supabase
                     .from("prescriptions")
                     .insert([
@@ -301,7 +292,12 @@ export default function Prescriptions({
                             patient_id: id,
                             clinician_id: parseInt(data.clinician_id),
                             appointment_id: newAppointment.id,
-                            status: "active", // Assuming a default status
+                            name: data.name,
+                            strength: data.strength,
+                            amount: data.amount,
+                            frequency: data.frequency,
+                            route: data.route,
+                            status: "active",
                         },
                     ])
                     .select()
@@ -367,7 +363,7 @@ export default function Prescriptions({
                     route: data.route,
                     clinician_id: data.clinician_id,
                     clinician: clinicianName,
-                    appointment_id: null, // No appointment_id when id is null
+                    appointment_id: null,
                     status: "active",
                 });
                 toast("Prescription Added", {
@@ -409,7 +405,7 @@ export default function Prescriptions({
                     return;
                 }
 
-                // Optionally delete the associated appointment
+                // Delete the associated appointment
                 if (prescriptionToDelete.appointment_id) {
                     const { error: appointmentError } = await supabase
                         .from("appointments")

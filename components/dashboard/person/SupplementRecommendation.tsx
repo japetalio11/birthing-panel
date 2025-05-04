@@ -123,7 +123,6 @@ export default function SupplementRecommendation({
                 }
 
                 const clinicianList: Clinician[] = data.map((clinician: any) => {
-                    // Safely construct full_name, filtering out null/undefined values
                     const nameParts = [
                         clinician.person?.first_name,
                         clinician.person?.middle_name,
@@ -186,7 +185,6 @@ export default function SupplementRecommendation({
                     setSupplementsData([]);
                 } else {
                     const formattedData = data.map((supplement: any) => {
-                        // Safely construct clinician name
                         const clinicianName = supplement.clinicians?.person
                             ? [
                                   supplement.clinicians.person.first_name,
@@ -204,6 +202,8 @@ export default function SupplementRecommendation({
                         return {
                             ...supplement,
                             clinician: clinicianName,
+                            date: supplement.date ? new Date(supplement.date).toLocaleDateString() : "N/A",
+                            status: supplement.status || "Active",
                         };
                     });
                     setSupplementsData(formattedData);
@@ -219,6 +219,8 @@ export default function SupplementRecommendation({
                                 route: supplement.route,
                                 clinician_id: supplement.clinician_id?.toString(),
                                 clinician: supplement.clinician,
+                                date: supplement.date,
+                                status: supplement.status,
                             });
                         });
                     }
@@ -257,6 +259,8 @@ export default function SupplementRecommendation({
                             frequency: data.frequency,
                             route: data.route,
                             clinician_id: parseInt(data.clinician_id),
+                            status: "Active",
+                            date: new Date().toISOString(),
                         },
                     ])
                     .select()
@@ -280,6 +284,8 @@ export default function SupplementRecommendation({
                         route: data.route,
                         clinician_id: data.clinician_id,
                         clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown Clinician",
+                        status: "Active",
+                        date: new Date().toLocaleDateString(),
                     });
                 } else {
                     setSupplementsData((prev) => [
@@ -287,6 +293,8 @@ export default function SupplementRecommendation({
                         {
                             ...newSupplement,
                             clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown Clinician",
+                            status: "Active",
+                            date: new Date().toLocaleDateString(),
                         },
                     ]);
                 }
@@ -302,6 +310,8 @@ export default function SupplementRecommendation({
                     route: data.route,
                     clinician_id: data.clinician_id,
                     clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown Clinician",
+                    status: "Active",
+                    date: new Date().toLocaleDateString(),
                 });
                 toast("Supplement Added", {
                     description: "New supplement has been added successfully.",
@@ -356,7 +366,49 @@ export default function SupplementRecommendation({
             toast("Error", {
                 description: "An unexpected error occurred while deleting the supplement.",
             });
-        };
+        }
+    };
+
+    const handleStatusChange = async (index: number, newStatus: string) => {
+        try {
+            const supplementToUpdate = (fields.length > 0 ? fields : supplementsData)[index];
+            if (id) {
+                const { error } = await supabase
+                    .from("supplements")
+                    .update({ status: newStatus })
+                    .eq("id", supplementToUpdate.id);
+
+                if (error) {
+                    console.error("Supplement status update error:", error);
+                    toast("Error", {
+                        description: `Failed to update supplement status: ${error.message}`,
+                    });
+                    return;
+                }
+            }
+
+            setSupplementsData((prev) =>
+                prev.map((supp, idx) =>
+                    idx === index ? { ...supp, status: newStatus } : supp
+                )
+            );
+
+            if (fields.length > 0 && append) {
+                append({
+                    ...supplementToUpdate,
+                    status: newStatus,
+                });
+            }
+
+            toast("Status Updated", {
+                description: `Supplement status changed to ${newStatus}.`,
+            });
+        } catch (err) {
+            console.error("Unexpected error updating status:", err);
+            toast("Error", {
+                description: "An unexpected error occurred while updating the status.",
+            });
+        }
     };
 
     const displaySupplements = fields.length > 0 ? fields : supplementsData;
@@ -378,7 +430,6 @@ export default function SupplementRecommendation({
                         className="w-full pl-8 rounded-lg bg-background"
                         onChange={(e) => {
                             // Implement search logic if needed
-
                         }}
                     />
                     <Dialog
@@ -582,7 +633,9 @@ export default function SupplementRecommendation({
                                 <TableHead>Amount</TableHead>
                                 <TableHead>Frequency</TableHead>
                                 <TableHead>Route</TableHead>
+                                <TableHead>Status</TableHead>
                                 <TableHead>Clinician</TableHead>
+                                <TableHead>Issued on</TableHead>
                                 <TableHead>Actions</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -597,7 +650,32 @@ export default function SupplementRecommendation({
                                     <TableCell>{supplement.amount}</TableCell>
                                     <TableCell>{supplement.frequency}</TableCell>
                                     <TableCell>{supplement.route}</TableCell>
+                                    <TableCell>
+                                        <Select
+                                            value={supplement.status}
+                                            onValueChange={(value) => handleStatusChange(index, value)}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select status" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Active">
+                                                    <div className="w-2 h-2 rounded-full bg-green-400" />
+                                                    Active
+                                                </SelectItem>
+                                                <SelectItem value="Completed">
+                                                    <div className="w-2 h-2 rounded-full bg-blue-400" />
+                                                    Completed
+                                                </SelectItem>
+                                                <SelectItem value="Discontinued">
+                                                    <div className="w-2 h-2 rounded-full bg-red-400" />
+                                                    Discontinued
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </TableCell>
                                     <TableCell>{supplement.clinician || "Unknown Clinician"}</TableCell>
+                                    <TableCell>{supplement.date}</TableCell>
                                     <TableCell>
                                         <Button
                                             variant="outline"
