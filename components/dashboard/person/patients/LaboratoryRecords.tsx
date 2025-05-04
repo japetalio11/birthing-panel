@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { FileDown } from "lucide-react";
 import React, { useState, useEffect } from "react"
 import { MonitorUp, MoreHorizontal, Search, Trash2, X } from "lucide-react"
 import { useForm } from "react-hook-form"
@@ -47,6 +48,7 @@ import { toast } from "sonner"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { supabase } from "@/lib/supabase/client"
+import { Separator } from "@radix-ui/react-dropdown-menu"
 
 const formSchema = z.object({
   filename: z.string().min(1, "File name is required"),
@@ -82,6 +84,8 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
   const [isUploading, setIsUploading] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [selectedRecord, setSelectedRecord] = useState<any>(null)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
   const today = new Date().toISOString().split('T')[0];
   
@@ -226,6 +230,8 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
   const closeSidebar = () => {
     setIsSidebarOpen(false)
     setSelectedRecord(null)
+    setIsPreviewOpen(false)
+    setPreviewUrl(null)
   }
 
   const getFileUrl = async (filePath: string) => {
@@ -240,6 +246,16 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
     } catch (error) {
       console.error('Error generating file URL:', error);
       return filePath;
+    }
+  }
+
+  const openPreview = async (url: string) => {
+    try {
+      const signedUrl = await getFileUrl(url);
+      setPreviewUrl(signedUrl);
+      setIsPreviewOpen(true);
+    } catch (error) {
+      toast.error('Failed to open file preview');
     }
   }
 
@@ -283,7 +299,6 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
           return
         }
 
-        // Get the public URL
         const { data: publicUrlData } = supabase.storage
           .from("laboratory-files")
           .getPublicUrl(uploadData.path)
@@ -415,6 +430,7 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
   const openRecordDetails = async (record: any) => {
     setSelectedRecord(record)
     setIsSidebarOpen(true)
+    await openPreview(record.fileurl);
   }
 
   const displayRecords = fields.length > 0 ? fields : recordsData
@@ -722,107 +738,156 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
         </CardFooter>
       </Card>
 
-      {/* Right Sidebar for Preview */}
       <div
         className={`fixed right-0 top-0 h-full w-96 bg-background shadow-lg transform transition-transform duration-300 ${
           isSidebarOpen ? 'translate-x-0' : 'translate-x-full'
-        } z-50`}
+        } z-100 border-l`}
       >
         {selectedRecord && (
           <div className="flex flex-col h-full">
-            <div className="p-4 border-b flex justify-between items-center">
-              <h2 className="text-lg font-semibold">Record Details</h2>
-              <Button variant="ghost" size="icon" onClick={closeSidebar}>
-                <X className="h-5 w-5" />
+            <div className="p-4 flex justify-between items-center border-b">
+              <h2 className="font-semibold">Record Details</h2>
+              <Button variant="outline" size="icon" onClick={closeSidebar}>
+                <X />
               </Button>
             </div>
             <div className="p-4 flex-1 overflow-y-auto">
-              <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label>File Name</Label>
-                  <div className="text-base">{selectedRecord.filename}</div>
+                  <Label className="font-semibold mb-2">File Name</Label>
+                  <p className="text-sm">{selectedRecord.filename}</p>
                 </div>
                 <div>
-                  <Label>Record Type</Label>
-                  <div className="text-base">{selectedRecord.type}</div>
+                  <Label className="font-semibold mb-2">Record Type</Label>
+                  <p className="text-sm">{selectedRecord.type}</p>
                 </div>
                 <div>
-                  <Label>Doctor</Label>
-                  <div className="text-base">{selectedRecord.doctor}</div>
+                  <Label className="font-semibold mb-2">Doctor</Label>
+                  <p className="text-sm">{selectedRecord.doctor}</p>
                 </div>
                 <div>
-                  <Label>Company</Label>
-                  <div className="text-base">{selectedRecord.company || 'N/A'}</div>
+                  <Label className="font-semibold mb-2">Company</Label>
+                  <p className="text-sm">{selectedRecord.company || 'N/A'}</p>
                 </div>
                 <div>
-                  <Label>Ordered Date</Label>
-                  <div className="text-base">{selectedRecord.ordered_date}</div>
+                  <Label className="font-semibold mb-2">Ordered Date</Label>
+                  <p className="text-sm">{selectedRecord.ordered_date}</p>
                 </div>
                 <div>
-                  <Label>Received Date</Label>
-                  <div className="text-base">{selectedRecord.received_date}</div>
+                  <Label className="font-semibold mb-2">Received Date</Label>
+                  <p className="text-sm">{selectedRecord.received_date}</p>
                 </div>
                 <div>
-                  <Label>Reported Date</Label>
-                  <div className="text-base">{selectedRecord.reported_date}</div>
+                  <Label className="font-semibold mb-2">Reported Date</Label>
+                  <p className="text-sm">{selectedRecord.reported_date}</p>
+                </div>
+              </div>
+
+              <div className="col-span-2 my-4">
+                <Separator className="border-t" />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+                <div>
+                  <Label className="font-semibold mb-2">Remarks</Label>
+                  <p className="text-sm">{selectedRecord.remarks || 'N/A'}</p>
                 </div>
                 <div>
-                  <Label>Impressions</Label>
-                  <div className="text-base">{selectedRecord.impressions}</div>
+                  <Label className="font-semibold mb-2">Impressions</Label>
+                  <p className="text-sm">{selectedRecord.impressions}</p>
                 </div>
                 <div>
-                  <Label>Remarks</Label>
-                  <div className="text-base">{selectedRecord.remarks || 'N/A'}</div>
-                </div>
-                <div>
-                  <Label>Recommendations</Label>
-                  <div className="text-base">{selectedRecord.recommendations || 'N/A'}</div>
-                </div>
-                <div>
-                  <Label>Notes</Label>
-                  <div className="text-base">{selectedRecord.notes || 'N/A'}</div>
+                  <Label className="font-semibold mb-2">Recommendations</Label>
+                  <p className="text-sm">{selectedRecord.recommendations || 'N/A'}</p>
                 </div>
                 {selectedRecord.fileurl && (
                   <div>
-                    <h3>Attachment</h3>
-                    {selectedRecord.fileurl.match(/\.(jpg|jpeg|png)$/i) ? (
-                      <img
-                        src={selectedRecord.fileurl}
-                        alt="Attachment"
-                        className="max-w-full h-auto mt-2"
-                      />
-                    ) : (
-                      <Button
-                        variant="link"
-                        className="p-0 text-blue-600 hover:underline"
-                        onClick={async () => {
-                          try {
-                            const signedUrl = await getFileUrl(selectedRecord.fileurl);
-                            window.open(signedUrl, '_blank');
-                          } catch (error) {
-                            toast.error('Failed to open file');
-                          }
-                        }}
-                      >
-                        View Attachment
-                      </Button>
-                    )}
+                    {/* <Label className="font-semibold mb-2">Attachment</Label> */}
+                    {/* <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => openPreview(selectedRecord.fileurl)}
+                    >
+                      Preview Attachment
+                    </Button> */}
                   </div>
                 )}
               </div>
             </div>
+            
             <div className="p-4 border-t">
               <Button
                 className="w-full"
                 onClick={() => handleDownload(selectedRecord.fileurl, selectedRecord.filename)}
                 disabled={!selectedRecord.fileurl}
               >
+                <FileDown className="mr-2 h-4 w-4" />
                 Download File
               </Button>
             </div>
           </div>
         )}
       </div>
+
+      {isPreviewOpen && (
+  <div className="fixed inset-0 z-50">
+    <div 
+      className="fixed inset-0 bg-black/70 transition-opacity duration-300 ease-in-out"
+      style={{ 
+        opacity: isPreviewOpen ? 1 : 0,
+        transition: 'opacity 300ms ease-in-out'
+      }}
+      onClick={() => setIsPreviewOpen(false)}
+    />
+    
+    <div 
+      className="fixed left-0 top-0 h-full w-[calc(100%-24rem)] shadow-lg"
+      style={{ 
+        transform: isPreviewOpen ? 'translateX(0)' : 'translateX(-100%)',
+        opacity: isPreviewOpen ? 1 : 0,
+        transition: 'transform 300ms ease-in-out, opacity 250ms ease-in-out',
+        background: 'transparent'
+      }}
+    >
+      <div className="absolute top-4 right-4 z-10">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setIsPreviewOpen(false)}
+          className="bg-black/50 text-white hover:bg-black/70"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+      
+      <div className="h-full w-full flex items-center justify-center p-4">
+        {previewUrl && previewUrl.match(/\.(jpg|jpeg|png)$/i) ? (
+          <img
+            src={previewUrl || undefined}
+            alt="Attachment preview"
+            className="max-h-full max-w-full object-contain opacity-0"
+            style={{
+              animation: 'fadeIn 400ms ease-in-out forwards 150ms',
+              background: 'rgba(0, 0, 0, 0.3)', 
+              borderRadius: '8px'
+            }}
+          />
+        ) : (
+          <iframe
+            src={previewUrl ?? undefined}
+            className="w-full h-full border-none opacity-0"
+            style={{
+              animation: 'fadeIn 400ms ease-in-out forwards 150ms',
+              background: 'rgba(0, 0, 0, 0.3)', 
+              borderRadius: '8px'
+            }}
+            title="Attachment preview"
+          />
+        )}
+      </div>
+    </div>
+  </div>
+)}
     </div>
   )
 }
