@@ -213,15 +213,12 @@ const columns: ColumnDef<Patient>[] = [
     },
     {
         id: "actions",
-        cell: ({ row }) => {
-            const patient = row.original;
-            const router = useRouter();
+        cell: () => {
             return (
                 <Button
                     aria-haspopup="true"
                     size="icon"
                     variant="ghost"
-                    onClick={() => router.push(`/Patients/Patient-View?id=${patient.id}`)}
                 >
                     <MoreHorizontal className="h-4 w-4" />
                 </Button>
@@ -601,6 +598,7 @@ export default function PatientsTable() {
                                                 <TableRow
                                                     key={row.id}
                                                     data-state={row.getIsSelected() && "selected"}
+                                                    onClick={() => router.push(`/Patients/Patient-View?id=${row.original.id}`)} className="cursor-pointer hover:bg-zinc-100"
                                                 >
                                                     {row.getVisibleCells().map((cell) => (
                                                         <TableCell key={cell.id}>
