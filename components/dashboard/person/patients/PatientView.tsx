@@ -86,7 +86,7 @@ export default function PatientView() {
                 )
             `
             )
-            .eq("person_id", id)
+            .eq("id", id)
             .single();
 
             if (error) {
