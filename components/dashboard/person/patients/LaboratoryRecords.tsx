@@ -352,7 +352,6 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
             company: formattedData.company,
             notes: formattedData.notes,
             fileurl: fileurl,
-            attachment: fileurl,
           })
         } else {
           setRecordsData((prev) => [...prev, newRecord])
@@ -372,7 +371,6 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
           company: formattedData.company,
           notes: formattedData.notes,
           fileurl: fileurl,
-          attachment: fileurl,
         })
         toast.success("New laboratory record has been added successfully.")
       }
@@ -402,30 +400,37 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
     }
   }
 
-  const handleDelete = async (index: number) => {
-    if (id) {
-      const recordToDelete = (fields.length > 0 ? fields : recordsData)[index]
-      const { error } = await supabase
-        .from("laboratory_records")
-        .delete()
-        .eq("id", recordToDelete.id)
+    const handleDelete = async (index: number) => {
+        if (id) {
+            const recordToDelete = (fields.length > 0 ? fields : recordsData)[index]
+            const { error } = await supabase
+                .from("laboratory_records")
+                .delete()
+                .eq("id", recordToDelete.id)
 
-        if (error) {
-          console.error("Record delete error:", error)
-          toast.error("Failed to delete record: " + error.message)
-          return
+                if (error) {
+                    console.error("Record delete error:", error)
+                    toast.error("Failed to delete record: " + error.message)
+                    return
+                }
+
+                setRecordsData((prev) => prev.filter((_, idx) => idx !== index))
         }
 
-        setRecordsData((prev) => prev.filter((_, idx) => idx !== index))
-      }
+        if (remove) {
+            remove(index)
+        }
+        
+        // Close sidebar and preview
+        setIsSidebarOpen(false)
+        setIsPreviewOpen(false)
+        setSelectedRecord(null)
+        setPreviewUrl(null)
 
-    if (remove) {
-      remove(index)
+        toast.success("Record Deleted", {
+            description: "Laboratory record has been removed from the list.",
+        })
     }
-    toast("Record Deleted", {
-      description: "Laboratory record has been removed from the list.",
-    })
-  }
 
   const openRecordDetails = async (record: any) => {
     setSelectedRecord(record)
@@ -805,6 +810,7 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                 <Button
                     className="w-full"
                     variant="outline"
+                    onClick={() => handleDelete(displayRecords.findIndex((r) => r.id === selectedRecord.id))}
                 >
                     <Trash2 />
                     Delete File

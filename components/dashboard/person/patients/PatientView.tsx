@@ -15,7 +15,6 @@ import Prescriptions from "../Prescriptions";
 import LaboratoryRecords from "../patients/LaboratoryRecords";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input"
-import { FormField } from "@/components/ui/form";
 import {
     Dialog,
     DialogContent,
@@ -61,14 +60,16 @@ interface Patient {
     ssn: string | null;
     member: string | null;
     allergy_id: number | null;
+    next_appointment?: string | null;
+    last_visit?: string | null;
 }
-
 export default function PatientView() {
     const router = useRouter();
     const [patient, setPatient] = useState<Patient | null>(null);
     const [loading, setLoading] = useState(true);
     const [openDialog, setOpenDialog] = React.useState(false);
     const [deleteInput, setDeleteInput] = useState(""); // State for input field
+    const [isDeactivated, setIsDeactivated] = useState(false); // State for deactivate switch
     const searchParams = useSearchParams();
     const id = searchParams.get("id");
 
@@ -139,6 +140,7 @@ export default function PatientView() {
 
             console.log("Fetched patient data:", combinedData);
             setPatient(combinedData);
+            setIsDeactivated(combinedData.status === "Inactive"); // Set switch state based on status
         } catch (err) {
             console.error("Unexpected error fetching patient:", err);
             toast("Error", {
@@ -152,6 +154,27 @@ export default function PatientView() {
 
         fetchPatient();
     }, [router]);
+
+    // Handle deactivate switch toggle
+    const handleDeactivateToggle = async () => {
+        if (!patient) return;
+
+        const newStatus = isDeactivated ? "Active" : "Inactive";
+        try {
+            const { error } = await supabase
+                .from("person")
+                .update({ status: newStatus })
+                .eq("id", patient.id);
+
+            if (error) throw error;
+
+            setIsDeactivated(!isDeactivated);
+            setPatient({ ...patient, status: newStatus });
+            toast.success(`Patient status updated to ${newStatus}.`);
+        } catch (err: any) {
+            toast.error(`Error updating patient status: ${err.message}`);
+        }
+    };
 
     if (!patient) {
         return null; // Redirect already handled in fetchPatient
@@ -253,7 +276,12 @@ export default function PatientView() {
                             Deactivating will temporarily put patient in inactive status. You can reactivate them later.
                         </p>
                         </div>
-                        <Switch id="deactivate" className="scale-125" />
+                        <Switch 
+                            id="deactivate" 
+                            className="scale-125" 
+                            checked={isDeactivated}
+                            onCheckedChange={handleDeactivateToggle}
+                        />
                     </div>
                     </div>
 
@@ -274,7 +302,7 @@ export default function PatientView() {
                         <Mail className=" h-4 w-4" />
                         Set Appointment
                     </Button>
-                    <Button variant="outline">
+                    <Button variant="outline" onClick={() => router.push(`/Patients/Update-Patient-Form?id=${patient.id}`)}>
                         <RefreshCcw className=" h-4 w-4" />
                         Update Patient
                     </Button>
