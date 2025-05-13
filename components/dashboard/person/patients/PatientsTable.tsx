@@ -211,21 +211,6 @@ const columns: ColumnDef<Patient>[] = [
             <div className="hidden md:block">{row.getValue("address") || "-"}</div>
         ),
     },
-    {
-        id: "actions",
-        cell: () => {
-            return (
-                <Button
-                    aria-haspopup="true"
-                    size="icon"
-                    variant="ghost"
-                >
-                    <MoreHorizontal className="h-4 w-4" />
-                </Button>
-            );
-        },
-        enableSorting: false,
-    },
 ];
 
 export default function PatientsTable() {
@@ -601,7 +586,7 @@ export default function PatientsTable() {
                                                     onClick={() => router.push(`/Patients/Patient-View?id=${row.original.id}`)} className="cursor-pointer hover:bg-zinc-100"
                                                 >
                                                     {row.getVisibleCells().map((cell) => (
-                                                        <TableCell key={cell.id}>
+                                                        <TableCell key={cell.id} className="py-4">
                                                             {flexRender(
                                                                 cell.column.columnDef.cell,
                                                                 cell.getContext()

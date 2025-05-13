@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { z } from "zod";
-import { useForm, useFieldArray, FormProvider } from "react-hook-form";
+import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import {
@@ -24,8 +24,9 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { createPatient } from "@/lib/supabase/create/createPatient";
+import { supabase } from "@/lib/supabase/client";
 
-// Combined schema for patient and allergies
+// Schema for patient form
 export const patientFormSchema = z.object({
     firstName: z.string().min(1, "First name is required"),
     middleName: z.string().optional(),
@@ -50,6 +51,7 @@ export const patientFormSchema = z.object({
     ecContactNumber: z.string().optional(),
     ecRelationship: z.string().optional(),
     profileImage: z.any().optional(),
+    profileImageUrl: z.string().optional(),
 });
 
 export type PatientFormValues = z.infer<typeof patientFormSchema>;
@@ -57,8 +59,10 @@ export type PatientFormValues = z.infer<typeof patientFormSchema>;
 export default function PatientForm() {
     const router = useRouter();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [filePreview, setFilePreview] = React.useState<string | null>(null);
+    const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
 
-    // Initialize form with combined schema
+    // Initialize form
     const form = useForm<PatientFormValues>({
         resolver: zodResolver(patientFormSchema),
         defaultValues: {
@@ -85,21 +89,79 @@ export default function PatientForm() {
             ecContactNumber: "",
             ecRelationship: "",
             profileImage: null,
+            profileImageUrl: "",
         },
     });
 
+    // Handle file selection and preview
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (file) {
+            setSelectedFile(file);
+            form.setValue("profileImage", file);
+
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    setFilePreview(e.target?.result as string);
+                };
+                reader.readAsDataURL(file);
+            } else {
+                setFilePreview(null);
+            }
+        }
+    };
+
+    // Handle form submission
     const onSubmit = async (data: PatientFormValues) => {
         try {
             setIsSubmitting(true);
-            await createPatient(data); // Assumes createPatient handles allergies
+            let profileImageUrl: string | null = null;
+
+            // Upload profile picture to Supabase storage
+            if (selectedFile) {
+                const fileExt = selectedFile.name.split(".").pop();
+                const uniquePrefix = `${data.firstName}_${data.lastName}_${Date.now()}`;
+                const fileName = `${uniquePrefix}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                    .from("profile-pictures")
+                    .upload(fileName, selectedFile);
+
+                if (uploadError) {
+                    console.error("File upload error:", uploadError);
+                    toast.error("Failed to upload profile picture: " + uploadError.message);
+                    return;
+                }
+
+                const { data: publicUrlData } = supabase.storage
+                    .from("profile-pictures")
+                    .getPublicUrl(uploadData.path);
+
+                profileImageUrl = publicUrlData.publicUrl;
+                console.log("Profile picture uploaded successfully, URL:", profileImageUrl);
+            }
+
+            // Prepare patient data with fileurl
+            const patientData = {
+                ...data,
+                fileurl: profileImageUrl, // Map profileImageUrl to fileurl for person table
+            };
+
+            // Call createPatient to insert into person table
+            await createPatient(patientData);
             toast.success("Patient Added Successfully", {
                 description: `${data.firstName} ${data.middleName || ""} ${data.lastName} has been added.`,
             });
+
+            // Reset form and states
             form.reset();
+            setFilePreview(null);
+            setSelectedFile(null);
             router.push("/Patients");
         } catch (error) {
             console.error("Error submitting form:", error);
-            toast("Error Adding Patient", {
+            toast.error("Error Adding Patient", {
                 description: error instanceof Error ? error.message : "Unknown error occurred",
             });
         } finally {
@@ -121,13 +183,21 @@ export default function PatientForm() {
                                         name="profileImage"
                                         render={({ field }) => (
                                             <FormItem className="flex flex-col items-center">
-                                                <div className="relative w-40  h-40 rounded-full overflow-hidden border">
-                                                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                                                        <div className="w-full h-3/4 flex flex-col items-center justify-center">
-                                                            <div className="w-12 h-12 bg-gray-500 rounded-full mb-1"></div>
-                                                            <div className="w-20 h-10 bg-gray-500 rounded-t-full"></div>
+                                                <div className="relative w-40 h-40 rounded-full overflow-hidden border">
+                                                    {filePreview ? (
+                                                        <img
+                                                            src={filePreview}
+                                                            alt="Profile preview"
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                                                            <div className="w-full h-3/4 flex flex-col items-center justify-center">
+                                                                <div className="w-12 h-12 bg-gray-500 rounded-full mb-1"></div>
+                                                                <div className="w-20 h-10 bg-gray-500 rounded-t-full"></div>
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    )}
                                                 </div>
                                                 <FormControl>
                                                     <input
@@ -135,7 +205,7 @@ export default function PatientForm() {
                                                         accept="image/*"
                                                         className="hidden"
                                                         id="profile-upload"
-                                                        onChange={(e) => field.onChange(e.target.files ? e.target.files[0] : null)}
+                                                        onChange={handleFileChange}
                                                     />
                                                 </FormControl>
                                                 <div
@@ -466,6 +536,8 @@ export default function PatientForm() {
                             className="h-8 gap-1"
                             onClick={() => {
                                 form.reset();
+                                setFilePreview(null);
+                                setSelectedFile(null);
                                 router.push("/Patients");
                             }}
                         >

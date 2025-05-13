@@ -68,6 +68,7 @@ export default function PatientView() {
     const [patient, setPatient] = useState<Patient | null>(null);
     const [loading, setLoading] = useState(true);
     const [openDialog, setOpenDialog] = React.useState(false);
+    const [deleteInput, setDeleteInput] = useState(""); // State for input field
     const searchParams = useSearchParams();
     const id = searchParams.get("id");
 
@@ -174,13 +175,9 @@ export default function PatientView() {
 
             if (personError) throw personError;
 
-            const error = patientError || personError;
-            if (error) {
-                toast.error(`Failed to delete patient: ${error.message}`);
-                return;
-            }
-            setOpenDialog(false);
             toast.success("Patient deleted successfully.");
+            setOpenDialog(false);
+            router.push("/Patients");
         } catch (err: any) {
             toast.error(`Error deleting patient: ${err.message}`);
         }
@@ -190,6 +187,7 @@ export default function PatientView() {
     const ecFullName = patient.ec_first_name
         ? `${patient.ec_first_name} ${patient.ec_middle_name ? patient.ec_middle_name + " " : ""}${patient.ec_last_name}`
         : "Not provided";
+    const isDeleteEnabled = deleteInput.trim().toLowerCase() === fullName.trim().toLowerCase();
 
     return (
         <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
@@ -280,7 +278,7 @@ export default function PatientView() {
                         <RefreshCcw className=" h-4 w-4" />
                         Update Patient
                     </Button>
-                    <Dialog>
+                    <Dialog open={openDialog} onOpenChange={setOpenDialog}>
                         <DialogTrigger asChild>
                             <Button 
                                 variant="outline"
@@ -296,11 +294,13 @@ export default function PatientView() {
                                     Are you sure you want to delete this patient? This action cannot be undone.
                                 </DialogDescription>
                                 <div className="grid gap-2 py-4">
-                                    <Label htmlFor="reason">Confirm Deletion</Label>
+                                    <Label htmlFor="reason">Type "{fullName}" to confirm deletion</Label>
                                     <Input 
                                         id="reason" 
                                         className="focus:border-red-500 focus:ring-red-500" 
-                                        placeholder="Enter full patient name to confirm deletion" 
+                                        placeholder={`Enter patient name`} 
+                                        value={deleteInput}
+                                        onChange={(e) => setDeleteInput(e.target.value)}
                                     />
                                 </div>
                             </DialogHeader>
@@ -313,6 +313,7 @@ export default function PatientView() {
                                 <Button 
                                     variant="destructive" 
                                     onClick={() => handleDelete(patient.id)}
+                                    disabled={!isDeleteEnabled}
                                 >
                                     Yes, delete this patient.
                                 </Button>

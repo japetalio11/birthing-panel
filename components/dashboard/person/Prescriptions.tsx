@@ -175,6 +175,7 @@ export default function Prescriptions({
                         frequency,
                         route,
                         status,
+                        date,
                         clinicians!clinician_id (
                             id,
                             person (
@@ -219,7 +220,8 @@ export default function Prescriptions({
                             clinician_id: prescription.clinician_id?.toString(),
                             clinician: clinicianName,
                             appointment_id: prescription.appointment_id,
-                            status: prescription.status,
+                            status: prescription.status || "Active",
+                            date: prescription.date ? new Date(prescription.date).toLocaleDateString() : "N/A",
                         };
                     });
                     setPrescriptionsData(formattedData);
@@ -237,6 +239,7 @@ export default function Prescriptions({
                                 clinician: prescription.clinician,
                                 appointment_id: prescription.appointment_id,
                                 status: prescription.status,
+                                date: prescription.date,
                             });
                         });
                     }
@@ -265,12 +268,14 @@ export default function Prescriptions({
         try {
             if (id) {
                 // Insert into appointments to get an appointment_id
+                const currentDate = new Date().toISOString();
                 const { data: newAppointment, error: appointmentError } = await supabase
                     .from("appointments")
                     .insert([
                         {
                             patient_id: id,
                             clinician_id: parseInt(data.clinician_id),
+                            date: currentDate,
                         },
                     ])
                     .select()
@@ -297,7 +302,8 @@ export default function Prescriptions({
                             amount: data.amount,
                             frequency: data.frequency,
                             route: data.route,
-                            status: "active",
+                            status: "Active",
+                            date: currentDate,
                         },
                     ])
                     .select()
@@ -316,6 +322,7 @@ export default function Prescriptions({
                     console.warn(`No clinician found for clinician_id ${data.clinician_id} during prescription insert`);
                 }
 
+                const formattedDate = new Date(currentDate).toLocaleDateString();
                 if (append) {
                     append({
                         id: newPrescription.id,
@@ -328,6 +335,7 @@ export default function Prescriptions({
                         clinician: clinicianName,
                         appointment_id: newPrescription.appointment_id,
                         status: newPrescription.status,
+                        date: formattedDate,
                     });
                 } else {
                     setPrescriptionsData((prev) => [
@@ -343,6 +351,7 @@ export default function Prescriptions({
                             clinician: clinicianName,
                             appointment_id: newPrescription.appointment_id,
                             status: newPrescription.status,
+                            date: formattedDate,
                         },
                     ]);
                 }
@@ -355,6 +364,7 @@ export default function Prescriptions({
                     console.warn(`No clinician found for clinician_id ${data.clinician_id} during prescription append`);
                 }
 
+                const formattedDate = new Date().toLocaleDateString();
                 append({
                     name: data.name,
                     strength: data.strength,
@@ -364,7 +374,8 @@ export default function Prescriptions({
                     clinician_id: data.clinician_id,
                     clinician: clinicianName,
                     appointment_id: null,
-                    status: "active",
+                    status: "Active",
+                    date: formattedDate,
                 });
                 toast("Prescription Added", {
                     description: "New prescription has been added successfully.",
@@ -430,6 +441,48 @@ export default function Prescriptions({
             console.error("Unexpected error deleting prescription:", err);
             toast("Error", {
                 description: "An unexpected error occurred while deleting the prescription.",
+            });
+        }
+    };
+
+    const handleStatusChange = async (index: number, newStatus: string) => {
+        try {
+            const prescriptionToUpdate = (fields.length > 0 ? fields : prescriptionsData)[index];
+            if (id) {
+                const { error } = await supabase
+                    .from("prescriptions")
+                    .update({ status: newStatus })
+                    .eq("id", appointmentToUpdate.id);
+
+                if (error) {
+                    console.error("Prescription status update error:", error.code, error.message, error.details);
+                    toast("Error", {
+                        description: `Failed to update prescription status: ${error.message}`,
+                    });
+                    return;
+                }
+            }
+
+            setPrescriptionsData((prev) =>
+                prev.map((prescription, idx) =>
+                    idx === index ? { ...prescription, status: newStatus } : prescription
+                )
+            );
+
+            if (fields.length > 0 && append) {
+                append({
+                    ...prescriptionToUpdate,
+                    status: newStatus,
+                });
+            }
+
+            toast("Status Updated", {
+                description: `Prescription status changed to ${newStatus}.`,
+            });
+        } catch (err) {
+            console.error("Unexpected error updating status:", err);
+            toast("Error", {
+                description: "An unexpected error occurred while updating the status.",
             });
         }
     };
@@ -656,8 +709,9 @@ export default function Prescriptions({
                                 <TableHead>Amount</TableHead>
                                 <TableHead>Frequency</TableHead>
                                 <TableHead>Route</TableHead>
-                                <TableHead>Clinician</TableHead>
                                 <TableHead>Status</TableHead>
+                                <TableHead>Clinician</TableHead>
+                                <TableHead>Issued on</TableHead>
                                 <TableHead>Actions</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -672,8 +726,32 @@ export default function Prescriptions({
                                     <TableCell>{prescription.amount}</TableCell>
                                     <TableCell>{prescription.frequency}</TableCell>
                                     <TableCell>{prescription.route}</TableCell>
+                                    <TableCell>
+                                        <Select
+                                            value={prescription.status}
+                                            onValueChange={(value) => handleStatusChange(index, value)}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select status" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Active" className="flex items-center gap-2">
+                                                    <div className="w-2 h-2 rounded-full bg-green-400" />
+                                                    Active
+                                                </SelectItem>
+                                                <SelectItem value="Completed" className="flex items-center gap-2">
+                                                    <div className="w-2 h-2 rounded-full bg-blue-400" />
+                                                    Completed
+                                                </SelectItem>
+                                                <SelectItem value="Discontinued" className="flex items-center gap-2">
+                                                    <div className="w-2 h-2 rounded-full bg-red-400" />
+                                                    Discontinued
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </TableCell>
                                     <TableCell>{prescription.clinician || "Unknown Clinician"}</TableCell>
-                                    <TableCell>{prescription.status}</TableCell>
+                                    <TableCell>{prescription.date}</TableCell>
                                     <TableCell>
                                         <Button
                                             variant="outline"
