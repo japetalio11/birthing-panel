@@ -50,6 +50,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { supabase } from "@/lib/supabase/client";
+import { Separator } from "@radix-ui/react-dropdown-menu";
 
 type Props = {
     context: "patient";
@@ -587,11 +588,24 @@ export default function SupplementRecommendation({
                                                                 </SelectTrigger>
                                                             </FormControl>
                                                             <SelectContent>
+                                                                <div className="relative">
+                                                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                                                    <Input
+                                                                        type="search"
+                                                                        placeholder="Search by name..."
+                                                                        className="w-full pl-8 rounded-lg bg-background"
+                                                                        // value={searchTerm}
+                                                                        // onChange={(e) => setSearchTerm(e.target.value)}
+                                                                    />
+                                                                </div>
+                                                                <div className="pt-2">
+                                                                <Separator />
                                                                 {clinicians.map((clinician) => (
                                                                     <SelectItem key={clinician.id} value={clinician.id}>
                                                                         {clinician.full_name}
                                                                     </SelectItem>
                                                                 ))}
+                                                                </div>
                                                             </SelectContent>
                                                         </Select>
                                                         <FormMessage className="col-span-4" />
@@ -659,15 +673,15 @@ export default function SupplementRecommendation({
                                                 <SelectValue placeholder="Select status" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="Active">
+                                                <SelectItem value="Active" className="flex items-center gap-2">
                                                     <div className="w-2 h-2 rounded-full bg-green-400" />
                                                     Active
                                                 </SelectItem>
-                                                <SelectItem value="Completed">
+                                                <SelectItem value="Completed" className="flex items-center gap-2">
                                                     <div className="w-2 h-2 rounded-full bg-blue-400" />
                                                     Completed
                                                 </SelectItem>
-                                                <SelectItem value="Discontinued">
+                                                <SelectItem value="Discontinued" className="flex items-center gap-2">
                                                     <div className="w-2 h-2 rounded-full bg-red-400" />
                                                     Discontinued
                                                 </SelectItem>

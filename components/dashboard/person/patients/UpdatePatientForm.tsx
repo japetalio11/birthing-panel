@@ -4,7 +4,7 @@ import * as React from "react";
 import { z } from "zod";
 import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
     Camera,
     CircleX,
@@ -23,11 +23,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { createPatient } from "@/lib/supabase/create/createPatient";
 import { supabase } from "@/lib/supabase/client";
 
-// Schema for patient form
-export const patientFormSchema = z.object({
+// Schema for update patient form (same as patientFormSchema from PatientForm.tsx)
+export const updatePatientFormSchema = z.object({
     firstName: z.string().min(1, "First name is required"),
     middleName: z.string().optional(),
     lastName: z.string().min(1, "Last name is required"),
@@ -54,17 +53,20 @@ export const patientFormSchema = z.object({
     profileImageUrl: z.string().optional(),
 });
 
-export type PatientFormValues = z.infer<typeof patientFormSchema>;
+export type UpdatePatientFormValues = z.infer<typeof updatePatientFormSchema>;
 
-export default function PatientForm() {
+export default function UpdatePatientForm() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const id = searchParams.get("id");
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [filePreview, setFilePreview] = React.useState<string | null>(null);
     const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
+    const [loading, setLoading] = React.useState(true);
 
     // Initialize form
-    const form = useForm<PatientFormValues>({
-        resolver: zodResolver(patientFormSchema),
+    const form = useForm<UpdatePatientFormValues>({
+        resolver: zodResolver(updatePatientFormSchema),
         defaultValues: {
             firstName: "",
             middleName: "",
@@ -93,6 +95,85 @@ export default function PatientForm() {
         },
     });
 
+    // Fetch patient data to pre-populate the form
+    React.useEffect(() => {
+        async function fetchPatient() {
+            if (!id) {
+                toast.error("No patient ID provided");
+                router.push("/Patients");
+                return;
+            }
+
+            try {
+                const { data, error } = await supabase
+                    .from("patients")
+                    .select(
+                        `
+                            *,
+                            person (
+                                *
+                            )
+                        `
+                    )
+                    .eq("id", id)
+                    .single();
+
+                if (error) {
+                    console.error("Supabase query error:", error);
+                    toast.error(`Failed to fetch patient data: ${error.message}`);
+                    router.push("/Patients");
+                    return;
+                }
+
+                if (!data) {
+                    console.warn(`No patient found with ID ${id}`);
+                    toast.error(`No patient found with ID ${id}`);
+                    router.push("/Patients");
+                    return;
+                }
+
+                // Combine person and patient data
+                const patientData: UpdatePatientFormValues = {
+                    firstName: data.person.first_name,
+                    middleName: data.person.middle_name || "",
+                    lastName: data.person.last_name,
+                    age: data.person.age || "",
+                    birthDate: new Date(data.person.birth_date),
+                    contactNumber: data.person.contact_number || "",
+                    citizenship: data.person.citizenship || "",
+                    address: data.person.address || "",
+                    maritalStatus: data.marital_status || "",
+                    religion: data.person.religion || "",
+                    occupation: data.occupation || "",
+                    member: data.member || "",
+                    ssn: data.ssn || "",
+                    gravidity: data.gravidity || "",
+                    parity: data.parity || "",
+                    lmc: data.last_menstrual_cycle ? new Date(data.last_menstrual_cycle) : undefined,
+                    edc: data.expected_date_of_confinement ? new Date(data.expected_date_of_confinement) : undefined,
+                    ecFirstName: data.person.ec_first_name || "",
+                    ecMiddleName: data.person.ec_middle_name || "",
+                    ecLastName: data.person.ec_last_name || "",
+                    ecContactNumber: data.person.ec_contact_number || "",
+                    ecRelationship: data.person.ec_relationship || "",
+                    profileImage: null,
+                    profileImageUrl: data.person.profile_image_url || "",
+                };
+
+                // Set form values
+                form.reset(patientData);
+                setFilePreview(data.person.profile_image_url || null);
+                setLoading(false);
+            } catch (err) {
+                console.error("Unexpected error fetching patient:", err);
+                toast.error("An unexpected error occurred while fetching patient data.");
+                router.push("/Patients");
+            }
+        }
+
+        fetchPatient();
+    }, [id, form, router]);
+
     // Handle file selection and preview
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -100,7 +181,7 @@ export default function PatientForm() {
             setSelectedFile(file);
             form.setValue("profileImage", file);
 
-            if (file.type.startsWith('image/')) {
+            if (file.type.startsWith("image/")) {
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     setFilePreview(e.target?.result as string);
@@ -113,12 +194,12 @@ export default function PatientForm() {
     };
 
     // Handle form submission
-    const onSubmit = async (data: PatientFormValues) => {
+    const onSubmit = async (data: UpdatePatientFormValues) => {
         try {
             setIsSubmitting(true);
-            let profileImageUrl: string | null = null;
+            let profileImageUrl: string | null = data.profileImageUrl ?? null;
 
-            // Upload profile picture to Supabase storage
+            // Upload new profile picture to Supabase storage if a new file is selected
             if (selectedFile) {
                 const fileExt = selectedFile.name.split(".").pop();
                 const uniquePrefix = `${data.firstName}_${data.lastName}_${Date.now()}`;
@@ -142,32 +223,73 @@ export default function PatientForm() {
                 console.log("Profile picture uploaded successfully, URL:", profileImageUrl);
             }
 
-            // Prepare patient data with fileurl
-            const patientData = {
-                ...data,
-                fileurl: profileImageUrl, // Map profileImageUrl to fileurl for person table
-            };
+            // Update person table
+            const { error: personError } = await supabase
+                .from("person")
+                .update({
+                    first_name: data.firstName,
+                    middle_name: data.middleName || null,
+                    last_name: data.lastName,
+                    age: data.age,
+                    birth_date: data.birthDate.toISOString().split("T")[0],
+                    contact_number: data.contactNumber,
+                    citizenship: data.citizenship || null,
+                    address: data.address || null,
+                    religion: data.religion || null,
+                    ec_first_name: data.ecFirstName || null,
+                    ec_middle_name: data.ecMiddleName || null,
+                    ec_last_name: data.ecLastName || null,
+                    ec_contact_number: data.ecContactNumber || null,
+                    ec_relationship: data.ecRelationship || null,
+                    profile_image_url: profileImageUrl || null,
+                })
+                .eq("id", id);
 
-            // Call createPatient to insert into person table
-            await createPatient(patientData);
-            toast.success("Patient Added Successfully", {
-                description: `${data.firstName} ${data.middleName || ""} ${data.lastName} has been added.`,
+            if (personError) {
+                throw personError;
+            }
+
+            // Update patients table
+            const { error: patientError } = await supabase
+                .from("patients")
+                .update({
+                    marital_status: data.maritalStatus || null,
+                    occupation: data.occupation || null,
+                    ssn: data.ssn || null,
+                    member: data.member || null,
+                    gravidity: data.gravidity || null,
+                    parity: data.parity || null,
+                    last_menstrual_cycle: data.lmc ? data.lmc.toISOString().split("T")[0] : null,
+                    expected_date_of_confinement: data.edc ? data.edc.toISOString().split("T")[0] : null,
+                })
+                .eq("id", id);
+
+            if (patientError) {
+                throw patientError;
+            }
+
+            toast.success("Patient Updated Successfully", {
+                description: `${data.firstName} ${data.middleName || ""} ${data.lastName} has been updated`,
             });
 
             // Reset form and states
             form.reset();
             setFilePreview(null);
             setSelectedFile(null);
-            router.push("/Patients");
+            router.push(`/Patients/Patient-View?id=${id}`)
         } catch (error) {
-            console.error("Error submitting form:", error);
-            toast.error("Error Adding Patient", {
+            console.error("Error updating patient:", error);
+            toast.error("Error Updating Patient", {
                 description: error instanceof Error ? error.message : "Unknown error occurred",
             });
         } finally {
             setIsSubmitting(false);
         }
     };
+
+    if (loading) {
+        return <div>Loading...</div>;
+    }
 
     return (
         <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
@@ -529,7 +651,7 @@ export default function PatientForm() {
                         </div>
                     </fieldset>
 
-                    <div className="justify-end gap-2ml-auto flex items-center gap-2">
+                    <div className="justify-end ml-auto flex items-center gap-2">
                         <Button
                             size="sm"
                             variant="outline"
@@ -538,22 +660,22 @@ export default function PatientForm() {
                                 form.reset();
                                 setFilePreview(null);
                                 setSelectedFile(null);
-                                router.push("/Patients");
+                                router.push(`/Patients/Patient-View?id=${id}`);
                             }}
                         >
                             <CircleX />
-                            <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Discard</span>
+                            <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Cancel</span>
                         </Button>
                         <Button type="submit" disabled={isSubmitting}>
                             {isSubmitting ? (
                                 <>
-                                    <Loader2 className=" h-4 w-4 animate-spin" />
-                                    Submitting...
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Updating...
                                 </>
                             ) : (
                                 <>
                                     <Send />
-                                    Submit Form
+                                    Update Patient
                                 </>
                             )}
                         </Button>

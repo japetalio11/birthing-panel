@@ -352,7 +352,6 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
             company: formattedData.company,
             notes: formattedData.notes,
             fileurl: fileurl,
-            attachment: fileurl,
           })
         } else {
           setRecordsData((prev) => [...prev, newRecord])
@@ -372,7 +371,6 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
           company: formattedData.company,
           notes: formattedData.notes,
           fileurl: fileurl,
-          attachment: fileurl,
         })
         toast.success("New laboratory record has been added successfully.")
       }
@@ -402,30 +400,37 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
     }
   }
 
-  const handleDelete = async (index: number) => {
-    if (id) {
-      const recordToDelete = (fields.length > 0 ? fields : recordsData)[index]
-      const { error } = await supabase
-        .from("laboratory_records")
-        .delete()
-        .eq("id", recordToDelete.id)
+    const handleDelete = async (index: number) => {
+        if (id) {
+            const recordToDelete = (fields.length > 0 ? fields : recordsData)[index]
+            const { error } = await supabase
+                .from("laboratory_records")
+                .delete()
+                .eq("id", recordToDelete.id)
 
-        if (error) {
-          console.error("Record delete error:", error)
-          toast.error("Failed to delete record: " + error.message)
-          return
+                if (error) {
+                    console.error("Record delete error:", error)
+                    toast.error("Failed to delete record: " + error.message)
+                    return
+                }
+
+                setRecordsData((prev) => prev.filter((_, idx) => idx !== index))
         }
 
-        setRecordsData((prev) => prev.filter((_, idx) => idx !== index))
-      }
+        if (remove) {
+            remove(index)
+        }
+        
+        // Close sidebar and preview
+        setIsSidebarOpen(false)
+        setIsPreviewOpen(false)
+        setSelectedRecord(null)
+        setPreviewUrl(null)
 
-    if (remove) {
-      remove(index)
+        toast.success("Record Deleted", {
+            description: "Laboratory record has been removed from the list.",
+        })
     }
-    toast("Record Deleted", {
-      description: "Laboratory record has been removed from the list.",
-    })
-  }
 
   const openRecordDetails = async (record: any) => {
     setSelectedRecord(record)
@@ -695,35 +700,18 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                   <TableHead>Record Type</TableHead>
                   <TableHead>Doctor</TableHead>
                   <TableHead>Ordered Date</TableHead>
-                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {displayRecords.map((record, index) => (
-                  <TableRow key={record.id || index} onClick={() => openRecordDetails(record)} className="cursor-pointer">
-                    <TableCell>
+                  <TableRow key={record.id || index} onClick={() => openRecordDetails(record)} className="cursor-pointer hover:bg-zinc-100">
+                    <TableCell className="py-4">
                       <Checkbox id={`record-${record.id || index}`} />
                     </TableCell>
                     <TableCell className="font-medium">{record.filename}</TableCell>
                     <TableCell>{record.type}</TableCell>
                     <TableCell>{record.doctor}</TableCell>
                     <TableCell>{record.ordered_date}</TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => handleDelete(index)}>
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -744,10 +732,13 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
         } z-100 border-l`}
       >
         {selectedRecord && (
-          <div className="flex flex-col h-full">
-            <div className="p-4 flex justify-between items-center border-b">
-              <h2 className="font-semibold">Record Details</h2>
-              <Button variant="outline" size="icon" onClick={closeSidebar}>
+          <div className="flex flex-col h-full p-2">
+            <div className="p-4 flex flex-row justify-between items-start">
+              <div className="flex flex-col">
+                <h2 className="font-semibold">Record Details</h2>
+                <p className="text-sm text-muted-foreground pt-1">Here&apos;s all you need to know about your patient&apos;s record</p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={closeSidebar}>
                 <X />
               </Button>
             </div>
@@ -815,7 +806,16 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
               </div>
             </div>
             
-            <div className="p-4 border-t">
+            <div className="p-4 space-y-2">
+                <Button
+                    className="w-full"
+                    variant="outline"
+                    onClick={() => handleDelete(displayRecords.findIndex((r) => r.id === selectedRecord.id))}
+                >
+                    <Trash2 />
+                    Delete File
+                </Button>
+
               <Button
                 className="w-full"
                 onClick={() => handleDownload(selectedRecord.fileurl, selectedRecord.filename)}
@@ -848,18 +848,7 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
         transition: 'transform 300ms ease-in-out, opacity 250ms ease-in-out',
         background: 'transparent'
       }}
-    >
-      <div className="absolute top-4 right-4 z-10">
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setIsPreviewOpen(false)}
-          className="bg-black/50 text-white hover:bg-black/70"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-      
+    >   
       <div className="h-full w-full flex items-center justify-center p-4">
         {previewUrl && previewUrl.match(/\.(jpg|jpeg|png)$/i) ? (
           <img
