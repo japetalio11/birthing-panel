@@ -5,7 +5,7 @@ export async function createPatientRecord(data: PatientFormValues, personId: str
     return await supabase
     .from('patients')
     .insert({
-        person_id: personId,
+        id: personId,
         gravidity: data.gravidity || null,
         parity: data.parity || null,
         last_menstrual_cycle: data.lmc ? data.lmc.toISOString().split('T')[0] : null,

@@ -211,9 +211,27 @@ const columns: ColumnDef<Patient>[] = [
             <div className="hidden md:block">{row.getValue("address") || "-"}</div>
         ),
     },
+    {
+        id: "actions",
+        cell: ({ row }) => {
+            const patient = row.original;
+            const router = useRouter();
+            return (
+                <Button
+                    aria-haspopup="true"
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => router.push(``)}
+                >
+                    <MoreHorizontal className="h-4 w-4" />
+                </Button>
+            );
+        },
+        enableSorting: false,
+    },
 ];
 
-export default function PatientsTable() {
+export default function AppointmentsTable() {
     const router = useRouter();
     const [patients, setPatients] = React.useState<Patient[]>([]);
     const [searchTerm, setSearchTerm] = React.useState("");
@@ -544,11 +562,11 @@ export default function PatientsTable() {
                                 <Button
                                     size="sm"
                                     className="h-8 ml-2 flex items-center gap-1"
-                                    onClick={() => router.push("/Patients/Patient-Form")}
+                                    onClick={() => router.push("/Appointments/Appointment-Form")}
                                 >
                                     <UserRoundPlus />
                                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                                        Add Patient
+                                        Set Appointment
                                     </span>
                                 </Button>
                             </div>
@@ -583,10 +601,9 @@ export default function PatientsTable() {
                                                 <TableRow
                                                     key={row.id}
                                                     data-state={row.getIsSelected() && "selected"}
-                                                    onClick={() => router.push(`/Patients/Patient-View?id=${row.original.id}`)} className="cursor-pointer hover:bg-zinc-100"
                                                 >
                                                     {row.getVisibleCells().map((cell) => (
-                                                        <TableCell key={cell.id} className="py-4">
+                                                        <TableCell key={cell.id}>
                                                             {flexRender(
                                                                 cell.column.columnDef.cell,
                                                                 cell.getContext()
