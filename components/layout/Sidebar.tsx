@@ -55,10 +55,10 @@ export default function Sidebar({ className, user }: SidebarProps) {
               </Link>
 
               <Link
-                href="/Appointments"
+                href="/Dashboard/Appointments"
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
-                  isRouteActive("/Appointments")
+                  isRouteActive("/Dashboard/Appointments")
                     ? "bg-muted text-primary"
                     : "text-muted-foreground hover:text-primary"
                 )}
@@ -68,10 +68,10 @@ export default function Sidebar({ className, user }: SidebarProps) {
               </Link>
 
               <Link
-                href="/Patients"
+                href="/Dashboard/Patients"
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
-                  isRouteActive("/Patients")
+                  isRouteActive("/Dashboard/Patients")
                     ? "bg-muted text-primary"
                     : "text-muted-foreground hover:text-primary"
                 )}
@@ -81,10 +81,10 @@ export default function Sidebar({ className, user }: SidebarProps) {
               </Link>
 
               <Link
-                href="/Clinicians"
+                href="/Dashboard/Clinicians"
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
-                  isRouteActive("/Clinicians")
+                  isRouteActive("/Dashboard/Clinicians")
                     ? "bg-muted text-primary"
                     : "text-muted-foreground hover:text-primary"
                 )}

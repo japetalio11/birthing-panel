@@ -544,7 +544,7 @@ export default function PatientsTable() {
                                 <Button
                                     size="sm"
                                     className="h-8 ml-2 flex items-center gap-1"
-                                    onClick={() => router.push("/Patients/Patient-Form")}
+                                    onClick={() => router.push("/Dashboard/Patients/Patient-Form")}
                                 >
                                     <UserRoundPlus />
                                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
@@ -583,7 +583,7 @@ export default function PatientsTable() {
                                                 <TableRow
                                                     key={row.id}
                                                     data-state={row.getIsSelected() && "selected"}
-                                                    onClick={() => router.push(`/Patients/Patient-View?id=${row.original.id}`)} className="cursor-pointer hover:bg-zinc-100"
+                                                    onClick={() => router.push(`/Dashboard/Patients/Patient-View?id=${row.original.id}`)} className="cursor-pointer hover:bg-zinc-100"
                                                 >
                                                     {row.getVisibleCells().map((cell) => (
                                                         <TableCell key={cell.id} className="py-4">
@@ -608,7 +608,7 @@ export default function PatientsTable() {
                         </CardContent>
                         <CardFooter>
                             <div className="text-xs text-muted-foreground">
-                                Showing <strong>1-{filteredPatients.length}</strong> of{" "}
+                                Showing <strong>{filteredPatients.length}</strong> of{" "}
                                 <strong>{patients.length}</strong> patients
                             </div>
                         </CardFooter>

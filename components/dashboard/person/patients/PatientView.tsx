@@ -96,7 +96,7 @@ export default function PatientView() {
                 description: `Failed to fetch patient data: ${error.message}`,
             });
             setLoading(false);
-            return router.push("/Patients");
+            return router.push("/Dashboard/Patients");
             }
 
             if (!data) {
@@ -105,7 +105,7 @@ export default function PatientView() {
                 description: "No person found with ID 2.",
             });
             setLoading(false);
-            return router.push("/Patients");
+            return router.push("/Dashboard/Patients");
             }
 
             // Combine person and patient data
@@ -147,7 +147,7 @@ export default function PatientView() {
             description: "An unexpected error occurred while fetching patient data.",
             });
             setLoading(false);
-            return router.push("/Patients");
+            return router.push("/Dashboard/Patients");
         }
         setLoading(false);
         }
@@ -200,7 +200,7 @@ export default function PatientView() {
 
             toast.success("Patient deleted successfully.");
             setOpenDialog(false);
-            router.push("/Patients");
+            router.push("/Dashboard/Patients");
         } catch (err: any) {
             toast.error(`Error deleting patient: ${err.message}`);
         }
@@ -302,7 +302,7 @@ export default function PatientView() {
                         <Mail className=" h-4 w-4" />
                         Set Appointment
                     </Button>
-                    <Button variant="outline" onClick={() => router.push(`/Patients/Update-Patient-Form?id=${patient.id}`)}>
+                    <Button variant="outline" onClick={() => router.push(`/Dashboard/Patients/Update-Patient-Form?id=${patient.id}`)}>
                         <RefreshCcw className=" h-4 w-4" />
                         Update Patient
                     </Button>
