@@ -20,7 +20,7 @@ export async function createPersonRecord(data: PatientFormValues) {
         ec_last_name: data.ecLastName || null,
         ec_contact_number: data.ecContactNumber || null,
         ec_relationship: data.ecRelationship || null,
-        fileurl: data.profileImageUrl || null, // Add fileurl for profile picture
+        fileurl: data.profileImageUrl || null,
     })
     .select('id')
     .single();

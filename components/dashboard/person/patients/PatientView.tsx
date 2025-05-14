@@ -3,8 +3,8 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
-import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { Download, Mail, Trash2, RefreshCcw} from "lucide-react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { Download, Mail, Trash2, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,7 @@ import SupplementRecommendation from "../SupplementRecommendation";
 import Prescriptions from "../Prescriptions";
 import LaboratoryRecords from "../patients/LaboratoryRecords";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input"
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -32,46 +32,50 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+// Define combined patient data type
 interface Patient {
-    id: number;
-    first_name: string;
-    middle_name: string | null;
-    last_name: string;
-    birth_date: string;
-    age: string | null;
-    contact_number: string | null;
-    citizenship: string | null;
-    address: string | null;
-    profile_image_url: string | null;
-    religion: string | null;
-    status: string | null;
-    marital_status: string | null;
-    ec_first_name: string | null;
-    ec_middle_name: string | null;
-    ec_last_name: string | null;
-    ec_contact_number: string | null;
-    ec_relationship: string | null;
-    expected_date_of_confinement: string | null;
-    last_menstrual_cycle: string | null;
-    gravidity: string | null;
-    parity: string | null;
-    occupation: string | null;
-    ssn: string | null;
-    member: string | null;
-    allergy_id: number | null;
-    next_appointment?: string | null;
-    last_visit?: string | null;
+  id: number;
+  first_name: string;
+  middle_name: string | null;
+  last_name: string;
+  birth_date: string;
+  age: string | null;
+  contact_number: string | null;
+  citizenship: string | null;
+  address: string | null;
+  fileurl: string | null; 
+  religion: string | null;
+  status: string | null;
+  marital_status: string | null;
+  ec_first_name: string | null;
+  ec_middle_name: string | null;
+  ec_last_name: string | null;
+  ec_contact_number: string | null;
+  ec_relationship: string | null;
+  expected_date_of_confinement: string | null;
+  last_menstrual_cycle: string | null;
+  gravidity: string | null;
+  parity: string | null;
+  occupation: string | null;
+  ssn: string | null;
+  member: string | null;
+  allergy_id: number | null;
+  next_appointment?: string | null;
+  last_visit?: string | null;
 }
-export default function PatientView() {
-    const router = useRouter();
-    const [patient, setPatient] = useState<Patient | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [openDialog, setOpenDialog] = React.useState(false);
-    const [deleteInput, setDeleteInput] = useState(""); // State for input field
-    const [isDeactivated, setIsDeactivated] = useState(false); // State for deactivate switch
-    const searchParams = useSearchParams();
-    const id = searchParams.get("id");
 
+export default function PatientView() {
+  const router = useRouter();
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [openDialog, setOpenDialog] = React.useState(false);
+  const [deleteInput, setDeleteInput] = useState("");
+  const [isDeactivated, setIsDeactivated] = useState(false);
+  const [profileImageSignedUrl, setProfileImageSignedUrl] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const id = searchParams.get("id");
+
+  // Function to generate signed URL for profile image
   const getProfileImageUrl = async (filePath: string) => {
     try {
       const path = filePath.split('profile-pictures/')[1] || filePath;
@@ -91,6 +95,7 @@ export default function PatientView() {
     }
   };
 
+  // Fetch patient data and profile image signed URL
   useEffect(() => {
     async function fetchPatient() {
       try {
@@ -103,9 +108,9 @@ export default function PatientView() {
                 *
               )
             `
-            )
-            .eq("id", id)
-            .single();
+          )
+          .eq("id", id)
+          .single();
 
         if (error) {
           console.error("Supabase query error:", error);
@@ -125,6 +130,7 @@ export default function PatientView() {
           return router.push("/Patients");
         }
 
+        // Combine person and patient data
         const combinedData: Patient = {
           id: data.person.id,
           first_name: data.person.first_name,
@@ -135,7 +141,7 @@ export default function PatientView() {
           contact_number: data.person.contact_number,
           citizenship: data.person.citizenship,
           address: data.person.address,
-          fileurl: data.person.fileurl, 
+          fileurl: data.person.fileurl, // Changed from profile_image_url to fileurl
           religion: data.person.religion,
           status: data.person.status,
           marital_status: data.marital_status,
@@ -154,50 +160,60 @@ export default function PatientView() {
           allergy_id: data.allergy_id || null,
         };
 
-            console.log("Fetched patient data:", combinedData);
-            setPatient(combinedData);
-            setIsDeactivated(combinedData.status === "Inactive"); // Set switch state based on status
-        } catch (err) {
-            console.error("Unexpected error fetching patient:", err);
-            toast("Error", {
-            description: "An unexpected error occurred while fetching patient data.",
-            });
-            setLoading(false);
-            return router.push("/Patients");
+        console.log("Fetched patient data:", combinedData);
+        setPatient(combinedData);
+        setIsDeactivated(combinedData.status === "Inactive");
+
+        // Fetch signed URL for profile image if it exists
+        if (combinedData.fileurl) {
+          console.log(`Attempting to fetch signed URL for fileurl: ${combinedData.fileurl}`);
+          const signedUrl = await getProfileImageUrl(combinedData.fileurl);
+          setProfileImageSignedUrl(signedUrl);
+          if (!signedUrl) {
+            console.warn('Failed to generate signed URL for profile image');
+          }
+        } else {
+          console.log('No fileurl found for patient profile image');
         }
+      } catch (err) {
+        console.error("Unexpected error fetching patient:", err);
+        toast("Error", {
+          description: "An unexpected error occurred while fetching patient data.",
+        });
         setLoading(false);
-        }
-
-        fetchPatient();
-    }, [router]);
-
-    // Handle deactivate switch toggle
-    const handleDeactivateToggle = async () => {
-        if (!patient) return;
-
-        const newStatus = isDeactivated ? "Active" : "Inactive";
-        try {
-            const { error } = await supabase
-                .from("person")
-                .update({ status: newStatus })
-                .eq("id", patient.id);
-
-            if (error) throw error;
-
-            setIsDeactivated(!isDeactivated);
-            setPatient({ ...patient, status: newStatus });
-            toast.success(`Patient status updated to ${newStatus}.`);
-        } catch (err: any) {
-            toast.error(`Error updating patient status: ${err.message}`);
-        }
-    };
-
-    if (!patient) {
-        return null; // Redirect already handled in fetchPatient
+        return router.push("/Patients");
+      }
+      setLoading(false);
     }
 
- const handleDelete = async (id: number) => {
+    fetchPatient();
+  }, [router, id]);
+
+  // Handle deactivate switch toggle
+  const handleDeactivateToggle = async () => {
+    if (!patient) return;
+
+    const newStatus = isDeactivated ? "Active" : "Inactive";
+    try {
+      const { error } = await supabase
+        .from("person")
+        .update({ status: newStatus })
+        .eq("id", patient.id);
+
+      if (error) throw error;
+
+      setIsDeactivated(!isDeactivated);
+      setPatient({ ...patient, status: newStatus });
+      toast.success(`Patient status updated to ${newStatus}.`);
+    } catch (err: any) {
+      toast.error(`Error updating patient status: ${err.message}`);
+    }
+  };
+
+  // Handle patient deletion
+  const handleDelete = async (id: number) => {
   try {
+    // Delete from patients table using 'id' instead of 'person_id'
     const { error: patientError } = await supabase
       .from("patients")
       .delete()
@@ -205,6 +221,7 @@ export default function PatientView() {
 
     if (patientError) throw patientError;
 
+    // Delete from person table
     const { error: personError } = await supabase
       .from("person")
       .delete()
@@ -212,19 +229,23 @@ export default function PatientView() {
 
     if (personError) throw personError;
 
-            toast.success("Patient deleted successfully.");
-            setOpenDialog(false);
-            router.push("/Patients");
-        } catch (err: any) {
-            toast.error(`Error deleting patient: ${err.message}`);
-        }
-    };
+    toast.success("Patient deleted successfully.");
+    setOpenDialog(false);
+    router.push("/Patients");
+  } catch (err: any) {
+    toast.error(`Error deleting patient: ${err.message}`);
+  }
+};
 
-    const fullName = `${patient.first_name} ${patient.middle_name ? patient.middle_name + " " : ""}${patient.last_name}`;
-    const ecFullName = patient.ec_first_name
-        ? `${patient.ec_first_name} ${patient.ec_middle_name ? patient.ec_middle_name + " " : ""}${patient.ec_last_name}`
-        : "Not provided";
-    const isDeleteEnabled = deleteInput.trim().toLowerCase() === fullName.trim().toLowerCase();
+  if (!patient) {
+    return null;
+  }
+
+  const fullName = `${patient.first_name} ${patient.middle_name ? patient.middle_name + " " : ""}${patient.last_name}`;
+  const ecFullName = patient.ec_first_name
+    ? `${patient.ec_first_name} ${patient.ec_middle_name ? patient.ec_middle_name + " " : ""}${patient.ec_last_name}`
+    : "Not provided";
+  const isDeleteEnabled = deleteInput.trim().toLowerCase() === fullName.trim().toLowerCase();
 
   return (
     <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
@@ -275,30 +296,30 @@ export default function PatientView() {
             </CardContent>
           </Card>
 
-            {/* Quick Actions Card */}
-            <Card className="flex-1 md:flex-1">
-                <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
-                <CardDescription>A quick overview of actions you can take.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                <div className="flex flex-col gap-6">
-                    <div className="flex flex-col items-center gap-2">
-                    <div className="flex gap-2">
-                        <div>
-                        <Label htmlFor="deactivate">Deactivate</Label>
-                        <p className="text-xs text-muted-foreground mt-2 mr-4">
-                            Deactivating will temporarily put patient in inactive status. You can reactivate them later.
-                        </p>
-                        </div>
-                        <Switch 
-                            id="deactivate" 
-                            className="scale-125" 
-                            checked={isDeactivated}
-                            onCheckedChange={handleDeactivateToggle}
-                        />
+          {/* Quick Actions Card */}
+          <Card className="flex-1 md:flex-1">
+            <CardHeader>
+              <CardTitle>Quick Actions</CardTitle>
+              <CardDescription>A quick overview of actions you can take.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-6">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex gap-2">
+                    <div>
+                      <Label htmlFor="deactivate">Deactivate</Label>
+                      <p className="text-xs text-muted-foreground mt-2 mr-4">
+                        Deactivating will temporarily put patient in inactive status. You can reactivate them later.
+                      </p>
                     </div>
-                    </div>
+                    <Switch
+                      id="deactivate"
+                      className="scale-125"
+                      checked={isDeactivated}
+                      onCheckedChange={handleDeactivateToggle}
+                    />
+                  </div>
+                </div>
 
                 <div className="flex flex-col items-center gap-2">
                   <div className="flex gap-2">
@@ -319,50 +340,48 @@ export default function PatientView() {
                       Set Appointment
                     </Button>
                     <Button variant="outline" onClick={() => router.push(`/Patients/Update-Patient-Form?id=${patient.id}`)}>
-                        <RefreshCcw className=" h-4 w-4" />
-                        Update Patient
+                      <RefreshCcw className="h-4 w-4" />
+                      Update Patient
                     </Button>
                     <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                        <DialogTrigger asChild>
-                            <Button 
-                                variant="outline"
-                            >
-                                <Trash2 className="h-4 w-4" />
-                                Delete Patient
+                      <DialogTrigger asChild>
+                        <Button variant="outline">
+                          <Trash2 className="h-4 w-4" />
+                          Delete Patient
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Delete Patient</DialogTitle>
+                          <DialogDescription>
+                            Are you sure you want to delete this patient? This action cannot be undone.
+                          </DialogDescription>
+                          <div className="grid gap-2 py-4">
+                            <Label htmlFor="reason">Type "{fullName}" to confirm deletion</Label>
+                            <Input
+                              id="reason"
+                              className="focus:border-red-500 focus:ring-red-500"
+                              placeholder={`Enter patient name`}
+                              value={deleteInput}
+                              onChange={(e) => setDeleteInput(e.target.value)}
+                            />
+                          </div>
+                        </DialogHeader>
+                        <DialogFooter>
+                          <DialogPrimitive.Close>
+                            <Button variant="outline">
+                              Cancel
                             </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>Delete Patient</DialogTitle>
-                                <DialogDescription>
-                                    Are you sure you want to delete this patient? This action cannot be undone.
-                                </DialogDescription>
-                                <div className="grid gap-2 py-4">
-                                    <Label htmlFor="reason">Type "{fullName}" to confirm deletion</Label>
-                                    <Input 
-                                        id="reason" 
-                                        className="focus:border-red-500 focus:ring-red-500" 
-                                        placeholder={`Enter patient name`} 
-                                        value={deleteInput}
-                                        onChange={(e) => setDeleteInput(e.target.value)}
-                                    />
-                                </div>
-                            </DialogHeader>
-                            <DialogFooter>
-                                <DialogPrimitive.Close>
-                                    <Button variant="outline">
-                                        Cancel
-                                    </Button>
-                                </DialogPrimitive.Close>
-                                <Button 
-                                    variant="destructive" 
-                                    onClick={() => handleDelete(patient.id)}
-                                    disabled={!isDeleteEnabled}
-                                >
-                                    Yes, delete this patient.
-                                </Button>
-                            </DialogFooter>
-                        </DialogContent>
+                          </DialogPrimitive.Close>
+                          <Button
+                            variant="destructive"
+                            onClick={() => handleDelete(patient.id)}
+                            disabled={!isDeleteEnabled}
+                          >
+                            Yes, delete this patient.
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
                     </Dialog>
                   </div>
                 </div>
@@ -480,9 +499,9 @@ export default function PatientView() {
             <SupplementRecommendation context="patient" id={id} />
           </TabsContent>
 
-            <TabsContent value="prescriptions">
-                <Prescriptions context="patient" id={id} />
-            </TabsContent>
+          <TabsContent value="prescriptions">
+            <Prescriptions context="patient" id={id} />
+          </TabsContent>
 
           <TabsContent value="records">
             <LaboratoryRecords context="patient" id={id} />

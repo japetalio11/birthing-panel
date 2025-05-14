@@ -142,10 +142,10 @@ export default function PatientForm() {
                 console.log("Profile picture uploaded successfully, URL:", profileImageUrl);
             }
 
-            // Prepare patient data with fileurl
+            // Prepare patient data with profileImageUrl
             const patientData = {
                 ...data,
-                fileurl: profileImageUrl, // Map profileImageUrl to fileurl for person table
+                profileImageUrl: profileImageUrl ?? undefined, // Ensure undefined instead of null
             };
 
             // Call createPatient to insert into person table
