@@ -74,6 +74,10 @@ import {
     useReactTable,
     flexRender
 } from "@tanstack/react-table";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 interface Patient {
     id: number;
     name: string;
@@ -227,8 +231,16 @@ export default function PatientsTable() {
     const [tab, setTab] = React.useState("all");
     const [sorting, setSorting] = React.useState<SortingState>([]);
     const [rowSelection, setRowSelection] = React.useState({});
+    const [exportFilters, setExportFilters] = React.useState({
+        startDate: undefined as Date | undefined,
+        endDate: undefined as Date | undefined,
+        minAge: "",
+        maxAge: "",
+        status: "all" as "all" | "active" | "inactive",
+        sort: "none" as "none" | "asc" | "desc",
+        limit: "",
+    });
 
-    // Fetch patients from Supabase
     React.useEffect(() => {
         async function fetchPatients() {
             try {
@@ -319,18 +331,15 @@ export default function PatientsTable() {
         fetchPatients();
     }, []);
 
-    // Handle search and filtering
     const filteredPatients = React.useMemo(() => {
         let result = [...patients];
 
-        // Apply search term
         if (searchTerm) {
             result = result.filter((patient) =>
                 patient.name.toLowerCase().includes(searchTerm.toLowerCase())
             );
         }
 
-        // Apply advanced search
         if (advancedSearch.birth_date) {
             result = result.filter((patient) =>
                 patient.birth_date?.toLowerCase().includes(advancedSearch.birth_date.toLowerCase())
@@ -352,7 +361,6 @@ export default function PatientsTable() {
             );
         }
 
-        // Apply tab filter
         if (tab === "active") {
             result = result.filter((patient) => patient.status.toLowerCase() === "active");
         } else if (tab === "inactive") {
@@ -362,22 +370,58 @@ export default function PatientsTable() {
         return result;
     }, [searchTerm, advancedSearch, tab, patients]);
 
-    // Initialize table
-    const table = useReactTable({
-        data: filteredPatients,
-        columns,
-        onSortingChange: setSorting,
-        getCoreRowModel: getCoreRowModel(),
-        getSortedRowModel: getSortedRowModel(),
-        onRowSelectionChange: setRowSelection,
-        state: {
-            sorting,
-            rowSelection,
-        },
-    });
+    const getExportPatients = () => {
+        let result = [...filteredPatients];
 
-    // Handle export
+        if (exportFilters.startDate || exportFilters.endDate) {
+            result = result.filter((patient) => {
+                if (!patient.last_appointment) return false;
+                const apptDate = new Date(patient.last_appointment);
+                const start = exportFilters.startDate
+                    ? new Date(exportFilters.startDate).setHours(0, 0, 0, 0)
+                    : -Infinity;
+                const end = exportFilters.endDate
+                    ? new Date(exportFilters.endDate).setHours(23, 59, 59, 999)
+                    : Infinity;
+                return apptDate.getTime() >= start && apptDate.getTime() <= end;
+            });
+        }
+
+        if (exportFilters.minAge || exportFilters.maxAge) {
+            result = result.filter((patient) => {
+                if (!patient.age) return false;
+                const age = parseInt(patient.age);
+                const min = exportFilters.minAge ? parseInt(exportFilters.minAge) : -Infinity;
+                const max = exportFilters.maxAge ? parseInt(exportFilters.maxAge) : Infinity;
+                return age >= min && age <= max;
+            });
+        }
+
+        if (exportFilters.status !== "all") {
+            result = result.filter((patient) =>
+                patient.status.toLowerCase() === exportFilters.status
+            );
+        }
+
+        if (exportFilters.sort !== "none") {
+            result.sort((a, b) => {
+                const comparison = a.name.localeCompare(b.name);
+                return exportFilters.sort === "asc" ? comparison : -comparison;
+            });
+        }
+
+        if (exportFilters.limit) {
+            const limit = parseInt(exportFilters.limit);
+            if (!isNaN(limit) && limit > 0) {
+                result = result.slice(0, limit);
+            }
+        }
+
+        return result;
+    };
+
     const handleExport = () => {
+        const patientsToExport = getExportPatients();
         const headers = [
             "Name",
             "Status",
@@ -387,7 +431,7 @@ export default function PatientsTable() {
             "Contact Number",
             "Home Address",
         ];
-        const rows = filteredPatients.map((patient) => [
+        const rows = patientsToExport.map((patient) => [
             patient.name,
             patient.status,
             patient.last_appointment || "",
@@ -409,6 +453,19 @@ export default function PatientsTable() {
         link.click();
         toast.success("Data exported successfully.");
     };
+
+    const table = useReactTable({
+        data: filteredPatients,
+        columns,
+        onSortingChange: setSorting,
+        getCoreRowModel: getCoreRowModel(),
+        getSortedRowModel: getSortedRowModel(),
+        onRowSelectionChange: setRowSelection,
+        state: {
+            sorting,
+            rowSelection,
+        },
+    });
 
     return (
         <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
@@ -512,13 +569,129 @@ export default function PatientsTable() {
                                     </span>
                                 </Button>
                             </DialogTrigger>
-                            <DialogContent>
+                            <DialogContent className="sm:max-w-[600px]">
                                 <DialogHeader>
-                                    <DialogTitle>Export Data</DialogTitle>
+                                    <DialogTitle>Export Patients</DialogTitle>
                                     <DialogDescription>
-                                        Export the current patient list as a CSV file.
+                                        Customize your export by applying filters and sorting options.
                                     </DialogDescription>
                                 </DialogHeader>
+                                <div className="grid gap-4 py-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Last Appointment Start Date</Label>
+                                            <DatePicker
+                                                value={exportFilters.startDate}
+                                                onChange={(date) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        startDate: date,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Last Appointment End Date</Label>
+                                            <DatePicker
+                                                value={exportFilters.endDate}
+                                                onChange={(date) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        endDate: date,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Minimum Age</Label>
+                                            <Input
+                                                type="number"
+                                                placeholder="e.g., 18"
+                                                value={exportFilters.minAge}
+                                                onChange={(e) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        minAge: e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Maximum Age</Label>
+                                            <Input
+                                                type="number"
+                                                placeholder="e.g., 65"
+                                                value={exportFilters.maxAge}
+                                                onChange={(e) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        maxAge: e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Status</Label>
+                                            <Select
+                                                value={exportFilters.status}
+                                                onValueChange={(value) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        status: value as "all" | "active" | "inactive",
+                                                    })
+                                                }
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select status" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">All</SelectItem>
+                                                    <SelectItem value="active">Active</SelectItem>
+                                                    <SelectItem value="inactive">Inactive</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Sort by Name</Label>
+                                            <Select
+                                                value={exportFilters.sort}
+                                                onValueChange={(value) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        sort: value as "none" | "asc" | "desc",
+                                                    })
+                                                }
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select sorting" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="none">None</SelectItem>
+                                                    <SelectItem value="asc">A-Z</SelectItem>
+                                                    <SelectItem value="desc">Z-A</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Export Limit</Label>
+                                            <Input
+                                                type="number"
+                                                placeholder="e.g., 3"
+                                                value={exportFilters.limit}
+                                                onChange={(e) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        limit: e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
                                 <DialogFooter>
                                     <Button variant="outline" onClick={() => {}}>
                                         Cancel
@@ -531,8 +704,8 @@ export default function PatientsTable() {
                 </div>
 
                 <TabsContent value={tab}>
-                    <Card x-chunk="dashboard-06-chunk-0">
-                        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <Card x-chunk="dashboard-06-chunk-alda">
+                        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md: justify-between">
                             <div className="space-y-1">
                                 <CardTitle>Patients</CardTitle>
                                 <CardDescription>
@@ -583,7 +756,8 @@ export default function PatientsTable() {
                                                 <TableRow
                                                     key={row.id}
                                                     data-state={row.getIsSelected() && "selected"}
-                                                    onClick={() => router.push(`/Patients/Patient-View?id=${row.original.id}`)} className="cursor-pointer hover:bg-zinc-100"
+                                                    onClick={() => router.push(`/Patients/Patient-View?id=${row.original.id}`)}
+                                                    className="cursor-pointer hover:bg-zinc-100"
                                                 >
                                                     {row.getVisibleCells().map((cell) => (
                                                         <TableCell key={cell.id} className="py-4">
@@ -597,7 +771,10 @@ export default function PatientsTable() {
                                             ))
                                         ) : (
                                             <TableRow>
-                                                <TableCell colSpan={columns.length} className="h-24 text-center">
+                                                <TableCell
+                                                    colSpan={columns.length}
+                                                    className="h-24 text-center"
+                                                >
                                                     No results.
                                                 </TableCell>
                                             </TableRow>
