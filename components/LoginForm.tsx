@@ -54,6 +54,11 @@ export default function LoginForm({
       const result = await response.json();
       if (result.success) {
         toast.success("Login successful!");
+        // Store user data in session storage
+        sessionStorage.setItem('user', JSON.stringify({
+          name: result.user.name,
+          role: result.user.role
+        }));
         router.push("/Dashboard");
       } else {
         toast.error(result.error || "Invalid name or password");

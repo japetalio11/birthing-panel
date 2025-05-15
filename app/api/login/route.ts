@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     // Query admin table
     const { data, error } = await supabase
       .from('admin')
-      .select('first_name, middle_name, last_name, password');
+      .select('first_name, middle_name, last_name, password, role');
 
     if (error) {
       console.error('Supabase query error:', {
@@ -66,6 +66,7 @@ export async function POST(request: Request) {
           middle_name: record.middle_name,
           last_name: record.last_name,
           password: record.password,
+          role: record.role,
         },
       });
       return isNameMatch && isPasswordMatch;
@@ -76,8 +77,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid name or password' }, { status: 401 });
     }
 
+    // Construct full name for response
+    const fullName = [
+      admin.first_name,
+      admin.middle_name,
+      admin.last_name
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
     console.log('Login successful for:', { name: trimmedName });
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ 
+      success: true,
+      user: {
+        name: fullName,
+        role: admin.role
+      }
+    });
   } catch (error: any) {
     console.error('API error:', {
       message: error.message,
