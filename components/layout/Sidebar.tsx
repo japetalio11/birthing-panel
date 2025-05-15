@@ -42,10 +42,10 @@ export default function Sidebar({ className, user }: SidebarProps) {
             <nav className="grid items-start px-2 text-sm lg:px-4">
               <SidebarGroupLabel>Management</SidebarGroupLabel>
               <Link
-                href="/"
+                href="/Dashboard"
                 className={cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
-                  isRouteActive("/") && pathname === "/"
+                  isRouteActive("/Dashboard") && pathname === "/Dashboard"
                     ? "bg-muted text-primary"
                     : "text-muted-foreground hover:text-primary"
                 )}
