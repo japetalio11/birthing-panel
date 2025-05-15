@@ -79,7 +79,7 @@ export default function LoginForm({
               <div className="flex flex-col items-center text-center">
                 <h1 className="text-2xl font-bold">Welcome back</h1>
                 <p className="text-balance text-muted-foreground">
-                  Login to your St. Pio account
+                  Login to your account
                 </p>
               </div>
               <div className="grid gap-2">
@@ -111,8 +111,13 @@ export default function LoginForm({
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Logging in..." : "Login"}
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={isLoading}
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmit(e)}
+                >
+                {isLoading ? "Login" : "Login"}
               </Button>
             </div>
           </form>
@@ -127,7 +132,7 @@ export default function LoginForm({
           </div>
         </CardContent>
       </Card>
-      <div className="text-balance text-center text-xs text-muted-foreground [&_a]:underline [&_a]:underline-offset-4 hover:[&_a]:text-primary">
+      <div className="text-balance text-center text-sm text-muted-foreground [&_a]:underline [&_a]:underline-offset-4 hover:[&_a]:text-primary">
         "Loving Father, touch me now with your healing hands, for I believe that your will is for me to be well in mind, body, soul and spirit"
         <div className="text-right py-2">
           — St. Padre Pio
