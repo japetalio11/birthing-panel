@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
@@ -31,6 +32,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Define combined patient data type
 interface Patient {
@@ -43,7 +46,7 @@ interface Patient {
   contact_number: string | null;
   citizenship: string | null;
   address: string | null;
-  fileurl: string | null; 
+  fileurl: string | null;
   religion: string | null;
   status: string | null;
   marital_status: string | null;
@@ -68,18 +71,26 @@ export default function PatientView() {
   const router = useRouter();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [loading, setLoading] = useState(true);
-  const [openDialog, setOpenDialog] = React.useState(false);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [openExportDialog, setOpenExportDialog] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
   const [isDeactivated, setIsDeactivated] = useState(false);
   const [profileImageSignedUrl, setProfileImageSignedUrl] = useState<string | null>(null);
+  const [exportOptions, setExportOptions] = useState({
+    basicInfo: true,
+    allergies: false,
+    supplements: false,
+    labRecords: false,
+    prescriptions: false,
+  });
+  const [exportFormat, setExportFormat] = useState("pdf");
+  const [isExporting, setIsExporting] = useState(false);
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
 
-  // Function to generate signed URL for profile image
   const getProfileImageUrl = async (filePath: string) => {
     try {
       const path = filePath.split('profile-pictures/')[1] || filePath;
-      console.log(`Generating signed URL for file path: ${path}`);
       const { data, error } = await supabase.storage
         .from('profile-pictures')
         .createSignedUrl(path, 3600);
@@ -87,7 +98,6 @@ export default function PatientView() {
         console.error('Error generating profile image signed URL:', error.message);
         return null;
       }
-      console.log('Signed URL generated successfully:', data.signedUrl);
       return data.signedUrl;
     } catch (error) {
       console.error('Unexpected error generating profile image signed URL:', error);
@@ -95,7 +105,6 @@ export default function PatientView() {
     }
   };
 
-  // Fetch patient data and profile image signed URL
   useEffect(() => {
     async function fetchPatient() {
       try {
@@ -130,7 +139,6 @@ export default function PatientView() {
           return router.push("/Patients");
         }
 
-        // Combine person and patient data
         const combinedData: Patient = {
           id: data.person.id,
           first_name: data.person.first_name,
@@ -141,7 +149,7 @@ export default function PatientView() {
           contact_number: data.person.contact_number,
           citizenship: data.person.citizenship,
           address: data.person.address,
-          fileurl: data.person.fileurl, // Changed from profile_image_url to fileurl
+          fileurl: data.person.fileurl,
           religion: data.person.religion,
           status: data.person.status,
           marital_status: data.marital_status,
@@ -160,20 +168,12 @@ export default function PatientView() {
           allergy_id: data.allergy_id || null,
         };
 
-        console.log("Fetched patient data:", combinedData);
         setPatient(combinedData);
         setIsDeactivated(combinedData.status === "Inactive");
 
-        // Fetch signed URL for profile image if it exists
         if (combinedData.fileurl) {
-          console.log(`Attempting to fetch signed URL for fileurl: ${combinedData.fileurl}`);
           const signedUrl = await getProfileImageUrl(combinedData.fileurl);
           setProfileImageSignedUrl(signedUrl);
-          if (!signedUrl) {
-            console.warn('Failed to generate signed URL for profile image');
-          }
-        } else {
-          console.log('No fileurl found for patient profile image');
         }
       } catch (err) {
         console.error("Unexpected error fetching patient:", err);
@@ -189,7 +189,6 @@ export default function PatientView() {
     fetchPatient();
   }, [router, id]);
 
-  // Handle deactivate switch toggle
   const handleDeactivateToggle = async () => {
     if (!patient) return;
 
@@ -210,32 +209,181 @@ export default function PatientView() {
     }
   };
 
-  // Handle patient deletion
   const handleDelete = async (id: number) => {
-  try {
-    // Delete from patients table using 'id' instead of 'person_id'
-    const { error: patientError } = await supabase
-      .from("patients")
-      .delete()
-      .eq("id", id);
+    try {
+      const { error: patientError } = await supabase
+        .from("patients")
+        .delete()
+        .eq("id", id);
 
-    if (patientError) throw patientError;
+      if (patientError) throw patientError;
 
-    // Delete from person table
-    const { error: personError } = await supabase
-      .from("person")
-      .delete()
-      .eq("id", id);
+      const { error: personError } = await supabase
+        .from("person")
+        .delete()
+        .eq("id", id);
 
-    if (personError) throw personError;
+      if (personError) throw personError;
 
-    toast.success("Patient deleted successfully.");
-    setOpenDialog(false);
-    router.push("/Patients");
-  } catch (err: any) {
-    toast.error(`Error deleting patient: ${err.message}`);
+      toast.success("Patient deleted successfully.");
+      setOpenDeleteDialog(false);
+      router.push("/Patients");
+    } catch (err: any) {
+      toast.error(`Error deleting patient: ${err.message}`);
+    }
+  };
+
+  async function handleExport() {
+    console.log("Starting export process...");
+    if (!patient || !id) {
+      console.error("No patient data or ID available.");
+      toast.error("No patient data available for export.");
+      return;
+    }
+
+    const hasSelectedOptions = Object.values(exportOptions).some((option) => option);
+    if (!hasSelectedOptions) {
+      console.warn("No export options selected.");
+      toast.error("Please select at least one export option.");
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      console.log("Fetching export data with options:", exportOptions);
+      let allergies: any[] = [];
+      let supplements: any[] = [];
+      let labRecords: any[] = [];
+      let prescriptions: any[] = [];
+
+      if (exportOptions.allergies) {
+        console.log("Fetching allergies...");
+        const { data, error } = await supabase
+          .from("allergies")
+          .select("*")
+          .eq("patient_id", id);
+        if (error) throw new Error(`Failed to fetch allergies: ${error.message}`);
+        allergies = data;
+        console.log("Allergies fetched:", allergies);
+      }
+
+      if (exportOptions.supplements) {
+        console.log("Fetching supplements...");
+        const { data, error } = await supabase
+          .from("supplements")
+          .select(
+            `
+            *,
+            clinicians!clinician_id (
+              person (
+                first_name,
+                middle_name,
+                last_name
+              )
+            )
+          `
+          )
+          .eq("patient_id", id);
+        if (error) throw new Error(`Failed to fetch supplements: ${error.message}`);
+        supplements = data.map((supp: any) => ({
+          ...supp,
+          clinician: [
+            supp.clinicians.person.first_name,
+            supp.clinicians.person.middle_name,
+            supp.clinicians.person.last_name,
+          ]
+            .filter((part) => part)
+            .join(" ") || "Unknown Clinician",
+        }));
+        console.log("Supplements fetched:", supplements);
+      }
+
+      if (exportOptions.labRecords) {
+        console.log("Fetching lab records...");
+        const { data, error } = await supabase
+          .from("laboratory_records")
+          .select("*")
+          .eq("patient_id", id);
+        if (error) throw new Error(`Failed to fetch lab records: ${error.message}`);
+        labRecords = data;
+        console.log("Lab records fetched:", labRecords);
+      }
+
+      if (exportOptions.prescriptions) {
+        console.log("Fetching prescriptions...");
+        const { data, error } = await supabase
+          .from("prescriptions")
+          .select(
+            `
+            *,
+            clinicians!clinician_id (
+              person (
+                first_name,
+                middle_name,
+                last_name
+              )
+            )
+          `
+          )
+          .eq("patient_id", id);
+        if (error) throw new Error(`Failed to fetch prescriptions: ${error.message}`);
+        prescriptions = data.map((pres: any) => ({
+          ...pres,
+          clinician: [
+            pres.clinicians.person.first_name,
+            pres.clinicians.person.middle_name,
+            pres.clinicians.person.last_name,
+          ]
+            .filter((part) => part)
+            .join(" ") || "Unknown Clinician",
+        }));
+        console.log("Prescriptions fetched:", prescriptions);
+      }
+
+      const exportData = {
+        patient,
+        exportOptions,
+        allergies,
+        supplements,
+        labRecords,
+        prescriptions,
+      };
+      console.log("Export data prepared:", exportData);
+
+      console.log("Sending request to /api/export...");
+      const response = await fetch("/api/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(exportData),
+      });
+      console.log("API response status:", response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `API request failed with status ${response.status}`);
+      }
+
+      console.log("Processing PDF download...");
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const fullName = `${patient.first_name} ${patient.middle_name ? patient.middle_name + " " : ""}${patient.last_name}`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Patient_Report_${fullName}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+
+      console.log("Export successful.");
+      toast.success("Export generated successfully.");
+      setOpenExportDialog(false);
+    } catch (error: any) {
+      console.error("Export failed:", error);
+      const errorMessage = error.message || "An unexpected error occurred during export.";
+      toast.error(`Failed to generate export: ${errorMessage}`);
+    } finally {
+      setIsExporting(false);
+    }
   }
-};
 
   if (!patient) {
     return null;
@@ -252,7 +400,6 @@ export default function PatientView() {
       <div className="grid gap-4">
         {/* Row for Basic Information and Quick Actions */}
         <div className="flex flex-col md:flex-row gap-4">
-          {/* Basic Information Card */}
           <Card className="flex-1 md:flex-[2]">
             <CardHeader>
               <div className="relative w-40 h-40 rounded-full overflow-hidden border">
@@ -296,7 +443,6 @@ export default function PatientView() {
             </CardContent>
           </Card>
 
-          {/* Quick Actions Card */}
           <Card className="flex-1 md:flex-1">
             <CardHeader>
               <CardTitle>Quick Actions</CardTitle>
@@ -343,7 +489,7 @@ export default function PatientView() {
                       <RefreshCcw className="h-4 w-4" />
                       Update Patient
                     </Button>
-                    <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+                    <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
                       <DialogTrigger asChild>
                         <Button variant="outline">
                           <Trash2 className="h-4 w-4" />
@@ -400,10 +546,95 @@ export default function PatientView() {
               <TabsTrigger value="records">Laboratory Records</TabsTrigger>
             </TabsList>
             <div className="ml-auto flex items-center gap-2">
-              <Button size="sm" variant="outline" className="h-8 gap-1">
-                <Download className="h-4 w-4" />
-                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Export</span>
-              </Button>
+              <Dialog open={openExportDialog} onOpenChange={setOpenExportDialog}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-8 gap-1">
+                    <Download className="h-4 w-4" />
+                    <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Export</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Export Patient Data</DialogTitle>
+                    <DialogDescription>
+                      Select the data to include in the export and choose the format.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="basicInfo"
+                        checked={exportOptions.basicInfo}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, basicInfo: !!checked })
+                        }
+                      />
+                      <Label htmlFor="basicInfo">Basic Information</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="allergies"
+                        checked={exportOptions.allergies}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, allergies: !!checked })
+                        }
+                      />
+                      <Label htmlFor="allergies">Allergies</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="supplements"
+                        checked={exportOptions.supplements}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, supplements: !!checked })
+                        }
+                      />
+                      <Label htmlFor="supplements">Supplements</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="prescriptions"
+                        checked={exportOptions.prescriptions}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, prescriptions: !!checked })
+                        }
+                      />
+                      <Label htmlFor="prescriptions">Prescriptions</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="labRecords"
+                        checked={exportOptions.labRecords}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, labRecords: !!checked })
+                        }
+                      />
+                      <Label htmlFor="labRecords">Laboratory Records</Label>
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="format" className="text-right">
+                        Format
+                      </Label>
+                      <Select value={exportFormat} onValueChange={setExportFormat}>
+                        <SelectTrigger className="col-span-3">
+                          <SelectValue placeholder="Select format" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pdf">PDF</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <DialogPrimitive.Close>
+                      <Button variant="outline">Cancel</Button>
+                    </DialogPrimitive.Close>
+                    <Button onClick={handleExport} disabled={isExporting}>
+                      {isExporting ? "Exporting..." : "Export"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
 

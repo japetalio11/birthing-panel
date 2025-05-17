@@ -1,9 +1,8 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { FileDown } from "lucide-react";
+import { FileDown, MonitorUp, MoreHorizontal, Search, Trash2, X } from "lucide-react"
 import React, { useState, useEffect } from "react"
-import { MonitorUp, MoreHorizontal, Search, Trash2, X } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { DatePicker } from "@/components/ui/date-picker"
@@ -69,7 +68,7 @@ type FormValues = z.infer<typeof formSchema>
 type Props = {
   context: "patient"
   id: string | null
-  fields?: any[] 
+  fields?: any[]
   append?: (record: any) => void
   remove?: (index: number) => void
 }
@@ -87,8 +86,8 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
-  const today = new Date().toISOString().split('T')[0];
-  
+  const today = new Date().toISOString().split('T')[0]
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -102,7 +101,7 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
       remarks: "",
       recommendations: "",
       company: "",
-      notes: ""
+      notes: "",
     },
   })
 
@@ -134,7 +133,7 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                   doctor: record.doctor,
                   ordered_date: record.ordered_date,
                   received_date: record.received_date,
-                  reported_date: record.reported_date,
+                  reported_date: record.received_date,
                   impressions: record.impressions,
                   remarks: record.remarks,
                   recommendations: record.recommendations,
@@ -167,8 +166,12 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
+      if (!file.type.includes('pdf') && !file.type.startsWith('image/')) {
+        toast.error('Please upload a valid PDF or image file.')
+        return
+      }
       setSelectedFile(file)
-      form.setValue("filename", file.name)
+      form.setValue('filename', file.name)
 
       if (file.type.startsWith('image/')) {
         const reader = new FileReader()
@@ -184,46 +187,55 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
 
   const formatDate = (date: string | Date): string => {
     if (!date) return today
-    
+
     if (typeof date === 'string') {
       if (date.includes('T')) {
         return date.split('T')[0]
       }
       return date
     }
-    
+
     return date.toISOString().split('T')[0]
   }
 
   const handleDownload = async (url: string, filename: string) => {
     try {
-      const filePath = url.split('laboratory-files/')[1];
-
+      const filePath = url.split('laboratory-files/')[1]
       const { data, error } = await supabase.storage
         .from('laboratory-files')
-        .createSignedUrl(filePath, 3600);
-      
+        .createSignedUrl(filePath, 3600)
+
       if (error) {
-        throw error;
+        throw error
       }
 
-      const response = await fetch(data.signedUrl);
-      const blob = await response.blob();
+      console.log('Signed URL:', data.signedUrl)
 
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
+      const response = await fetch(data.signedUrl)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
 
-      window.URL.revokeObjectURL(downloadUrl);
-      document.body.removeChild(a);
-      
-      toast.success('Download started');
+      const blob = await response.blob()
+      console.log('Downloaded blob:', {
+        size: blob.size,
+        type: blob.type,
+      })
+
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+
+      window.URL.revokeObjectURL(downloadUrl)
+      document.body.removeChild(a)
+
+      toast.success('Download started')
     } catch (error) {
-      console.error('Error downloading file:', error);
-      toast.error('Failed to download file');
+      console.error('Error downloading file:', error)
+      toast.error('Failed to download file')
     }
   }
 
@@ -236,38 +248,67 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
 
   const getFileUrl = async (filePath: string) => {
     try {
-      const path = filePath.split('laboratory-files/')[1] || filePath;
-      
+      const path = filePath.split('laboratory-files/')[1] || filePath
       const { data } = await supabase.storage
         .from('laboratory-files')
-        .createSignedUrl(path, 3600); 
-      
-      return data?.signedUrl || filePath;
+        .createSignedUrl(path, 3600)
+
+      return data?.signedUrl || filePath
     } catch (error) {
-      console.error('Error generating file URL:', error);
-      return filePath;
+      console.error('Error generating file URL:', error)
+      return filePath
     }
   }
 
   const openPreview = async (url: string) => {
     try {
-      const signedUrl = await getFileUrl(url);
-      setPreviewUrl(signedUrl);
-      setIsPreviewOpen(true);
+      const filePath = url.split('laboratory-files/')[1]
+      const { data, error } = await supabase.storage
+        .from('laboratory-files')
+        .createSignedUrl(filePath, 3600)
+
+      if (error) {
+        throw error
+      }
+
+      const response = await fetch(data.signedUrl)
+      const blob = await response.blob()
+      const blobUrl = window.URL.createObjectURL(blob)
+      console.log('Preview URL:', blobUrl)
+      setPreviewUrl(blobUrl)
+      setIsPreviewOpen(true)
     } catch (error) {
-      toast.error('Failed to open file preview');
+      console.error('Error opening preview:', error)
+      toast.error('Failed to open file preview')
     }
   }
 
   const onSubmitRecord = async (data: FormValues) => {
     try {
       if (!selectedFile) {
-        toast.error("Please select a file.")
+        toast.error('Please select a file.')
         return
       }
 
+      if (selectedFile.type === 'application/pdf') {
+        const reader = new FileReader()
+        const isValidPDF = await new Promise<boolean>((resolve) => {
+          reader.onload = (e) => {
+            const text = e.target?.result as string
+            resolve(text.startsWith('%PDF-'))
+          }
+          reader.onerror = () => resolve(false)
+          reader.readAsText(selectedFile, 'UTF-8')
+        })
+
+        if (!isValidPDF) {
+          toast.error('The selected file is not a valid PDF.')
+          return
+        }
+      }
+
       if (!id && !append) {
-        toast.error("Cannot add record without form integration.")
+        toast.error('Cannot add record without form integration.')
         return
       }
 
@@ -280,36 +321,43 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
         reported_date: formatDate(data.reported_date),
       }
 
-      console.log("Submitting record with data:", formattedData)
+      console.log('Submitting record with data:', formattedData)
 
       let fileurl: string | null = null
       if (selectedFile) {
-        const fileExt = selectedFile.name.split(".").pop()
+        console.log('Uploading file:', {
+          name: selectedFile.name,
+          size: selectedFile.size,
+          type: selectedFile.type,
+        })
+        const fileExt = selectedFile.name.split('.').pop()
         const uniquePrefix = `${id || 'new'}_${Date.now()}`
         const fileName = `${uniquePrefix}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`
 
         const { data: uploadData, error: uploadError } = await supabase.storage
-          .from("laboratory-files")
-          .upload(fileName, selectedFile)
+          .from('laboratory-files')
+          .upload(fileName, selectedFile, {
+            contentType: selectedFile.type,
+          })
 
         if (uploadError) {
-          console.error("File upload error:", uploadError)
-          toast.error("Failed to upload file: " + uploadError.message)
+          console.error('File upload error:', uploadError)
+          toast.error('Failed to upload file: ' + uploadError.message)
           setIsUploading(false)
           return
         }
 
         const { data: publicUrlData } = supabase.storage
-          .from("laboratory-files")
+          .from('laboratory-files')
           .getPublicUrl(uploadData.path)
 
         fileurl = publicUrlData.publicUrl
-        console.log("File uploaded successfully, URL:", fileurl)
+        console.log('File uploaded successfully, URL:', fileurl)
       }
 
       if (id) {
         const { data: newRecord, error } = await supabase
-          .from("laboratory_records")
+          .from('laboratory_records')
           .insert([
             {
               patient_id: id,
@@ -331,8 +379,8 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
           .single()
 
         if (error) {
-          console.error("Record insert error:", error)
-          toast.error("Failed to add record: " + error.message)
+          console.error('Record insert error:', error)
+          toast.error('Failed to add record: ' + error.message)
           setIsUploading(false)
           return
         }
@@ -356,7 +404,7 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
         } else {
           setRecordsData((prev) => [...prev, newRecord])
         }
-        toast.success("New laboratory record has been added successfully.")
+        toast.success('New laboratory record has been added successfully.')
       } else if (append) {
         append({
           filename: formattedData.filename,
@@ -372,7 +420,7 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
           notes: formattedData.notes,
           fileurl: fileurl,
         })
-        toast.success("New laboratory record has been added successfully.")
+        toast.success('New laboratory record has been added successfully.')
       }
 
       form.reset({
@@ -388,54 +436,53 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
         company: "",
         notes: "",
       })
-      
+
       setSelectedFile(null)
       setFilePreview(null)
       setOpenDialog(false)
     } catch (error) {
-      console.error("Error in onSubmitRecord:", error)
-      toast.error("An unexpected error occurred while saving the record.")
+      console.error('Error in onSubmitRecord:', error)
+      toast.error('An unexpected error occurred while saving the record.')
     } finally {
       setIsUploading(false)
     }
   }
 
-    const handleDelete = async (index: number) => {
-        if (id) {
-            const recordToDelete = (fields.length > 0 ? fields : recordsData)[index]
-            const { error } = await supabase
-                .from("laboratory_records")
-                .delete()
-                .eq("id", recordToDelete.id)
+  const handleDelete = async (index: number) => {
+    if (id) {
+      const recordToDelete = (fields.length > 0 ? fields : recordsData)[index]
+      const { error } = await supabase
+        .from('laboratory_records')
+        .delete()
+        .eq('id', recordToDelete.id)
 
-                if (error) {
-                    console.error("Record delete error:", error)
-                    toast.error("Failed to delete record: " + error.message)
-                    return
-                }
+      if (error) {
+        console.error('Record delete error:', error)
+        toast.error('Failed to delete record: ' + error.message)
+        return
+      }
 
-                setRecordsData((prev) => prev.filter((_, idx) => idx !== index))
-        }
-
-        if (remove) {
-            remove(index)
-        }
-        
-        // Close sidebar and preview
-        setIsSidebarOpen(false)
-        setIsPreviewOpen(false)
-        setSelectedRecord(null)
-        setPreviewUrl(null)
-
-        toast.success("Record Deleted", {
-            description: "Laboratory record has been removed from the list.",
-        })
+      setRecordsData((prev) => prev.filter((_, idx) => idx !== index))
     }
+
+    if (remove) {
+      remove(index)
+    }
+
+    setIsSidebarOpen(false)
+    setIsPreviewOpen(false)
+    setSelectedRecord(null)
+    setPreviewUrl(null)
+
+    toast.success('Record Deleted', {
+      description: 'Laboratory record has been removed from the list.',
+    })
+  }
 
   const openRecordDetails = async (record: any) => {
     setSelectedRecord(record)
     setIsSidebarOpen(true)
-    await openPreview(record.fileurl);
+    await openPreview(record.fileurl)
   }
 
   const displayRecords = fields.length > 0 ? fields : recordsData
@@ -446,7 +493,7 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
         <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <CardTitle>Laboratory Records</CardTitle>
-            <CardDescription>Store your patient's records for safe keeping</CardDescription>
+            <CardDescription>Store your patient&apos;s records for safe keeping</CardDescription>
           </div>
           <div className="relative flex items-center w-full max-w-sm md:w-auto">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -496,7 +543,7 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                                 <Input
                                   type="file"
                                   onChange={handleFileChange}
-                                  accept=".pdf,.jpg,.jpeg,.png"
+                                  accept="application/pdf,image/jpeg,image/png"
                                 />
                               </FormControl>
                               {filePreview && (
@@ -567,10 +614,10 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                         name="ordered_date"
                         render={({ field }) => (
                           <FormItem>
-                              <FormLabel>Ordered Date</FormLabel>
-                              <FormControl>
-                                  <DatePicker value={field.value} onChange={field.onChange} />
-                              </FormControl>
+                            <FormLabel>Ordered Date</FormLabel>
+                            <FormControl>
+                              <DatePicker value={field.value} onChange={field.onChange} />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -580,10 +627,10 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                         name="received_date"
                         render={({ field }) => (
                           <FormItem>
-                              <FormLabel>Received Date</FormLabel>
-                              <FormControl>
-                                  <DatePicker value={field.value} onChange={field.onChange} />
-                              </FormControl>
+                            <FormLabel>Received Date</FormLabel>
+                            <FormControl>
+                              <DatePicker value={field.value} onChange={field.onChange} />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -593,10 +640,10 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                         name="reported_date"
                         render={({ field }) => (
                           <FormItem>
-                              <FormLabel>Reported Date</FormLabel>
-                              <FormControl>
-                                  <DatePicker value={field.value} onChange={field.onChange} />
-                              </FormControl>
+                            <FormLabel>Reported Date</FormLabel>
+                            <FormControl>
+                              <DatePicker value={field.value} onChange={field.onChange} />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -669,7 +716,7 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                     </div>
                     <DialogFooter>
                       <Button type="submit" disabled={isUploading}>
-                        {isUploading ? "Uploading..." : "Save Record"}
+                        {isUploading ? 'Uploading...' : 'Save Record'}
                       </Button>
                     </DialogFooter>
                   </form>
@@ -704,7 +751,11 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
               </TableHeader>
               <TableBody>
                 {displayRecords.map((record, index) => (
-                  <TableRow key={record.id || index} onClick={() => openRecordDetails(record)} className="cursor-pointer hover:bg-zinc-100">
+                  <TableRow
+                    key={record.id || index}
+                    onClick={() => openRecordDetails(record)}
+                    className="cursor-pointer hover:bg-zinc-100"
+                  >
                     <TableCell className="py-4">
                       <Checkbox id={`record-${record.id || index}`} />
                     </TableCell>
@@ -791,30 +842,18 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                   <Label className="font-semibold mb-2">Recommendations</Label>
                   <p className="text-sm">{selectedRecord.recommendations || 'N/A'}</p>
                 </div>
-                {selectedRecord.fileurl && (
-                  <div>
-                    {/* <Label className="font-semibold mb-2">Attachment</Label> */}
-                    {/* <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => openPreview(selectedRecord.fileurl)}
-                    >
-                      Preview Attachment
-                    </Button> */}
-                  </div>
-                )}
               </div>
             </div>
-            
+
             <div className="p-4 space-y-2">
-                <Button
-                    className="w-full"
-                    variant="outline"
-                    onClick={() => handleDelete(displayRecords.findIndex((r) => r.id === selectedRecord.id))}
-                >
-                    <Trash2 />
-                    Delete File
-                </Button>
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={() => handleDelete(displayRecords.findIndex((r) => r.id === selectedRecord.id))}
+              >
+                <Trash2 />
+                Delete File
+              </Button>
 
               <Button
                 className="w-full"
@@ -830,53 +869,41 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
       </div>
 
       {isPreviewOpen && (
-  <div className="fixed inset-0 z-50">
-    <div 
-      className="fixed inset-0 bg-black/70 transition-opacity duration-300 ease-in-out"
-      style={{ 
-        opacity: isPreviewOpen ? 1 : 0,
-        transition: 'opacity 300ms ease-in-out'
-      }}
-      onClick={() => setIsPreviewOpen(false)}
-    />
-    
-    <div 
-      className="fixed left-0 top-0 h-full w-[calc(100%-24rem)] shadow-lg"
-      style={{ 
-        transform: isPreviewOpen ? 'translateX(0)' : 'translateX(-100%)',
-        opacity: isPreviewOpen ? 1 : 0,
-        transition: 'transform 300ms ease-in-out, opacity 250ms ease-in-out',
-        background: 'transparent'
-      }}
-    >   
-      <div className="h-full w-full flex items-center justify-center p-4">
-        {previewUrl && previewUrl.match(/\.(jpg|jpeg|png)$/i) ? (
-          <img
-            src={previewUrl || undefined}
-            alt="Attachment preview"
-            className="max-h-full max-w-full object-contain opacity-0"
+        <div className="fixed inset-0 z-50">
+          <div
+            className="fixed inset-0 bg-black/70 transition-opacity duration-300 ease-in-out"
             style={{
-              animation: 'fadeIn 400ms ease-in-out forwards 150ms',
-              background: 'rgba(0, 0, 0, 0.3)', 
-              borderRadius: '8px'
+              opacity: isPreviewOpen ? 1 : 0,
+              transition: 'opacity 300ms ease-in-out',
             }}
+            onClick={() => setIsPreviewOpen(false)}
           />
-        ) : (
-          <iframe
-            src={previewUrl ?? undefined}
-            className="w-full h-full border-none opacity-0"
+          <div
+            className="fixed left-0 top-0 h-full w-[calc(100%-24rem)] shadow-lg"
             style={{
-              animation: 'fadeIn 400ms ease-in-out forwards 150ms',
-              background: 'rgba(0, 0, 0, 0.3)', 
-              borderRadius: '8px'
+              transform: isPreviewOpen ? 'translateX(0)' : 'translateX(-100%)',
+              opacity: isPreviewOpen ? 1 : 0,
+              transition: 'transform 300ms ease-in-out, opacity 250ms ease-in-out',
+              background: 'transparent',
             }}
-            title="Attachment preview"
-          />
-        )}
-      </div>
-    </div>
-  </div>
-)}
+          >
+            <div className="h-full w-full flex items-center justify-center p-4">
+              {previewUrl && (
+                <iframe
+                  src={previewUrl}
+                  className="w-full h-full border-none opacity-0"
+                  style={{
+                    animation: 'fadeIn 400ms ease-in-out forwards 150ms',
+                    background: 'rgba(0, 0, 0, 0.3)',
+                    borderRadius: '8px',
+                  }}
+                  title="Attachment preview"
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

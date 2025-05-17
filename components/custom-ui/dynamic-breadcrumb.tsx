@@ -33,12 +33,6 @@ export default function DynamicBreadcrumb() {
     <Breadcrumb className="hidden sm:flex">
       <BreadcrumbList>
 
-        <BreadcrumbItem>
-          <BreadcrumbLink asChild>
-            <Link href="/">Dashboard</Link>
-          </BreadcrumbLink>
-        </BreadcrumbItem>
-
         {pathSegments.map((segment, index) => {
           const href = "/" + pathSegments.slice(0, index + 1).join("/")
           const isLast = index === pathSegments.length - 1

@@ -1,12 +1,8 @@
 "use client"
 
 import {
-  BadgeCheck,
-  Bell,
   ChevronsUpDown,
-  CreditCard,
   LogOut,
-  Sparkles,
 } from "lucide-react"
 
 import {
@@ -17,7 +13,6 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -27,20 +22,27 @@ import {
   SidebarMenuButton,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { useRouter } from "next/navigation"
 
 export default function NavUser({
   user,
 }: {
   user?: {
     name?: string
-    email?: string
+    role?: string
     avatar?: string
   }
 }) {
   const { isMobile } = useSidebar()
-  const displayName = user?.name || "Admin"
-  const displayEmail = user?.email || "japetalio@gbox.adnu.edu.ph"
+  const router = useRouter()
+  const displayName = user?.name || "Loading..."
+  const displayRole = user?.role || "Loading..."
   const displayAvatar = user?.avatar || ""
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('user'); // Clear session storage
+    router.push("/")
+  }
 
   return (
     <DropdownMenu>
@@ -52,12 +54,12 @@ export default function NavUser({
           <Avatar className="h-8 w-8 rounded-lg">
             <AvatarImage src={displayAvatar} alt={displayName} />
             <AvatarFallback className="rounded-lg">
-              {displayName.charAt(0).toUpperCase()}
+              {displayName.charAt(0).toUpperCase() || "?"}
             </AvatarFallback>
           </Avatar>
           <div className="grid flex-1 text-left text-sm leading-tight">
             <span className="truncate font-semibold">{displayName}</span>
-            <span className="truncate text-xs">{displayEmail}</span>
+            <span className="truncate text-xs">{displayRole}</span>
           </div>
           <ChevronsUpDown className="ml-auto size-4" />
         </SidebarMenuButton>
@@ -73,17 +75,17 @@ export default function NavUser({
             <Avatar className="h-8 w-8 rounded-lg">
               <AvatarImage src={displayAvatar} alt={displayName} />
               <AvatarFallback className="rounded-lg">
-                {displayName.charAt(0).toUpperCase() || "G"}
+                {displayName.charAt(0).toUpperCase() || "?"}
               </AvatarFallback>
             </Avatar>
             <div className="grid flex-1 text-left text-sm leading-tight">
               <span className="truncate font-semibold">{displayName}</span>
-              <span className="truncate text-xs">{displayEmail}</span>
+              <span className="truncate text-xs">{displayRole}</span>
             </div>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={handleLogout}>
           <LogOut className="mr-2 h-4 w-4" />
           Log out
         </DropdownMenuItem>

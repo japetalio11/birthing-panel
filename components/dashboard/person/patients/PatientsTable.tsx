@@ -756,7 +756,7 @@ export default function PatientsTable() {
                                                 <TableRow
                                                     key={row.id}
                                                     data-state={row.getIsSelected() && "selected"}
-                                                    onClick={() => router.push(`/Patients/Patient-View?id=${row.original.id}`)}
+                                                    onClick={() => router.push(`/Dashboard/Patients/Patient-View?id=${row.original.id}`)}
                                                     className="cursor-pointer hover:bg-zinc-100"
                                                 >
                                                     {row.getVisibleCells().map((cell) => (

@@ -158,7 +158,7 @@ export default function PatientForm() {
             form.reset();
             setFilePreview(null);
             setSelectedFile(null);
-            router.push("/Patients");
+            router.push("/Dashboard/Patients");
         } catch (error) {
             console.error("Error submitting form:", error);
             toast.error("Error Adding Patient", {
@@ -538,7 +538,7 @@ export default function PatientForm() {
                                 form.reset();
                                 setFilePreview(null);
                                 setSelectedFile(null);
-                                router.push("/Patients");
+                                router.push("/Dashboard/Patients");
                             }}
                         >
                             <CircleX />
