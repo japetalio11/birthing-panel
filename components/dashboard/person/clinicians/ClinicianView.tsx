@@ -3,29 +3,36 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
-import { toast } from "sonner";
+import * as DialogPrimitive from "@radix-ui/react-dialog"
+import { Download, Mail, Trash2, RefreshCcw} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import Allergy from "../Allergy";
+import SupplementRecommendation from "../SupplementRecommendation";
+import Prescriptions from "../Prescriptions";
+import LaboratoryRecords from "../patients/LaboratoryRecords";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input"
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
+Card,
+CardContent,
+CardDescription,
+CardHeader,
+CardTitle,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download, Mail, Trash2, RefreshCcw } from "lucide-react";
 
+// Define combined clinician data type
 interface Clinician {
     id: number;
     first_name: string;
@@ -38,268 +45,414 @@ interface Clinician {
     address: string | null;
     profile_image_url: string | null;
     religion: string | null;
-    role: string | null;
-    email: string | null;
-    occupation: string | null;
-    specialization: string | null;
     status: string | null;
     marital_status: string | null;
+    appointment_id: string | null;
+    role: string | null;
+    license_number: string | null;
+    specialization: string | null;
+    prescription_id: string | null;
     ec_first_name: string | null;
     ec_middle_name: string | null;
     ec_last_name: string | null;
     ec_contact_number: string | null;
     ec_relationship: string | null;
-    license_number: string | null;
+    ssn: string | null;
+    next_appointment?: string | null;
 }
-
 export default function ClinicianView() {
     const router = useRouter();
     const [clinician, setClinician] = useState<Clinician | null>(null);
     const [loading, setLoading] = useState(true);
-    const [openDialog, setOpenDialog] = useState(false);
-    const [deleteInput, setDeleteInput] = useState("");
+    const [openDialog, setOpenDialog] = React.useState(false);
+    const [deleteInput, setDeleteInput] = useState(""); // State for input field
+    const [isDeactivated, setIsDeactivated] = useState(false); // State for deactivate switch
     const searchParams = useSearchParams();
     const id = searchParams.get("id");
 
+    // Fetch clinician data from Supabase for person.id = 2
     useEffect(() => {
-        if (!id) {
-            toast.error("No clinician ID provided.");
-            router.push("/Clinicians");
-            return;
-        }
+        async function fetchClinician() {
+        try {
+            const { data, error } = await supabase
+            .from("clinicians")
+            .select(
+            `
+                *,
+                person (
+                    *
+                )
+            `
+            )
+            .eq("id", id)
+            .single();
 
-        const fetchClinician = async () => {
-            try {
-                const { data, error } = await supabase
-                    .from("clinicians")
-                    .select(
-                        `
-                        *,
-                        person (
-                            *
-                        )
-                    `
-                    )
-                    .eq("id", id)
-                    .single();
-
-                if (error) {
-                    console.error("Supabase query error:", error);
-                    toast.error(`Failed to fetch clinician data: ${error.message}`);
-                    router.push("/Clinicians");
-                    return;
-                }
-
-                if (!data) {
-                    toast.error("No clinician found with the provided ID.");
-                    router.push("/Clinicians");
-                    return;
-                }
-
-                const combinedData: Clinician = {
-                    id: data.person.id,
-                    first_name: data.person.first_name,
-                    middle_name: data.person.middle_name,
-                    last_name: data.person.last_name,
-                    birth_date: data.person.birth_date,
-                    age: data.person.age,
-                    contact_number: data.person.contact_number,
-                    citizenship: data.person.citizenship,
-                    address: data.person.address,
-                    profile_image_url: data.person.profile_image_url,
-                    religion: data.person.religion,
-                    role: data.person.role,
-                    email: data.person.email,
-                    occupation: data.person.occupation,
-                    specialization: data.person.specialization,
-                    license_number: data.license_number,
-                    status: data.person.status,
-                    marital_status: data.marital_status,
-                    ec_first_name: data.person.ec_first_name,
-                    ec_middle_name: data.person.ec_middle_name,
-                    ec_last_name: data.person.ec_last_name,
-                    ec_contact_number: data.person.ec_contact_number,
-                    ec_relationship: data.person.ec_relationship,
-                };
-
-                setClinician(combinedData);
-            } catch (err) {
-                console.error("Unexpected error fetching clinician:", err);
-                toast.error("An unexpected error occurred while fetching clinician data.");
-                router.push("/Clinicians");
-            } finally {
-                setLoading(false);
+            if (error) {
+            console.error("Supabase query error:", error);
+            toast("Error", {
+                description: `Failed to fetch clinician data: ${error.message}`,
+            });
+            setLoading(false);
+            return router.push("/Dashboard/Clinicians");
             }
-        };
+
+            if (!data) {
+            console.warn("No person found with ID 2");
+            toast("Error", {
+                description: "No person found with ID 2.",
+            });
+            setLoading(false);
+            return router.push("/Dashboard/Clinicians");
+            }
+
+            // Combine person and clinician data
+            const combinedData: Clinician = {
+                id: data.person.id,
+                first_name: data.person.first_name,
+                middle_name: data.person.middle_name,
+                last_name: data.person.last_name,
+                birth_date: data.person.birth_date,
+                ssn: data.ssn,
+                next_appointment: data.next_appointment,
+
+                age: data.person.age,
+                contact_number: data.person.contact_number,
+                citizenship: data.person.citizenship,
+                address: data.person.address,
+                profile_image_url: data.person.profile_image_url,
+                religion: data.person.religion,
+                status: data.person.status,
+                marital_status: data.marital_status,
+                ec_first_name: data.person.ec_first_name,
+                ec_middle_name: data.person.ec_middle_name,
+                ec_last_name: data.person.ec_last_name,
+                ec_contact_number: data.person.ec_contact_number,
+                ec_relationship: data.person.ec_relationship,
+            };
+
+            console.log("Fetched clinician data:", combinedData);
+            setClinician(combinedData);
+            setIsDeactivated(combinedData.status === "Inactive"); // Set switch state based on status
+        } catch (err) {
+            console.error("Unexpected error fetching clinician:", err);
+            toast("Error", {
+            description: "An unexpected error occurred while fetching clinician data.",
+            });
+            setLoading(false);
+            return router.push("/Dashboard/Clinicians");
+        }
+        setLoading(false);
+        }
 
         fetchClinician();
-    }, [id, router]);
+    }, [router]);
 
-    const handleDelete = async () => {
+    // Handle deactivate switch toggle
+    const handleDeactivateToggle = async () => {
         if (!clinician) return;
 
+        const newStatus = isDeactivated ? "Active" : "Inactive";
         try {
-            const { error: clinicianError } = await supabase
-                .from("clinicians")
-                .delete()
-                .eq("id", clinician.id);
-
-            if (clinicianError) throw clinicianError;
-
-            const { error: personError } = await supabase
+            const { error } = await supabase
                 .from("person")
-                .delete()
+                .update({ status: newStatus })
                 .eq("id", clinician.id);
 
-            if (personError) throw personError;
+            if (error) throw error;
 
-            toast.success("Clinician deleted successfully.");
-            setOpenDialog(false);
-            router.push("/Clinicians");
+            setIsDeactivated(!isDeactivated);
+            setClinician({ ...clinician, status: newStatus });
+            toast.success(`Clinician status updated to ${newStatus}.`);
         } catch (err: any) {
-            toast.error(`Error deleting clinician: ${err.message}`);
+            toast.error(`Error updating clinician status: ${err.message}`);
         }
     };
-
-    if (loading) {
-        return <p>Loading...</p>;
-    }
 
     if (!clinician) {
         return null; // Redirect already handled in fetchClinician
     }
 
+    const handleDelete = async (id: number) => {
+        try {
+            // Delete from clinicians table first
+            const { error: clinicianError } = await supabase
+                .from("clinicians")
+                .delete()
+                .eq("person_id", id);
+
+            if (clinicianError) throw clinicianError;
+
+            // Then delete from person table
+            const { error: personError } = await supabase
+                .from("person")
+                .delete()
+                .eq("id", id);
+
+            if (personError) throw personError;
+
+            toast.success("Clinician deleted successfully.");
+            setOpenDialog(false);
+            router.push("/Dashboard/Clinicians");
+        } catch (err: any) {
+            toast.error(`Error deleting clinician: ${err.message}`);
+        }
+    };
+
     const fullName = `${clinician.first_name} ${clinician.middle_name ? clinician.middle_name + " " : ""}${clinician.last_name}`;
     const ecFullName = clinician.ec_first_name
         ? `${clinician.ec_first_name} ${clinician.ec_middle_name ? clinician.ec_middle_name + " " : ""}${clinician.ec_last_name}`
         : "Not provided";
-
-    const isDeleteEnabled = deleteInput === fullName;
+    const isDeleteEnabled = deleteInput.trim().toLowerCase() === fullName.trim().toLowerCase();
 
     return (
-  <main className="flex flex-col flex-1 items-start gap-8 p-8 bg-gray-50 min-h-screen">
+        <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+        <div className="grid gap-4 ">
+            {/* Row for Basic Information and Quick Actions */}
+            <div className="flex flex-col md:flex-row gap-4">
+            {/* Basic Information Card */}
+            <Card className="flex-1 md:flex-[2]">
+                <CardHeader>
+                <div className="relative w-40 h-40 rounded-full overflow-hidden border">
+                    {clinician.profile_image_url ? (
+                        <img
+                            src={clinician.profile_image_url}
+                            alt={`${clinician.first_name}'s profile`}
+                            className="w-full h-full object-cover"
+                        />
+                    ) : (
+                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                            <div className="w-full h-3/4 flex flex-col items-center justify-center">
+                                <div className="w-12 h-12 bg-gray-500 rounded-full mb-1"></div>
+                                <div className="w-20 h-10 bg-gray-500 rounded-t-full"></div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+                <CardTitle className="text-2xl pt-2">{fullName}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                    <Label className="font-semibol mb-2">Clinician Status</Label>
+                    <p className="text-sm">{clinician.status || "Not specified"}</p>
+                    </div>
+                    <div>
+                    <Label className="font-semibold mb-2">Next Appointment</Label>
+                    <p className="text-sm">{clinician.next_appointment || "Not scheduled"}</p>
+                    </div>
+                </div>
+                </CardContent>
+            </Card>
 
-      {/* Header: Profile + Name + Email */}
-      <div className="flex items-center gap-8 mb-8">
-        <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-          {clinician.profile_image_url ? (
-            <img
-              src={clinician.profile_image_url}
-              alt={fullName}
-              className="object-cover w-full h-full"
-            />
-          ) : (
-            <span className="text-4xl font-bold text-gray-400">
-              {clinician.first_name[0]}
-            </span>
-          )}
-        </div>
-        <div className="flex-1">
-          <h1 className="text-2xl font-semibold">{fullName}</h1>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-gray-500 text-sm">
-              {clinician.email || "Email not provided"} 
-            </span>
-            <Button variant="outline" className="ml-2">Edit</Button>
-          </div>
-        </div>
-      </div>
+            {/* Quick Actions Card */}
+            <Card className="flex-1 md:flex-1">
+                <CardHeader>
+                <CardTitle>Quick Actions</CardTitle>
+                <CardDescription>A quick overview of actions you can take.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                <div className="flex flex-col gap-6">
+                    <div className="flex flex-col items-center gap-2">
+                    <div className="flex gap-2">
+                        <div>
+                        <Label htmlFor="deactivate">Deactivate</Label>
+                        <p className="text-xs text-muted-foreground mt-2 mr-4">
+                            Deactivating will temporarily put clinician in inactive status. You can reactivate them later.
+                        </p>
+                        </div>
+                        <Switch 
+                            id="deactivate" 
+                            className="scale-125" 
+                            checked={isDeactivated}
+                            onCheckedChange={handleDeactivateToggle}
+                        />
+                    </div>
+                    </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="info" className="w-full">
-        <TabsList className="flex border-b border-gray-200 mb-8 bg-transparent">
-          <TabsTrigger value="info" className="px-6 py-2 text-base font-medium border-b-2 data-[state=active]:border-red-500 data-[state=active]:text-red-600 rounded-none">
-            Clinician Information
-          </TabsTrigger>
-          <TabsTrigger value="appointments" className="px-6 py-2 text-base font-medium border-b-2 rounded-none">
-            Appointment History
-          </TabsTrigger>
-          <TabsTrigger value="prescriptions" className="px-6 py-2 text-base font-medium border-b-2 rounded-none">
-            Prescription History
-          </TabsTrigger>
-          <TabsTrigger value="supplements" className="px-6 py-2 text-base font-medium border-b-2 rounded-none">
-            Supplement Recommendation
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="info">
-          <div>
-            <h2 className="text-red-500 font-semibold mb-4">BASIC INFORMATION</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-y-8 gap-x-12 text-base">
-              <div>
-                <span className="block text-gray-500">Age</span>
-                <span className="font-semibold">{clinician.age ? `${clinician.age} years old` : "Not specified"}</span>
-              </div>
-              <div>
-                <span className="block text-gray-500">Birth Date</span>
-                <span className="font-semibold">{clinician.birth_date || "Not specified"}</span>
-              </div>
-              <div>
-                <span className="block text-gray-500">Religion</span>
-                <span className="font-semibold">{clinician.religion || "Not specified"}</span>
-              </div>
-              <div>
-                <span className="block text-gray-500">Marital Status</span>
-                <span className="font-semibold">{clinician.marital_status || "Not specified"}</span>
-              </div>
-              <div>
-                <span className="block text-gray-500">Address</span>
-                <span className="font-semibold">{clinician.address || "Not specified"}</span>
-              </div>
-              <div>
-                <span className="block text-gray-500">Phone Number</span>
-                <span className="font-semibold">{clinician.contact_number || "Not provided"}</span>
-              </div>
-              <div>
-                <span className="block text-gray-500">Citizenship</span>
-                <span className="font-semibold">{clinician.citizenship || "Not specified"}</span>
-              </div>
-              <div>
-                <span className="block text-gray-500">Specialization</span>
-                <span className="font-semibold">{clinician.specialization || "Not specified"}</span>
-              </div>
-              <div>
-                <span className="block text-gray-500">License Number</span>
-                <span className="font-semibold">{clinician.license_number || "Not specified"}</span>
-              </div>
-              <div>
-                <span className="block text-gray-500">Role</span>
-                <span className="font-semibold">{clinician.role || "Not specified"}</span>
-              </div>
+                    <div className="flex flex-col items-center gap-2">
+                    <div className="flex gap-2">
+                        <div>
+                        <Label htmlFor="archive">Archive</Label>
+                        <p className="text-xs text-muted-foreground mt-2 mr-4">
+                            Archiving will remove the clinician from the active list. You can restore them later.
+                        </p>
+                        </div>
+                        <Switch id="archive" className="scale-125" />
+                    </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                    <Button variant="outline">
+                        <Mail className=" h-4 w-4" />
+                        Set Appointment
+                    </Button>
+                    <Button variant="outline" onClick={() => router.push(`/Dashboard/Clinicians/Update-Clinician-Form?id=${clinician.id}`)}>
+                        <RefreshCcw className=" h-4 w-4" />
+                        Update Clinician
+                    </Button>
+                    <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+                        <DialogTrigger asChild>
+                            <Button 
+                                variant="outline"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                                Delete Clinician
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Delete Clinician</DialogTitle>
+                                <DialogDescription>
+                                    Are you sure you want to delete this clinician? This action cannot be undone.
+                                </DialogDescription>
+                                <div className="grid gap-2 py-4">
+                                    <Label htmlFor="reason">Type "{fullName}" to confirm deletion</Label>
+                                    <Input 
+                                        id="reason" 
+                                        className="focus:border-red-500 focus:ring-red-500" 
+                                        placeholder={`Enter clinician name`} 
+                                        value={deleteInput}
+                                        onChange={(e) => setDeleteInput(e.target.value)}
+                                    />
+                                </div>
+                            </DialogHeader>
+                            <DialogFooter>
+                                <DialogPrimitive.Close>
+                                    <Button variant="outline">
+                                        Cancel
+                                    </Button>
+                                </DialogPrimitive.Close>
+                                <Button 
+                                    variant="destructive" 
+                                    onClick={() => handleDelete(clinician.id)}
+                                    disabled={!isDeleteEnabled}
+                                >
+                                    Yes, delete this clinician.
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                    </div>
+                </div>
+                </CardContent>
+            </Card>
             </div>
-          </div>
-        </TabsContent>
-        {/* Additional TabsContent for appointments, prescriptions, supplements can be added here */}
-      </Tabs>
 
-      {/* Delete Dialog */}
-      <div className="mt-10">
-        <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-          <DialogTrigger asChild>
-            <Button variant="destructive">Delete Clinician</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete Clinician</DialogTitle>
-              <p>Type "{fullName}" to confirm deletion.</p>
-            </DialogHeader>
-            <Input
-              value={deleteInput}
-              onChange={(e) => setDeleteInput(e.target.value)}
-              placeholder={`Enter "${fullName}"`}
-            />
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setOpenDialog(false)}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={handleDelete} disabled={!isDeleteEnabled}>
-                Confirm Delete
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+            <Tabs defaultValue="overview">
+            <div className="flex items-center">
+                <TabsList>
+                <TabsTrigger value="overview">Clinician Overview</TabsTrigger>
+                <TabsTrigger value="appointments">Appointment History</TabsTrigger>
+                <TabsTrigger value="supplements">Supplement Recommendation</TabsTrigger>
+                <TabsTrigger value="prescriptions">Prescription History</TabsTrigger>
+                </TabsList>
+                <div className="ml-auto flex items-center gap-2">
+                <Button size="sm" variant="outline" className="h-8 gap-1">
+                    <Download className=" h-4 w-4" />
+                    <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Export</span>
+                </Button>
+                </div>
+            </div>
 
-      
-  </main>
-  );
+            <TabsContent value="overview">
+                <Card x-chunk="dashboard-06-chunk-0">
+                <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div className="space-y-1">
+                    <CardTitle>Clinician Information</CardTitle>
+                    <CardDescription>All gathered clinician information</CardDescription>
+                    </div>
+                </CardHeader>
+                <CardContent className="text-sm">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">Date of Birth</Label>
+                            <div className="col-span-3">{clinician.birth_date}</div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">Age</Label>
+                            <div className="col-span-3">{clinician.age || "Not specified"}</div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">Contact</Label>
+                            <div className="col-span-3">{clinician.contact_number || "Not provided"}</div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">Address</Label>
+                            <div className="col-span-3">{clinician.address || "Not provided"}</div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">Marital Status</Label>
+                            <div className="col-span-3">{clinician.marital_status || "Not provided"}</div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">Citizenship</Label>
+                            <div className="col-span-3">{clinician.citizenship || "Not specified"}</div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">Religion</Label>
+                            <div className="col-span-3">{clinician.religion || "Not specified"}</div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">SSN</Label>
+                            <div className="col-span-3">{clinician.ssn || "Not provided"}</div>
+                        </div>
+                    </div>
+                </CardContent>
+                </Card>
+
+                <div className="pt-8">
+                <Card x-chunk="dashboard-06-chunk-0">
+                    <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div className="space-y-1">
+                        <CardTitle>Emergency Contact</CardTitle>
+                        <CardDescription>In case of an emergency, please contact this person.</CardDescription>
+                    </div>
+                    </CardHeader>
+                    <CardContent className="text-sm">
+                    <div className="grid gap-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                        <Label className="text-right">Name</Label>
+                        <div className="col-span-3">{ecFullName}</div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                        <Label className="text-right">Relationship</Label>
+                        <div className="col-span-3">{clinician.ec_relationship || "Not specified"}</div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                        <Label className="text-right">Phone</Label>
+                        <div className="col-span-3">{clinician.ec_contact_number || "Not provided"}</div>
+                        </div>
+                    </div>
+                    </CardContent>
+                </Card>
+                </div>
+
+            </TabsContent>
+
+            <TabsContent value="appointments">
+                <Card x-chunk="dashboard-06-chunk-0">
+                <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div className="space-y-1">
+                    <CardTitle>Appointment History</CardTitle>
+                    <CardDescription>All gathered appointment history</CardDescription>
+                    </div>
+                </CardHeader>
+                <CardContent className="text-sm">
+                    <LaboratoryRecords context='clinician' id={id} />
+                </CardContent>
+                </Card>
+            </TabsContent>
+
+            <TabsContent value="supplements">
+                <SupplementRecommendation context='clinician' id={id} />
+            </TabsContent>
+
+            <TabsContent value="prescriptions">
+                <Prescriptions context="clinician" id={id} />
+            </TabsContent>
+            
+            </Tabs>
+        </div>
+        </main>
+    );
 }
