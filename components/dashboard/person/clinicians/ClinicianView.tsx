@@ -49,6 +49,7 @@ interface Clinician {
     ec_last_name: string | null;
     ec_contact_number: string | null;
     ec_relationship: string | null;
+    license_number: string | null;
 }
 
 export default function ClinicianView() {
@@ -111,6 +112,7 @@ export default function ClinicianView() {
                     email: data.person.email,
                     occupation: data.person.occupation,
                     specialization: data.person.specialization,
+                    license_number: data.license_number,
                     status: data.person.status,
                     marital_status: data.marital_status,
                     ec_first_name: data.person.ec_first_name,
@@ -175,58 +177,127 @@ export default function ClinicianView() {
     const isDeleteEnabled = deleteInput === fullName;
 
     return (
-        <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-2xl">{fullName}</CardTitle>
-                    <CardDescription>{clinician.status || "Status not specified"}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <Label>Birth Date</Label>
-                            <p>{clinician.birth_date || "Not specified"}</p>
-                        </div>
-                        <div>
-                            <Label>Age</Label>
-                            <p>{clinician.age || "Not specified"}</p>
-                        </div>
-                        <div>
-                            <Label>Contact Number</Label>
-                            <p>{clinician.contact_number || "Not provided"}</p>
-                        </div>
-                        <div>
-                            <Label>Address</Label>
-                            <p>{clinician.address || "Not provided"}</p>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
+  <main className="flex flex-col flex-1 items-start gap-8 p-8 bg-gray-50 min-h-screen">
 
-            <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                <DialogTrigger asChild>
-                    <Button variant="destructive">Delete Clinician</Button>
-                </DialogTrigger>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Delete Clinician</DialogTitle>
-                        <p>Type "{fullName}" to confirm deletion.</p>
-                    </DialogHeader>
-                    <Input
-                        value={deleteInput}
-                        onChange={(e) => setDeleteInput(e.target.value)}
-                        placeholder={`Enter "${fullName}"`}
-                    />
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setOpenDialog(false)}>
-                            Cancel
-                        </Button>
-                        <Button variant="destructive" onClick={handleDelete} disabled={!isDeleteEnabled}>
-                            Confirm Delete
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </main>
-    );
+      {/* Header: Profile + Name + Email */}
+      <div className="flex items-center gap-8 mb-8">
+        <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+          {clinician.profile_image_url ? (
+            <img
+              src={clinician.profile_image_url}
+              alt={fullName}
+              className="object-cover w-full h-full"
+            />
+          ) : (
+            <span className="text-4xl font-bold text-gray-400">
+              {clinician.first_name[0]}
+            </span>
+          )}
+        </div>
+        <div className="flex-1">
+          <h1 className="text-2xl font-semibold">{fullName}</h1>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-gray-500 text-sm">
+              {clinician.email || "Email not provided"} 
+            </span>
+            <Button variant="outline" className="ml-2">Edit</Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <Tabs defaultValue="info" className="w-full">
+        <TabsList className="flex border-b border-gray-200 mb-8 bg-transparent">
+          <TabsTrigger value="info" className="px-6 py-2 text-base font-medium border-b-2 data-[state=active]:border-red-500 data-[state=active]:text-red-600 rounded-none">
+            Clinician Information
+          </TabsTrigger>
+          <TabsTrigger value="appointments" className="px-6 py-2 text-base font-medium border-b-2 rounded-none">
+            Appointment History
+          </TabsTrigger>
+          <TabsTrigger value="prescriptions" className="px-6 py-2 text-base font-medium border-b-2 rounded-none">
+            Prescription History
+          </TabsTrigger>
+          <TabsTrigger value="supplements" className="px-6 py-2 text-base font-medium border-b-2 rounded-none">
+            Supplement Recommendation
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="info">
+          <div>
+            <h2 className="text-red-500 font-semibold mb-4">BASIC INFORMATION</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-y-8 gap-x-12 text-base">
+              <div>
+                <span className="block text-gray-500">Age</span>
+                <span className="font-semibold">{clinician.age ? `${clinician.age} years old` : "Not specified"}</span>
+              </div>
+              <div>
+                <span className="block text-gray-500">Birth Date</span>
+                <span className="font-semibold">{clinician.birth_date || "Not specified"}</span>
+              </div>
+              <div>
+                <span className="block text-gray-500">Religion</span>
+                <span className="font-semibold">{clinician.religion || "Not specified"}</span>
+              </div>
+              <div>
+                <span className="block text-gray-500">Marital Status</span>
+                <span className="font-semibold">{clinician.marital_status || "Not specified"}</span>
+              </div>
+              <div>
+                <span className="block text-gray-500">Address</span>
+                <span className="font-semibold">{clinician.address || "Not specified"}</span>
+              </div>
+              <div>
+                <span className="block text-gray-500">Phone Number</span>
+                <span className="font-semibold">{clinician.contact_number || "Not provided"}</span>
+              </div>
+              <div>
+                <span className="block text-gray-500">Citizenship</span>
+                <span className="font-semibold">{clinician.citizenship || "Not specified"}</span>
+              </div>
+              <div>
+                <span className="block text-gray-500">Specialization</span>
+                <span className="font-semibold">{clinician.specialization || "Not specified"}</span>
+              </div>
+              <div>
+                <span className="block text-gray-500">License Number</span>
+                <span className="font-semibold">{clinician.license_number || "Not specified"}</span>
+              </div>
+              <div>
+                <span className="block text-gray-500">Role</span>
+                <span className="font-semibold">{clinician.role || "Not specified"}</span>
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+        {/* Additional TabsContent for appointments, prescriptions, supplements can be added here */}
+      </Tabs>
+
+      {/* Delete Dialog */}
+      <div className="mt-10">
+        <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+          <DialogTrigger asChild>
+            <Button variant="destructive">Delete Clinician</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Clinician</DialogTitle>
+              <p>Type "{fullName}" to confirm deletion.</p>
+            </DialogHeader>
+            <Input
+              value={deleteInput}
+              onChange={(e) => setDeleteInput(e.target.value)}
+              placeholder={`Enter "${fullName}"`}
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpenDialog(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDelete} disabled={!isDeleteEnabled}>
+                Confirm Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+  </main>
+  );
 }
