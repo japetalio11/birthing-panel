@@ -298,6 +298,8 @@ export default function ClinicianView() {
           </DialogContent>
         </Dialog>
       </div>
+
+      
   </main>
   );
 }

@@ -37,7 +37,14 @@ export const clinicianFormSchema: z.ZodType<any> = z.object({
     citizenship: z.string().optional(),
     address: z.string().optional(),
     role: z.enum(["Doctor", "Midwife"], { required_error: "Role is required" }),
-//  LicenseNumber: z.string().min(1, "License number is required")
+    LicenseNumber: z.string().min(1, "License number is required"),
+    maritalStatus: z.enum(["Single", "Married", "Divorced", "Widowed"], { required_error: "Marital status is required" }),
+    religion: z.string().optional(),
+    specialization: z.enum(["Obstetrician", "Obsetrician-Gynecologist", "MFM Specialist", "Neonatologist"], { required_error: "Specialization is required" }),
+    ssn: z.string().optional(),
+    appointmentId: z.string().optional(),
+    prescriptionId: z.string().optional(),
+    password: z.string().optional(),
     ecFirstName: z.string().optional(),
     ecMiddleName: z.string().optional(),
     ecLastName: z.string().optional(),
@@ -81,6 +88,10 @@ export default function ClinicianForm() {
             ecRelationship: "",
             profileImage: null,
             profileImageUrl: "",
+            password: "",
+            appointmentId: "",
+            prescriptionId: "",
+            fileurl: "",
         },
     });
 
@@ -377,7 +388,7 @@ export default function ClinicianForm() {
                             />
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid-cols-1 md:grid-cols-3 gap-4">
                             <FormField
                                 control={form.control}
                                 name="religion"
@@ -401,11 +412,13 @@ export default function ClinicianForm() {
                                             onValueChange={field.onChange}
                                         >
                                             <SelectTrigger id="specialization" className="col-span-3">
-                                                <SelectValue placeholder="Select role" />
+                                                <SelectValue placeholder="Select specialization" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="Gynecologist">Gynecologist</SelectItem>
-                                                <SelectItem value="Cardiologist">Cardiologist</SelectItem>
+                                                <SelectItem value="Obstetrician">Obstetrician</SelectItem>
+                                                <SelectItem value="Obstetrician-Gynecologist">Obstetrician-Gynecologist</SelectItem>
+                                                <SelectItem value="MFM Specialist">MFM Specialist</SelectItem>
+                                                <SelectItem value="Neontologist">Neontologist</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </FormItem>
