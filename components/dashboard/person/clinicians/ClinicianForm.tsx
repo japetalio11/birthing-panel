@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { createClinician } from "@/lib/supabase/create/createClinician";
 import { supabase } from "@/lib/supabase/client";
+
 // Schema for clinician form
 export const clinicianFormSchema: z.ZodType<any> = z.object({
     firstName: z.string().min(1, "First name is required"),
@@ -97,20 +98,37 @@ export default function ClinicianForm() {
 
     // Handle file selection and preview
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (file) {
+        try {
+            const file = event.target.files?.[0];
+            if (!file) {
+                console.error("No file selected in handleFileChange");
+                return;
+            }
+
             setSelectedFile(file);
             form.setValue("profileImage", file);
 
             if (file.type.startsWith('image/')) {
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    setFilePreview(e.target?.result as string);
+                    if (e.target?.result) {
+                        setFilePreview(e.target.result as string);
+                    } else {
+                        console.error("FileReader failed to load file preview");
+                    }
+                };
+                reader.onerror = (error) => {
+                    console.error("FileReader error:", error);
+                    toast.error("Failed to read file for preview");
                 };
                 reader.readAsDataURL(file);
             } else {
+                console.warn("Selected file is not an image:", file.type);
                 setFilePreview(null);
             }
+        } catch (error) {
+            console.error("Error in handleFileChange:", error);
+            toast.error("Error processing selected file");
         }
     };
 
@@ -119,6 +137,14 @@ export default function ClinicianForm() {
         try {
             setIsSubmitting(true);
             let profileImageUrl: string | null = null;
+
+            // Validate form data before proceeding
+            const validationResult = clinicianFormSchema.safeParse(data);
+            if (!validationResult.success) {
+                console.error("Form validation failed:", validationResult.error);
+                toast.error("Form validation failed. Please check all fields.");
+                return;
+            }
 
             // Upload profile picture to Supabase storage
             if (selectedFile) {
@@ -131,7 +157,7 @@ export default function ClinicianForm() {
                     .upload(fileName, selectedFile);
 
                 if (uploadError) {
-                    console.error("File upload error:", uploadError);
+                    console.error("Supabase file upload error:", uploadError);
                     toast.error("Failed to upload profile picture: " + uploadError.message);
                     return;
                 }
@@ -140,18 +166,25 @@ export default function ClinicianForm() {
                     .from("profile-pictures")
                     .getPublicUrl(uploadData.path);
 
+                if (!publicUrlData.publicUrl) {
+                    console.error("Failed to retrieve public URL for uploaded file");
+                    toast.error("Failed to retrieve profile picture URL");
+                    return;
+                }
+
                 profileImageUrl = publicUrlData.publicUrl;
                 console.log("Profile picture uploaded successfully, URL:", profileImageUrl);
             }
 
-            // Prepare clinicial data with fileurl
+            // Prepare clinician data with fileurl
             const clinicianData = {
                 ...data,
-                fileurl: profileImageUrl, // Map profileImageUrl to fileurl for person table
+                fileurl: profileImageUrl,
             };
 
             // Call createClinician to insert into person table
             await createClinician(clinicianData);
+            console.log("Clinician created successfully:", clinicianData);
             toast.success("Clinician Added Successfully", {
                 description: `${data.firstName} ${data.middleName || ""} ${data.lastName} has been added.`,
             });
@@ -174,7 +207,10 @@ export default function ClinicianForm() {
     return (
         <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
             <FormProvider {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <form onSubmit={form.handleSubmit((data) => {
+                    console.log("Form submission initiated with data:", data);
+                    onSubmit(data);
+                })} className="space-y-6">
                     <fieldset className="grid gap-6 rounded-lg border p-6">
                         <legend className="-ml-1 px-1 text-sm font-medium">Basic Information</legend>
                         <div className="flex flex-col md:flex-row gap-6">
@@ -191,6 +227,7 @@ export default function ClinicianForm() {
                                                             src={filePreview}
                                                             alt="Profile preview"
                                                             className="w-full h-full object-cover"
+                                                            onError={(e) => console.error("Error loading profile image preview:", e)}
                                                         />
                                                     ) : (
                                                         <div className="w-full h-full bg-gray-200 flex items-center justify-center">
@@ -212,7 +249,10 @@ export default function ClinicianForm() {
                                                 </FormControl>
                                                 <div
                                                     className="absolute right-0 bottom-2 bg-black rounded-full p-3 cursor-pointer transition-colors"
-                                                    onClick={() => document.getElementById("profile-upload")?.click()}
+                                                    onClick={() => {
+                                                        console.log("Profile image upload button clicked");
+                                                        document.getElementById("profile-upload")?.click();
+                                                    }}
                                                 >
                                                     <Camera className="h-4 w-4 text-white" />
                                                 </div>
@@ -231,7 +271,15 @@ export default function ClinicianForm() {
                                             <FormItem>
                                                 <FormLabel>First Name</FormLabel>
                                                 <FormControl>
-                                                    <Input placeholder="Enter First Name" {...field} aria-required="true" />
+                                                    <Input
+                                                        placeholder="Enter First Name"
+                                                        {...field}
+                                                        aria-required="true"
+                                                        onChange={(e) => {
+                                                            field.onChange(e);
+                                                            console.log("First name changed:", e.target.value);
+                                                        }}
+                                                    />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -244,7 +292,14 @@ export default function ClinicianForm() {
                                             <FormItem>
                                                 <FormLabel>Middle Name</FormLabel>
                                                 <FormControl>
-                                                    <Input placeholder="Enter Middle Name" {...field} />
+                                                    <Input
+                                                        placeholder="Enter Middle Name"
+                                                        {...field}
+                                                        onChange={(e) => {
+                                                            field.onChange(e);
+                                                            console.log("Middle name changed:", e.target.value);
+                                                        }}
+                                                    />
                                                 </FormControl>
                                             </FormItem>
                                         )}
@@ -256,7 +311,15 @@ export default function ClinicianForm() {
                                             <FormItem>
                                                 <FormLabel>Last Name</FormLabel>
                                                 <FormControl>
-                                                    <Input placeholder="Enter Last Name" {...field} aria-required="true" />
+                                                    <Input
+                                                        placeholder="Enter Last Name"
+                                                        {...field}
+                                                        aria-required="true"
+                                                        onChange={(e) => {
+                                                            field.onChange(e);
+                                                            console.log("Last name changed:", e.target.value);
+                                                        }}
+                                                    />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -266,25 +329,28 @@ export default function ClinicianForm() {
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <FormField
-                                control={form.control}
-                                name="gender"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Gender</FormLabel>
-                                        <Select
-                                            value={field.value}
-                                            onValueChange={field.onChange}
-                                        >
-                                            <SelectTrigger id="gender" className="col-span-3">
-                                                <SelectValue placeholder="Select gender" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Male">Male</SelectItem>
-                                                <SelectItem value="Female">Female</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </FormItem>
-                                )}
+                                        control={form.control}
+                                        name="gender"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Gender</FormLabel>
+                                                <Select
+                                                    value={field.value}
+                                                    onValueChange={(value) => {
+                                                        field.onChange(value);
+                                                        console.log("Gender changed:", value);
+                                                    }}
+                                                >
+                                                    <SelectTrigger id="gender" className="col-span-3">
+                                                        <SelectValue placeholder="Select gender" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Male">Male</SelectItem>
+                                                        <SelectItem value="Female">Female</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </FormItem>
+                                        )}
                                     />
                                     <FormField
                                         control={form.control}
@@ -293,7 +359,13 @@ export default function ClinicianForm() {
                                             <FormItem>
                                                 <FormLabel>Birth Date</FormLabel>
                                                 <FormControl>
-                                                    <DatePicker value={field.value} onChange={field.onChange} />
+                                                    <DatePicker
+                                                        value={field.value}
+                                                        onChange={(date) => {
+                                                            field.onChange(date);
+                                                            console.log("Birth date changed:", date);
+                                                        }}
+                                                    />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -306,7 +378,15 @@ export default function ClinicianForm() {
                                             <FormItem>
                                                 <FormLabel>Contact Number</FormLabel>
                                                 <FormControl>
-                                                    <Input placeholder="Enter Contact Number" {...field} aria-required="true" />
+                                                    <Input
+                                                        placeholder="Enter Contact Number"
+                                                        {...field}
+                                                        aria-required="true"
+                                                        onChange={(e) => {
+                                                            field.onChange(e);
+                                                            console.log("Contact number changed:", e.target.value);
+                                                        }}
+                                                    />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -323,7 +403,14 @@ export default function ClinicianForm() {
                                 <FormItem>
                                     <FormLabel>Address</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Enter address" {...field} />
+                                        <Input
+                                            placeholder="Enter address"
+                                            {...field}
+                                            onChange={(e) => {
+                                                field.onChange(e);
+                                                console.log("Address changed:", e.target.value);
+                                            }}
+                                        />
                                     </FormControl>
                                 </FormItem>
                             )}
@@ -337,7 +424,14 @@ export default function ClinicianForm() {
                                     <FormItem>
                                         <FormLabel>Citizenship</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Enter citizenship" {...field} />
+                                            <Input
+                                                placeholder="Enter citizenship"
+                                                {...field}
+                                                onChange={(e) => {
+                                                    field.onChange(e);
+                                                    console.log("Citizenship changed:", e.target.value);
+                                                }}
+                                            />
                                         </FormControl>
                                     </FormItem>
                                 )}
@@ -350,7 +444,10 @@ export default function ClinicianForm() {
                                         <FormLabel>Marital Status</FormLabel>
                                         <Select
                                             value={field.value}
-                                            onValueChange={field.onChange}
+                                            onValueChange={(value) => {
+                                                field.onChange(value);
+                                                console.log("Marital status changed:", value);
+                                            }}
                                         >
                                             <SelectTrigger id="maritalStatus" className="col-span-3">
                                                 <SelectValue placeholder="Select marital status" />
@@ -365,7 +462,7 @@ export default function ClinicianForm() {
                                     </FormItem>
                                 )}
                             />
-                           <FormField
+                            <FormField
                                 control={form.control}
                                 name="role"
                                 render={({ field }) => (
@@ -373,14 +470,17 @@ export default function ClinicianForm() {
                                         <FormLabel>Role</FormLabel>
                                         <Select
                                             value={field.value}
-                                            onValueChange={field.onChange}
+                                            onValueChange={(value) => {
+                                                field.onChange(value);
+                                                console.log("Role changed:", value);
+                                            }}
                                         >
                                             <SelectTrigger id="role" className="col-span-3">
                                                 <SelectValue placeholder="Select role" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="Single">Doctor</SelectItem>
-                                                <SelectItem value="Married">Midwife</SelectItem>
+                                                <SelectItem value="Doctor">Doctor</SelectItem>
+                                                <SelectItem value="Midwife">Midwife</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </FormItem>
@@ -388,7 +488,7 @@ export default function ClinicianForm() {
                             />
                         </div>
 
-                        <div className="grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <FormField
                                 control={form.control}
                                 name="religion"
@@ -396,12 +496,19 @@ export default function ClinicianForm() {
                                     <FormItem>
                                         <FormLabel>Religion</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Enter religion" {...field} />
+                                            <Input
+                                                placeholder="Enter religion"
+                                                {...field}
+                                                onChange={(e) => {
+                                                    field.onChange(e);
+                                                    console.log("Religion changed:", e.target.value);
+                                                }}
+                                            />
                                         </FormControl>
                                     </FormItem>
                                 )}
                             />
-                           <FormField
+                            <FormField
                                 control={form.control}
                                 name="specialization"
                                 render={({ field }) => (
@@ -409,7 +516,10 @@ export default function ClinicianForm() {
                                         <FormLabel>Specialization</FormLabel>
                                         <Select
                                             value={field.value}
-                                            onValueChange={field.onChange}
+                                            onValueChange={(value) => {
+                                                field.onChange(value);
+                                                console.log("Specialization changed:", value);
+                                            }}
                                         >
                                             <SelectTrigger id="specialization" className="col-span-3">
                                                 <SelectValue placeholder="Select specialization" />
@@ -418,7 +528,7 @@ export default function ClinicianForm() {
                                                 <SelectItem value="Obstetrician">Obstetrician</SelectItem>
                                                 <SelectItem value="Obstetrician-Gynecologist">Obstetrician-Gynecologist</SelectItem>
                                                 <SelectItem value="MFM Specialist">MFM Specialist</SelectItem>
-                                                <SelectItem value="Neontologist">Neontologist</SelectItem>
+                                                <SelectItem value="Neonatologist">Neonatologist</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     </FormItem>
@@ -431,7 +541,14 @@ export default function ClinicianForm() {
                                     <FormItem>
                                         <FormLabel>Social Security Number</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Enter SSN" {...field} />
+                                            <Input
+                                                placeholder="Enter SSN"
+                                                {...field}
+                                                onChange={(e) => {
+                                                    field.onChange(e);
+                                                    console.log("SSN changed:", e.target.value);
+                                                }}
+                                            />
                                         </FormControl>
                                     </FormItem>
                                 )}
@@ -444,13 +561,19 @@ export default function ClinicianForm() {
                                     <FormItem>
                                         <FormLabel>License Number</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Enter License Number" {...field} />
+                                            <Input
+                                                placeholder="Enter License Number"
+                                                {...field}
+                                                onChange={(e) => {
+                                                    field.onChange(e);
+                                                    console.log("License number changed:", e.target.value);
+                                                }}
+                                            />
                                         </FormControl>
                                     </FormItem>
                                 )}
                             />
                         </div>
-
                     </fieldset>
 
                     <fieldset className="grid gap-6 rounded-lg border p-6">
@@ -463,7 +586,14 @@ export default function ClinicianForm() {
                                     <FormItem>
                                         <FormLabel>First Name</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Enter first name" {...field} />
+                                            <Input
+                                                placeholder="Enter first name"
+                                                {...field}
+                                                onChange={(e) => {
+                                                    field.onChange(e);
+                                                    console.log("Emergency contact first name changed:", e.target.value);
+                                                }}
+                                            />
                                         </FormControl>
                                     </FormItem>
                                 )}
@@ -475,7 +605,14 @@ export default function ClinicianForm() {
                                     <FormItem>
                                         <FormLabel>Middle Name</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Enter middle name" {...field} />
+                                            <Input
+                                                placeholder="Enter middle name"
+                                                {...field}
+                                                onChange={(e) => {
+                                                    field.onChange(e);
+                                                    console.log("Emergency contact middle name changed:", e.target.value);
+                                                }}
+                                            />
                                         </FormControl>
                                     </FormItem>
                                 )}
@@ -487,7 +624,14 @@ export default function ClinicianForm() {
                                     <FormItem>
                                         <FormLabel>Last Name</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Enter last name" {...field} />
+                                            <Input
+                                                placeholder="Enter last name"
+                                                {...field}
+                                                onChange={(e) => {
+                                                    field.onChange(e);
+                                                    console.log("Emergency contact last name changed:", e.target.value);
+                                                }}
+                                            />
                                         </FormControl>
                                     </FormItem>
                                 )}
@@ -502,7 +646,14 @@ export default function ClinicianForm() {
                                     <FormItem>
                                         <FormLabel>Contact Number</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Enter contact number" {...field} />
+                                            <Input
+                                                placeholder="Enter contact number"
+                                                {...field}
+                                                onChange={(e) => {
+                                                    field.onChange(e);
+                                                    console.log("Emergency contact number changed:", e.target.value);
+                                                }}
+                                            />
                                         </FormControl>
                                     </FormItem>
                                 )}
@@ -514,7 +665,14 @@ export default function ClinicianForm() {
                                     <FormItem>
                                         <FormLabel>Relationship</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="Enter relationship" {...field} />
+                                            <Input
+                                                placeholder="Enter relationship"
+                                                {...field}
+                                                onChange={(e) => {
+                                                    field.onChange(e);
+                                                    console.log("Emergency contact relationship changed:", e.target.value);
+                                                }}
+                                            />
                                         </FormControl>
                                     </FormItem>
                                 )}
@@ -528,6 +686,7 @@ export default function ClinicianForm() {
                             variant="outline"
                             className="h-8 gap-1"
                             onClick={() => {
+                                console.log("Discard button clicked, resetting form");
                                 form.reset();
                                 setFilePreview(null);
                                 setSelectedFile(null);

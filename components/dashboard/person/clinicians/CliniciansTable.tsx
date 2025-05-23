@@ -77,6 +77,10 @@ import {
 interface Clinician {
     id: number;
     name: string;
+    role: string;
+    email: string;
+    password: string;
+    specialization: string;
     status: string;
     birth_date: string | null;
     age: string | null;
@@ -301,6 +305,10 @@ export default function CliniciansTable() {
                         name: person.first_name
                             ? `${person.first_name} ${person.middle_name} ${person.last_name || ""}`
                             : "Unknown",
+                        role: clinician.role || "", // Default to empty string if not available
+                        email: clinician.email || "", // Default to empty string if not available
+                        password: clinician.password || "", // Default to empty string if not available
+                        specialization: clinician.specialization || "", // Default to empty string if not available
                         status: person.status || "Unknown",
                         birth_date: person.birth_date
                             ? new Date(person.birth_date).toLocaleDateString("en-US", {
@@ -438,8 +446,8 @@ export default function CliniciansTable() {
 
                         <TabsList defaultValue={"doctors"}>
                             <TabsTrigger value="all">All</TabsTrigger>
-                            <TabsTrigger value="doctors">Doctors</TabsTrigger>
-                            <TabsTrigger value="midwives">Midwives</TabsTrigger>
+                            <TabsTrigger value="doctor">Doctor</TabsTrigger>
+                            <TabsTrigger value="midwife">Midwife</TabsTrigger>
                         </TabsList>
                     </div>
 

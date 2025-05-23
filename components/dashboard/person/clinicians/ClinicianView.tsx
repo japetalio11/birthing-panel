@@ -128,6 +128,12 @@ export default function ClinicianView() {
                 ec_last_name: data.person.ec_last_name,
                 ec_contact_number: data.person.ec_contact_number,
                 ec_relationship: data.person.ec_relationship,
+                // Add missing properties, fallback to null if not present
+                appointment_id: data.appointment_id ?? null,
+                role: data.role ?? null,
+                license_number: data.license_number ?? null,
+                specialization: data.specialization ?? null,
+                prescription_id: data.prescription_id ?? null,
             };
 
             console.log("Fetched clinician data:", combinedData);
@@ -438,17 +444,17 @@ export default function ClinicianView() {
                     </div>
                 </CardHeader>
                 <CardContent className="text-sm">
-                    <LaboratoryRecords context='clinician' id={id} />
+                    <LaboratoryRecords context='patient' id={id} />
                 </CardContent>
                 </Card>
             </TabsContent>
 
             <TabsContent value="supplements">
-                <SupplementRecommendation context='clinician' id={id} />
+                <SupplementRecommendation context='patient' id={id} />
             </TabsContent>
 
             <TabsContent value="prescriptions">
-                <Prescriptions context="clinician" id={id} />
+                <Prescriptions context="patient" id={id} />
             </TabsContent>
             
             </Tabs>
