@@ -1,3 +1,4 @@
+// /components/ui/sonner.tsx
 "use client"
 
 import { useTheme } from "next-themes"
@@ -9,12 +10,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
-      className="toaster group"
+      className="toaster group font-sans" // Added font-sans class to apply Inter font
       style={
         {
           "--normal-bg": "var(--popover)",
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
+          "fontFamily": "var(--font-sans)", // Ensure font-family uses Inter via --font-sans
         } as React.CSSProperties
       }
       {...props}

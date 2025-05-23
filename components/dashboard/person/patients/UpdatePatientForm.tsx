@@ -100,7 +100,7 @@ export default function UpdatePatientForm() {
         async function fetchPatient() {
             if (!id) {
                 toast.error("No patient ID provided");
-                router.push("/Patients");
+                router.push("/Dashboard/Patients");
                 return;
             }
 
@@ -121,14 +121,14 @@ export default function UpdatePatientForm() {
                 if (error) {
                     console.error("Supabase query error:", error);
                     toast.error(`Failed to fetch patient data: ${error.message}`);
-                    router.push("/Patients");
+                    router.push("/Dashboard/Patients");
                     return;
                 }
 
                 if (!data) {
                     console.warn(`No patient found with ID ${id}`);
                     toast.error(`No patient found with ID ${id}`);
-                    router.push("/Patients");
+                    router.push("/Dashboard/Patients");
                     return;
                 }
 
@@ -167,7 +167,7 @@ export default function UpdatePatientForm() {
             } catch (err) {
                 console.error("Unexpected error fetching patient:", err);
                 toast.error("An unexpected error occurred while fetching patient data.");
-                router.push("/Patients");
+                router.push("/Dashboard/Patients");
             }
         }
 
@@ -276,7 +276,7 @@ export default function UpdatePatientForm() {
             form.reset();
             setFilePreview(null);
             setSelectedFile(null);
-            router.push(`/Patients/Patient-View?id=${id}`)
+            router.push(`/Dashboard/Patients/Patient-View?id=${id}`)
         } catch (error) {
             console.error("Error updating patient:", error);
             toast.error("Error Updating Patient", {
@@ -660,7 +660,7 @@ export default function UpdatePatientForm() {
                                 form.reset();
                                 setFilePreview(null);
                                 setSelectedFile(null);
-                                router.push(`/Patients/Patient-View?id=${id}`);
+                                router.push(`/Dashboard/Patients/Patient-View?id=${id}`);
                             }}
                         >
                             <CircleX />
