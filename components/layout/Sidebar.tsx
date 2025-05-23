@@ -20,14 +20,9 @@ import { toast } from "sonner"
 
 type SidebarProps = {
   className?: string
-  user?: {
-    name?: string
-    email?: string
-    avatar?: string
-  }
 }
 
-export default function Sidebar({ className, user }: SidebarProps) {
+export default function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
 
@@ -58,7 +53,7 @@ export default function Sidebar({ className, user }: SidebarProps) {
       <div className={cn("hidden border-r bg-muted/40 md:block w-[300px]", className)}>
         <div className="flex h-full max-h-screen flex-col gap-2">
           <div className="flex h-14 items-center px-1 lg:h-[60px] border-b">
-            <NavUser user={user} />
+            <NavUser />
           </div>
 
           <div className="flex-1 overflow-y-auto">

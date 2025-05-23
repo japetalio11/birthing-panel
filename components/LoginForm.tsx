@@ -54,10 +54,13 @@ export default function LoginForm({
       const result = await response.json();
       if (result.success) {
         toast.success("Login successful!");
-        // Store user data in session storage
+        // Store user data in session storage with additional information
         sessionStorage.setItem('user', JSON.stringify({
           name: result.user.name,
-          role: result.user.role
+          firstName: result.user.firstName,
+          role: result.user.role,
+          avatar: result.user.avatar,
+          userType: result.user.userType
         }));
         router.push("/Dashboard");
       } else {

@@ -21,32 +21,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Name and password are required' }, { status: 400 });
     }
 
-    // Log input for debugging
     const trimmedName = name.trim();
-    console.log('Input received:', { name: trimmedName, password });
 
-    // Query admin table
-    const { data, error } = await supabase
+    // First try admin authentication
+    const { data: adminData, error: adminError } = await supabase
       .from('admin')
       .select('first_name, middle_name, last_name, password, role');
 
-    if (error) {
-      console.error('Supabase query error:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-      });
+    if (adminError) {
+      console.error('Admin query error:', adminError);
       return NextResponse.json({ error: 'Database error' }, { status: 500 });
     }
 
-    if (!data || data.length === 0) {
-      console.log('No admin records found in table');
-      return NextResponse.json({ error: 'Invalid name or password' }, { status: 401 });
-    }
-
-    // Find matching admin
-    const admin = data.find((record) => {
+    // Check admin credentials
+    const admin = adminData?.find((record) => {
       const dbFullName = [
         record.first_name,
         record.middle_name,
@@ -55,59 +43,105 @@ export async function POST(request: Request) {
         .filter(Boolean)
         .join(' ')
         .trim();
-      const isNameMatch = dbFullName.toLowerCase() === trimmedName.toLowerCase();
-      const isPasswordMatch = record.password === password;
-      console.log('Checking record:', {
-        dbFullName,
-        inputName: trimmedName,
-        isNameMatch,
-        isPasswordMatch,
-        raw: {
-          first_name: record.first_name,
-          middle_name: record.middle_name,
-          last_name: record.last_name,
-          password: record.password,
-          role: record.role,
-        },
-      });
-      return isNameMatch && isPasswordMatch;
+      return dbFullName.toLowerCase() === trimmedName.toLowerCase() && record.password === password;
     });
 
-    if (!admin) {
-      console.log('No matching admin found for:', { name: trimmedName, password });
+    if (admin) {
+      // Admin login successful
+      const fullName = [admin.first_name, admin.middle_name, admin.last_name]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+
+      const response = NextResponse.json({
+        success: true,
+        user: {
+          name: fullName,
+          firstName: admin.first_name,
+          role: admin.role,
+          avatar: null,
+          userType: 'admin'
+        }
+      });
+
+      response.cookies.set({
+        name: 'auth_token',
+        value: 'authenticated',
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7
+      });
+
+      return response;
+    }
+
+    // If not admin, try clinician authentication
+    // First get person details
+    const { data: personData, error: personError } = await supabase
+      .from('person')
+      .select('id, first_name, middle_name, last_name, fileurl');
+
+    if (personError) {
+      console.error('Person query error:', personError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+    // Find matching person by name
+    const person = personData?.find((p) => {
+      const dbFullName = [p.first_name, p.middle_name, p.last_name]
+        .filter(Boolean)
+        .join(' ')
+        .trim();
+      return dbFullName.toLowerCase() === trimmedName.toLowerCase();
+    });
+
+    if (!person) {
       return NextResponse.json({ error: 'Invalid name or password' }, { status: 401 });
     }
 
-    // Construct full name for response
-    const fullName = [
-      admin.first_name,
-      admin.middle_name,
-      admin.last_name
-    ]
+    // Get clinician details
+    const { data: clinicianData, error: clinicianError } = await supabase
+      .from('clinicians')
+      .select('role, password')
+      .eq('id', person.id)
+      .single();
+
+    if (clinicianError) {
+      console.error('Clinician query error:', clinicianError);
+      return NextResponse.json({ error: 'Database error' }, { status: 500 });
+    }
+
+    if (!clinicianData || clinicianData.password !== password) {
+      return NextResponse.json({ error: 'Invalid name or password' }, { status: 401 });
+    }
+
+    // Clinician login successful
+    const fullName = [person.first_name, person.middle_name, person.last_name]
       .filter(Boolean)
       .join(' ')
       .trim();
 
-    // Create the response
-    const response = NextResponse.json({ 
+    const response = NextResponse.json({
       success: true,
       user: {
         name: fullName,
-        role: admin.role
+        firstName: person.first_name,
+        role: clinicianData.role,
+        avatar: person.fileurl,
+        userType: 'clinician'
       }
     });
 
-    // Set authentication cookie
     response.cookies.set({
       name: 'auth_token',
       value: 'authenticated',
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7 // 1 week
+      maxAge: 60 * 60 * 24 * 7
     });
 
-    console.log('Login successful for:', { name: trimmedName });
     return response;
 
   } catch (error: any) {
