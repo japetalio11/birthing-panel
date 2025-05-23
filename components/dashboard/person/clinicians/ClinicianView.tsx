@@ -38,6 +38,10 @@ interface Clinician {
     address: string | null;
     profile_image_url: string | null;
     religion: string | null;
+    role: string | null;
+    email: string | null;
+    occupation: string | null;
+    specialization: string | null;
     status: string | null;
     marital_status: string | null;
     ec_first_name: string | null;
@@ -45,15 +49,6 @@ interface Clinician {
     ec_last_name: string | null;
     ec_contact_number: string | null;
     ec_relationship: string | null;
-    expected_date_of_confinement: string | null;
-    last_menstrual_cycle: string | null;
-    gravidity: string | null;
-    parity: string | null;
-    occupation: string | null;
-    ssn: string | null;
-    member: string | null;
-    allergy_id: number | null;
-    next_appointment: string | null;
 }
 
 export default function ClinicianView() {
@@ -112,6 +107,10 @@ export default function ClinicianView() {
                     address: data.person.address,
                     profile_image_url: data.person.profile_image_url,
                     religion: data.person.religion,
+                    role: data.person.role,
+                    email: data.person.email,
+                    occupation: data.person.occupation,
+                    specialization: data.person.specialization,
                     status: data.person.status,
                     marital_status: data.marital_status,
                     ec_first_name: data.person.ec_first_name,
@@ -119,15 +118,6 @@ export default function ClinicianView() {
                     ec_last_name: data.person.ec_last_name,
                     ec_contact_number: data.person.ec_contact_number,
                     ec_relationship: data.person.ec_relationship,
-                    expected_date_of_confinement: data.expected_date_of_confinement || null,
-                    last_menstrual_cycle: data.last_menstrual_cycle || null,
-                    gravidity: data.gravidity || null,
-                    parity: data.parity || null,
-                    occupation: data.occupation || null,
-                    ssn: data.ssn || null,
-                    member: data.member || null,
-                    allergy_id: data.allergy_id || null,
-                    next_appointment: data.next_appointment || null,
                 };
 
                 setClinician(combinedData);

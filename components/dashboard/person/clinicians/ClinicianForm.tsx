@@ -74,8 +74,6 @@ export default function ClinicianForm() {
             role: "",
             licenseNumber: "",
             ssn: "",
-            lmc: undefined,
-            edc: undefined,
             ecFirstName: "",
             ecMiddleName: "",
             ecLastName: "",
