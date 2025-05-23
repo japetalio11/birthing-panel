@@ -36,7 +36,7 @@ export const clinicianFormSchema: z.ZodType<any> = z.object({
     contactNumber: z.string().min(1, "Contact number is required"),
     citizenship: z.string().optional(),
     address: z.string().optional(),
-    role: z.enum(["Doctor", "Midwife"], { required_error: "Gender is required" }),
+    role: z.enum(["Doctor", "Midwife"], { required_error: "Role is required" }),
 //  LicenseNumber: z.string().min(1, "License number is required")
     ecFirstName: z.string().optional(),
     ecMiddleName: z.string().optional(),

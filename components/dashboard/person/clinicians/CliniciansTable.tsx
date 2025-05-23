@@ -567,7 +567,7 @@ export default function CliniciansTable() {
                                 <Button
                                     size="sm"
                                     className="h-8 ml-2 flex items-center gap-1"
-                                    onClick={() => router.push("/Clinicians/Clinician-Form")}
+                                    onClick={() => router.push("/Dashboard/Clinicians/Clinician-Form")}
                                 >
                                     <UserRoundPlus />
                                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
@@ -606,7 +606,7 @@ export default function CliniciansTable() {
                                                 <TableRow
                                                     key={row.id}
                                                     data-state={row.getIsSelected() && "selected"}
-                                                    onClick={() => router.push(`/Clinicians/Clinician-View?id=${row.original.id}`)} className="cursor-pointer hover:bg-zinc-100"
+                                                    onClick={() => router.push(`/Dashboard/Clinicians/Clinician-View?id=${row.original.id}`)} className="cursor-pointer hover:bg-zinc-100"
                                                 >
                                                     {row.getVisibleCells().map((cell) => (
                                                         <TableCell key={cell.id}>
