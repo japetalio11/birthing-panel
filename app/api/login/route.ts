@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client';
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
 export async function POST(request: Request) {
   try {
@@ -87,14 +88,28 @@ export async function POST(request: Request) {
       .join(' ')
       .trim();
 
-    console.log('Login successful for:', { name: trimmedName });
-    return NextResponse.json({ 
+    // Create the response
+    const response = NextResponse.json({ 
       success: true,
       user: {
         name: fullName,
         role: admin.role
       }
     });
+
+    // Set authentication cookie
+    response.cookies.set({
+      name: 'auth_token',
+      value: 'authenticated',
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7 // 1 week
+    });
+
+    console.log('Login successful for:', { name: trimmedName });
+    return response;
+
   } catch (error: any) {
     console.error('API error:', {
       message: error.message,
