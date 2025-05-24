@@ -31,6 +31,8 @@ type UserData = {
   role: string;
   avatar: string | null;
   userType: 'admin' | 'clinician';
+  isAdmin: boolean;
+  isDoctor: boolean;
 }
 
 export default function NavUser() {

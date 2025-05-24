@@ -60,7 +60,9 @@ export async function POST(request: Request) {
           firstName: admin.first_name,
           role: admin.role,
           avatar: null,
-          userType: 'admin'
+          userType: 'admin',
+          isAdmin: true,
+          isDoctor: false
         }
       });
 
@@ -129,7 +131,9 @@ export async function POST(request: Request) {
         firstName: person.first_name,
         role: clinicianData.role,
         avatar: person.fileurl,
-        userType: 'clinician'
+        userType: 'clinician',
+        isAdmin: false,
+        isDoctor: clinicianData.role.toLowerCase().includes('doctor')
       }
     });
 

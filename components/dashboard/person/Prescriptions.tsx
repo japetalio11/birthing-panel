@@ -50,9 +50,10 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { supabase } from "@/lib/supabase/client";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 
 type Props = {
-  context: "patient";
+  context: "patient" | "clinician";
   id: string | null;
   fields?: any[];
   append?: (prescription: any) => void;
@@ -86,6 +87,10 @@ export default function Prescriptions({
   const [prescriptionsData, setPrescriptionsData] = useState<any[]>([]);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [clinicians, setClinicians] = useState<Clinician[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFilter, setDateFilter] = useState<string>("");
+  const { isAdmin } = useIsAdmin();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -107,12 +112,14 @@ export default function Prescriptions({
           .from("clinicians")
           .select(`
             id,
+            role,
             person (
               first_name,
               middle_name,
               last_name
             )
-          `);
+          `)
+          .eq('role', 'Doctor'); // Only fetch doctors
 
         if (error) {
           console.error("Clinician fetch error:", error.code, error.message, error.details);
@@ -162,7 +169,7 @@ export default function Prescriptions({
       }
 
       try {
-        const { data, error } = await supabase
+        const query = supabase
           .from("prescriptions")
           .select(`
             id,
@@ -183,9 +190,25 @@ export default function Prescriptions({
                 middle_name,
                 last_name
               )
+            ),
+            patients!patient_id (
+              id,
+              person (
+                first_name,
+                middle_name,
+                last_name
+              )
             )
-          `)
-          .eq("patient_id", id);
+          `);
+
+        // Apply filter based on context
+        if (context === 'patient') {
+          query.eq("patient_id", id);
+        } else {
+          query.eq("clinician_id", id);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
           console.error("Prescription fetch error:", error.code, error.message, error.details);
@@ -206,6 +229,16 @@ export default function Prescriptions({
                   .join(" ") || "Unknown Clinician"
               : "Unknown Clinician";
 
+            const patientName = prescription.patients?.person
+              ? [
+                  prescription.patients.person.first_name,
+                  prescription.patients.person.middle_name,
+                  prescription.patients.person.last_name,
+                ]
+                  .filter((part) => part != null && part !== "")
+                  .join(" ") || "Unknown Patient"
+              : "Unknown Patient";
+
             if (!prescription.clinicians?.person?.first_name) {
               console.warn(`Missing clinician name for prescription ID ${prescription.id}:`, prescription.clinicians);
             }
@@ -219,6 +252,7 @@ export default function Prescriptions({
               route: prescription.route || "N/A",
               clinician_id: prescription.clinician_id?.toString(),
               clinician: clinicianName,
+              patient: patientName,
               appointment_id: prescription.appointment_id,
               status: prescription.status || "Active",
               date: prescription.date ? new Date(prescription.date).toLocaleDateString() : "N/A",
@@ -229,17 +263,7 @@ export default function Prescriptions({
           if (append) {
             formattedData.forEach((prescription: any) => {
               append({
-                id: prescription.id,
-                name: prescription.name,
-                strength: prescription.strength,
-                amount: prescription.amount,
-                frequency: prescription.frequency,
-                route: prescription.route,
-                clinician_id: prescription.clinician_id,
-                clinician: prescription.clinician,
-                appointment_id: prescription.appointment_id,
-                status: prescription.status,
-                date: prescription.date,
+                ...prescription
               });
             });
           }
@@ -255,7 +279,7 @@ export default function Prescriptions({
     }
 
     fetchPrescriptions();
-  }, [id, fields, append]);
+  }, [id, fields, append, context]);
 
   const onSubmitPrescription = async (data: FormValues) => {
     if (!id && !append) {
@@ -454,7 +478,31 @@ export default function Prescriptions({
     }
   };
 
-  const displayPrescriptions = fields.length > 0 ? fields : prescriptionsData;
+  const displayPrescriptions = React.useMemo(() => {
+    const data = fields.length > 0 ? fields : prescriptionsData;
+    if (!searchTerm && statusFilter === "all" && !dateFilter) return data;
+
+    return data.filter((prescription) => {
+      const searchString = searchTerm.toLowerCase();
+      const matchesSearch = !searchTerm || (
+        prescription.name?.toLowerCase().includes(searchString) ||
+        prescription.strength?.toLowerCase().includes(searchString) ||
+        prescription.amount?.toLowerCase().includes(searchString) ||
+        prescription.frequency?.toLowerCase().includes(searchString) ||
+        prescription.route?.toLowerCase().includes(searchString) ||
+        prescription.clinician?.toLowerCase().includes(searchString) ||
+        prescription.patient?.toLowerCase().includes(searchString) ||
+        prescription.status?.toLowerCase().includes(searchString)
+      );
+
+      const matchesStatus = statusFilter === "all" || prescription.status === statusFilter;
+      
+      const matchesDate = !dateFilter || 
+        (prescription.date && new Date(prescription.date).toLocaleDateString() === new Date(dateFilter).toLocaleDateString());
+
+      return matchesSearch && matchesStatus && matchesDate;
+    });
+  }, [fields, prescriptionsData, searchTerm, statusFilter, dateFilter]);
 
   return (
     <Card>
@@ -462,214 +510,247 @@ export default function Prescriptions({
         <div className="space-y-1">
           <CardTitle>Prescriptions</CardTitle>
           <CardDescription>
-            Identify your patient's prescriptions before it's too late
+            {context === 'patient' 
+              ? "Identify your patient's prescriptions before it's too late"
+              : "View all prescriptions you have given to patients"}
           </CardDescription>
         </div>
         <div className="relative flex items-center w-full max-w-sm md:w-auto">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Search prescriptions..."
+            placeholder="Search by prescription name or patient..."
             className="w-full pl-8 rounded-lg bg-background"
-            onChange={(e) => {
-              // Implement search logic if needed
-            }}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
           />
-          <Dialog
-            open={openDialog}
-            onOpenChange={(open) => {
-              setOpenDialog(open);
-              if (!open) {
-                form.reset({
-                  name: "",
-                  strength: "",
-                  amount: "",
-                  frequency: "",
-                  route: "",
-                  clinician_id: "",
-                });
-              }
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
-                <PillBottle className="h-4 w-4" />
-                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                  Add Prescription
-                </span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[1000px]">
-              <DialogHeader>
-                <DialogTitle>Add Prescription</DialogTitle>
-                <DialogDescription>
-                  Add a new prescription to your patient. Click save when you're done!
-                </DialogDescription>
-              </DialogHeader>
-              <FormProvider {...form}>
-                <Form {...form}>
-                  <form
-                    onSubmit={form.handleSubmit(onSubmitPrescription)}
-                    className="grid gap-4 py-4"
-                  >
-                    <div className="grid grid-cols-3 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="name"
-                        render={({ field }) => (
-                          <FormItem className="grid grid-cols-4 items-center gap-2">
-                            <FormLabel htmlFor="prescription" className="text-right">
-                              Prescription
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                id="prescription"
-                                placeholder="Enter prescription"
-                                className="col-span-4"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage className="col-span-4" />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="strength"
-                        render={({ field }) => (
-                          <FormItem className="grid grid-cols-4 items-center gap-2">
-                            <FormLabel htmlFor="strength" className="text-right">
-                              Strength
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                id="strength"
-                                placeholder="Enter strength"
-                                className="col-span-4"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage className="col-span-4" />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="amount"
-                        render={({ field }) => (
-                          <FormItem className="grid grid-cols-4 items-center gap-2">
-                            <FormLabel htmlFor="amount" className="text-right">
-                              Amount
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                id="amount"
-                                placeholder="Enter amount"
-                                className="col-span-4"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage className="col-span-4" />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="frequency"
-                        render={({ field }) => (
-                          <FormItem className="grid grid-cols-4 items-center gap-2">
-                            <FormLabel htmlFor="frequency" className="text-right">
-                              Frequency
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                id="frequency"
-                                placeholder="Enter frequency"
-                                className="col-span-4"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage className="col-span-4" />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="route"
-                        render={({ field }) => (
-                          <FormItem className="grid grid-cols-4 items-center gap-2">
-                            <FormLabel htmlFor="route" className="text-right">
-                              Route
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                id="route"
-                                placeholder="Enter route"
-                                className="col-span-4"
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage className="col-span-4" />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="clinician_id"
-                        render={({ field }) => (
-                          <FormItem className="grid grid-cols-4 items-center gap-2">
-                            <FormLabel htmlFor="clinician_id" className="text-right">
-                              Clinician
-                            </FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
+          {context === 'patient' && (
+            <Dialog
+              open={openDialog}
+              onOpenChange={(open) => {
+                setOpenDialog(open);
+                if (!open) {
+                  form.reset({
+                    name: "",
+                    strength: "",
+                    amount: "",
+                    frequency: "",
+                    route: "",
+                    clinician_id: "",
+                  });
+                }
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
+                  <PillBottle className="h-4 w-4" />
+                  <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+                    Add Prescription
+                  </span>
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[1000px]">
+                <DialogHeader>
+                  <DialogTitle>Add Prescription</DialogTitle>
+                  <DialogDescription>
+                    Add a new prescription to your patient. Click save when you're done!
+                  </DialogDescription>
+                </DialogHeader>
+                <FormProvider {...form}>
+                  <Form {...form}>
+                    <form
+                      onSubmit={form.handleSubmit(onSubmitPrescription)}
+                      className="grid gap-4 py-4"
+                    >
+                      <div className="grid grid-cols-3 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="name"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-2">
+                              <FormLabel htmlFor="prescription" className="text-right">
+                                Prescription
+                              </FormLabel>
                               <FormControl>
-                                <SelectTrigger id="clinician_id" className="col-span-4">
-                                  <SelectValue placeholder="Select clinician" />
-                                </SelectTrigger>
+                                <Input
+                                  id="prescription"
+                                  placeholder="Enter prescription"
+                                  className="col-span-4"
+                                  {...field}
+                                />
                               </FormControl>
-                              <SelectContent>
-                                {clinicians.map((clinician) => (
-                                  <SelectItem key={clinician.id} value={clinician.id}>
-                                    {clinician.full_name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage className="col-span-4" />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    <DialogFooter>
-                      <Button type="submit">Save prescription</Button>
-                    </DialogFooter>
-                  </form>
-                </Form>
-              </FormProvider>
-            </DialogContent>
-          </Dialog>
+                              <FormMessage className="col-span-4" />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="strength"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-2">
+                              <FormLabel htmlFor="strength" className="text-right">
+                                Strength
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  id="strength"
+                                  placeholder="Enter strength"
+                                  className="col-span-4"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage className="col-span-4" />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="amount"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-2">
+                              <FormLabel htmlFor="amount" className="text-right">
+                                Amount
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  id="amount"
+                                  placeholder="Enter amount"
+                                  className="col-span-4"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage className="col-span-4" />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="frequency"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-2">
+                              <FormLabel htmlFor="frequency" className="text-right">
+                                Frequency
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  id="frequency"
+                                  placeholder="Enter frequency"
+                                  className="col-span-4"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage className="col-span-4" />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="route"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-2">
+                              <FormLabel htmlFor="route" className="text-right">
+                                Route
+                              </FormLabel>
+                              <FormControl>
+                                <Input
+                                  id="route"
+                                  placeholder="Enter route"
+                                  className="col-span-4"
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage className="col-span-4" />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="clinician_id"
+                          render={({ field }) => (
+                            <FormItem className="grid grid-cols-4 items-center gap-2">
+                              <FormLabel htmlFor="clinician_id" className="text-right">
+                                Clinician
+                              </FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger id="clinician_id" className="col-span-4">
+                                    <SelectValue placeholder="Select clinician" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {clinicians.map((clinician) => (
+                                    <SelectItem key={clinician.id} value={clinician.id}>
+                                      {clinician.full_name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage className="col-span-4" />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <DialogFooter>
+                        <Button type="submit">Save prescription</Button>
+                      </DialogFooter>
+                    </form>
+                  </Form>
+                </FormProvider>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </CardHeader>
       <CardContent>
+        <div className="flex flex-col gap-4 mb-4">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <Input
+                type="search"
+                placeholder="Search by prescription name or patient..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="Completed">Completed</SelectItem>
+                <SelectItem value="Discontinued">Discontinued</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="w-[180px]"
+            />
+          </div>
+        </div>
+
         {fetchError ? (
           <p className="text-sm text-red-600">{fetchError}</p>
         ) : displayPrescriptions.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No prescriptions recorded for this patient.
+            {searchTerm || statusFilter !== "all" || dateFilter
+              ? "No prescriptions found matching the search criteria."
+              : context === 'patient'
+                ? "No prescriptions recorded for this patient."
+                : "No prescriptions given by this clinician."}
           </p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableCell>
-                  <Checkbox
-                    id="select-all"
-                    onCheckedChange={(checked) => {
-                      // Implement select all logic if needed
-                    }}
-                  />
+                  <Checkbox id="select-all" />
                 </TableCell>
                 <TableHead>Prescription</TableHead>
                 <TableHead>Strength</TableHead>
@@ -677,9 +758,13 @@ export default function Prescriptions({
                 <TableHead>Frequency</TableHead>
                 <TableHead>Route</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Clinician</TableHead>
+                {context === 'patient' ? (
+                  <TableHead>Clinician</TableHead>
+                ) : (
+                  <TableHead>Patient</TableHead>
+                )}
                 <TableHead>Issued on</TableHead>
-                <TableHead>Actions</TableHead>
+                {isAdmin && <TableHead>Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -717,17 +802,21 @@ export default function Prescriptions({
                       </SelectContent>
                     </Select>
                   </TableCell>
-                  <TableCell>{prescription.clinician || "Unknown Clinician"}</TableCell>
-                  <TableCell>{prescription.date}</TableCell>
                   <TableCell>
-                    <Button
-                      variant="outline"
-                      onClick={() => handleDelete(index)}
-                    >
-                      <Trash2 />
-                      Delete
-                    </Button>
+                    {context === 'patient' ? prescription.clinician : prescription.patient}
                   </TableCell>
+                  <TableCell>{prescription.date}</TableCell>
+                  {isAdmin && (
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleDelete(index)}
+                      >
+                        <Trash2 />
+                        Delete
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
@@ -737,7 +826,7 @@ export default function Prescriptions({
       <CardFooter>
         <div className="text-xs text-muted-foreground">
           Showing <strong>{displayPrescriptions.length}</strong> of{" "}
-          <strong>{displayPrescriptions.length}</strong> Prescriptions
+          <strong>{fields.length > 0 ? fields.length : prescriptionsData.length}</strong> Prescriptions
         </div>
       </CardFooter>
     </Card>

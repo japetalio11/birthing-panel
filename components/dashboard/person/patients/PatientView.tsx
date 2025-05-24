@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
@@ -76,6 +75,7 @@ export default function PatientView() {
   const [deleteInput, setDeleteInput] = useState("");
   const [isDeactivated, setIsDeactivated] = useState(false);
   const [profileImageSignedUrl, setProfileImageSignedUrl] = useState<string | null>(null);
+  const [userData, setUserData] = useState<{ isAdmin: boolean; isDoctor: boolean } | null>(null);
   const [exportOptions, setExportOptions] = useState({
     basicInfo: true,
     allergies: false,
@@ -87,6 +87,18 @@ export default function PatientView() {
   const [isExporting, setIsExporting] = useState(false);
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
+
+  useEffect(() => {
+    // Get user data from session storage
+    const storedUser = sessionStorage.getItem('user');
+    if (storedUser) {
+      const user = JSON.parse(storedUser);
+      setUserData({
+        isAdmin: user.isAdmin,
+        isDoctor: user.isDoctor
+      });
+    }
+  }, []);
 
   const getProfileImageUrl = async (filePath: string) => {
     try {
@@ -489,46 +501,48 @@ export default function PatientView() {
                       <RefreshCcw className="h-4 w-4" />
                       Update Patient
                     </Button>
-                    <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline">
-                          <Trash2 className="h-4 w-4" />
-                          Delete Patient
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Delete Patient</DialogTitle>
-                          <DialogDescription>
-                            Are you sure you want to delete this patient? This action cannot be undone.
-                          </DialogDescription>
-                          <div className="grid gap-2 py-4">
-                            <Label htmlFor="reason">Type "{fullName}" to confirm deletion</Label>
-                            <Input
-                              id="reason"
-                              className="focus:border-red-500 focus:ring-red-500"
-                              placeholder={`Enter patient name`}
-                              value={deleteInput}
-                              onChange={(e) => setDeleteInput(e.target.value)}
-                            />
-                          </div>
-                        </DialogHeader>
-                        <DialogFooter>
-                          <DialogPrimitive.Close>
-                            <Button variant="outline">
-                              Cancel
-                            </Button>
-                          </DialogPrimitive.Close>
-                          <Button
-                            variant="destructive"
-                            onClick={() => handleDelete(patient.id)}
-                            disabled={!isDeleteEnabled}
-                          >
-                            Yes, delete this patient.
+                    {userData?.isAdmin && (
+                      <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline">
+                            <Trash2 className="h-4 w-4" />
+                            Delete Patient
                           </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Delete Patient</DialogTitle>
+                            <DialogDescription>
+                              Are you sure you want to delete this patient? This action cannot be undone.
+                            </DialogDescription>
+                            <div className="grid gap-2 py-4">
+                              <Label htmlFor="reason">Type "{fullName}" to confirm deletion</Label>
+                              <Input
+                                id="reason"
+                                className="focus:border-red-500 focus:ring-red-500"
+                                placeholder={`Enter patient name`}
+                                value={deleteInput}
+                                onChange={(e) => setDeleteInput(e.target.value)}
+                              />
+                            </div>
+                          </DialogHeader>
+                          <DialogFooter>
+                            <DialogPrimitive.Close>
+                              <Button variant="outline">
+                                Cancel
+                              </Button>
+                            </DialogPrimitive.Close>
+                            <Button
+                              variant="destructive"
+                              onClick={() => handleDelete(patient.id)}
+                              disabled={!isDeleteEnabled}
+                            >
+                              Yes, delete this patient.
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    )}
                   </div>
                 </div>
               </div>
@@ -542,7 +556,9 @@ export default function PatientView() {
               <TabsTrigger value="overview">Patient Overview</TabsTrigger>
               <TabsTrigger value="appointments">Appointments</TabsTrigger>
               <TabsTrigger value="supplements">Supplement Recommendation</TabsTrigger>
-              <TabsTrigger value="prescriptions">Prescription</TabsTrigger>
+              {(userData?.isAdmin || userData?.isDoctor) && (
+                <TabsTrigger value="prescriptions">Prescription</TabsTrigger>
+              )}
               <TabsTrigger value="records">Laboratory Records</TabsTrigger>
             </TabsList>
             <div className="ml-auto flex items-center gap-2">
@@ -730,9 +746,11 @@ export default function PatientView() {
             <SupplementRecommendation context="patient" id={id} />
           </TabsContent>
 
-          <TabsContent value="prescriptions">
-            <Prescriptions context="patient" id={id} />
-          </TabsContent>
+          {(userData?.isAdmin || userData?.isDoctor) && (
+            <TabsContent value="prescriptions">
+              <Prescriptions context="patient" id={id} />
+            </TabsContent>
+          )}
 
           <TabsContent value="records">
             <LaboratoryRecords context="patient" id={id} />

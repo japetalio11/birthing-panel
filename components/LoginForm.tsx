@@ -60,7 +60,9 @@ export default function LoginForm({
           firstName: result.user.firstName,
           role: result.user.role,
           avatar: result.user.avatar,
-          userType: result.user.userType
+          userType: result.user.userType,
+          isAdmin: result.user.isAdmin,
+          isDoctor: result.user.isDoctor
         }));
         router.push("/Dashboard");
       } else {

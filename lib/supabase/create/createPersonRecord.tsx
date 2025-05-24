@@ -1,7 +1,8 @@
 import { supabase } from '../client';
 import { PatientFormValues } from '@/components/dashboard/person/patients/PatientForm'
+import { ClinicianFormValues } from '@/components/dashboard/person/clinicians/ClinicianForm'
 
-export async function createPersonRecord(data: PatientFormValues) {
+export async function createPersonRecord(data: PatientFormValues | ClinicianFormValues) {
     return await supabase
     .from('person')
     .insert({
