@@ -196,7 +196,7 @@ export default function Dashboard() {
         <Card className="@container/card rounded-lg border border-gray-200">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Overview</CardTitle>
+              <CardTitle>Pregnancy by Age Analysis</CardTitle>
               <CardDescription>Distribution of patients by age</CardDescription>
             </div>
             <Button
