@@ -515,15 +515,7 @@ export default function Prescriptions({
               : "View all prescriptions you have given to patients"}
           </CardDescription>
         </div>
-        <div className="relative flex items-center w-full max-w-sm md:w-auto">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search by prescription name or patient..."
-            className="w-full pl-8 rounded-lg bg-background"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="relative flex items-center">
           {context === 'patient' && (
             <Dialog
               open={openDialog}
@@ -542,7 +534,7 @@ export default function Prescriptions({
               }}
             >
               <DialogTrigger asChild>
-                <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
+                <Button size="sm" className="h-8 flex items-center gap-1">
                   <PillBottle className="h-4 w-4" />
                   <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
                     Add Prescription
@@ -706,15 +698,6 @@ export default function Prescriptions({
       <CardContent>
         <div className="flex flex-col gap-4 mb-4">
           <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <Input
-                type="search"
-                placeholder="Search by prescription name or patient..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full"
-              />
-            </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by status" />

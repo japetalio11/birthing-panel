@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing clinician data or export options" }, { status: 400 });
     }
 
-    const { clinician, exportOptions, supplements, prescriptions } = data;
+    const { clinician, exportOptions, supplements, prescriptions, appointments } = data;
     const fullName = `${clinician.first_name} ${clinician.middle_name ? clinician.middle_name + " " : ""}${clinician.last_name}`;
     const ecFullName = clinician.ec_first_name
       ? `${clinician.ec_first_name} ${clinician.ec_middle_name ? clinician.ec_middle_name + " " : ""}${clinician.ec_last_name}`
@@ -204,6 +204,28 @@ export async function POST(req: NextRequest) {
         checkPageBreak(15);
         doc.text(
           `Prescription ${index + 1}: ${pres.name || "N/A"} (Strength: ${pres.strength || "N/A"}, Amount: ${pres.amount || "N/A"}, Frequency: ${pres.frequency || "N/A"}, Route: ${pres.route || "N/A"}, Patient: ${pres.patient || "N/A"}, Status: ${pres.status || "N/A"}, Issued: ${pres.date ? new Date(pres.date).toLocaleDateString() : "N/A"})`,
+          leftMargin,
+          y,
+          { maxWidth: tableWidth }
+        );
+        y += 15;
+      });
+      y += 20;
+    }
+
+    if (exportOptions.appointments && appointments.length > 0) {
+      console.log("Adding appointments to PDF...");
+      doc.setFontSize(16);
+      checkPageBreak(20);
+      doc.setFillColor(220, 235, 255);
+      doc.rect(leftMargin, y - 10, tableWidth, 20, "F");
+      doc.text("Appointments", leftMargin, y);
+      y += 20;
+      doc.setFontSize(12);
+      appointments.forEach((app: any, index: number) => {
+        checkPageBreak(15);
+        doc.text(
+          `Appointment ${index + 1}: ${app.service || "N/A"} (Date: ${app.date || "N/A"}, Patient: ${app.patient || "N/A"}, Status: ${app.status || "N/A"}, Payment Status: ${app.payment_status || "N/A"})`,
           leftMargin,
           y,
           { maxWidth: tableWidth }

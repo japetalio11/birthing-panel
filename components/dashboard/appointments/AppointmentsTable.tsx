@@ -148,30 +148,6 @@ const columns: ColumnDef<Appointment>[] = [
     },
   },
   {
-    id: "time",
-    header: ({ column }) => (
-      <Button
-        variant="ghost"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-      >
-        Time
-        <ArrowUpDown className="ml-2 h-4 w-4" />
-      </Button>
-    ),
-    cell: ({ row }) => (
-      <div>
-        {new Date(row.original.date).toLocaleTimeString([], {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        })}
-      </div>
-    ),
-    sortingFn: (rowA, rowB) => {
-      return new Date(rowA.original.date).getTime() - new Date(rowB.original.date).getTime();
-    },
-  },
-  {
     accessorKey: "service",
     header: "Service",
     cell: ({ row }) => <div>{row.getValue("service")}</div>,
@@ -376,7 +352,6 @@ export default function AppointmentsTable() {
       "Patient Name",
       "Clinician Name",
       "Date",
-      "Time",
       "Service",
       "Status",
       "Payment Status",
@@ -385,11 +360,6 @@ export default function AppointmentsTable() {
       appointment.patient_name,
       appointment.clinician_name,
       new Date(appointment.date).toLocaleDateString(),
-      new Date(appointment.date).toLocaleTimeString([], {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      }),
       appointment.service,
       appointment.status,
       appointment.payment_status,

@@ -463,16 +463,7 @@ export default function SupplementRecommendation({
                             : "View all supplements you have given to patients"}
                     </CardDescription>
                 </div>
-                <div className="relative flex items-center w-full max-w-sm md:w-auto">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        type="search"
-                        placeholder="Search supplements..."
-                        className="w-full pl-8 rounded-lg bg-background"
-                        onChange={(e) => {
-                            // Implement search logic if needed
-                        }}
-                    />
+                <div className="relative flex items-center">
                     {context === 'patient' && (
                         <Dialog
                             open={openDialog}
@@ -491,7 +482,7 @@ export default function SupplementRecommendation({
                             }}
                         >
                             <DialogTrigger asChild>
-                                <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
+                                <Button size="sm" className="h-8 flex items-center gap-1">
                                     <PillBottle className="h-4 w-4" />
                                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
                                         Add Supplement
@@ -505,161 +496,93 @@ export default function SupplementRecommendation({
                                         Add a new supplement to your patient. Click save when you're done!
                                     </DialogDescription>
                                 </DialogHeader>
-                                <FormProvider {...form}>
-                                    <Form {...form}>
-                                        <form
-                                            onSubmit={form.handleSubmit(onSubmitSupplement)}
-                                            className="grid gap-4 py-4"
-                                        >
-                                            <div className="grid grid-cols-3 gap-4">
-                                                <FormField
-                                                    control={form.control}
-                                                    name="name"
-                                                    render={({ field }) => (
-                                                        <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                            <FormLabel htmlFor="supplement" className="text-right">
-                                                                Supplement
-                                                            </FormLabel>
-                                                            <FormControl>
-                                                                <Input
-                                                                    id="supplement"
-                                                                    placeholder="Enter supplement"
-                                                                    className="col-span-4"
-                                                                    {...field}
-                                                                />
-                                                            </FormControl>
-                                                            <FormMessage className="col-span-4" />
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                                <FormField
-                                                    control={form.control}
-                                                    name="strength"
-                                                    render={({ field }) => (
-                                                        <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                            <FormLabel htmlFor="strength" className="text-right">
-                                                                Strength
-                                                            </FormLabel>
-                                                            <FormControl>
-                                                                <Input
-                                                                    id="strength"
-                                                                    placeholder="Enter strength"
-                                                                    className="col-span-4"
-                                                                    {...field}
-                                                                />
-                                                            </FormControl>
-                                                            <FormMessage className="col-span-4" />
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                                <FormField
-                                                    control={form.control}
-                                                    name="amount"
-                                                    render={({ field }) => (
-                                                        <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                            <FormLabel htmlFor="amount" className="text-right">
-                                                                Amount
-                                                            </FormLabel>
-                                                            <FormControl>
-                                                                <Input
-                                                                    id="amount"
-                                                                    placeholder="Enter amount"
-                                                                    className="col-span-4"
-                                                                    {...field}
-                                                                />
-                                                            </FormControl>
-                                                            <FormMessage className="col-span-4" />
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                            </div>
-                                            <div className="grid grid-cols-3 gap-4">
-                                                <FormField
-                                                    control={form.control}
-                                                    name="frequency"
-                                                    render={({ field }) => (
-                                                        <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                            <FormLabel htmlFor="frequency" className="text-right">
-                                                                Frequency
-                                                            </FormLabel>
-                                                            <FormControl>
-                                                                <Input
-                                                                    id="frequency"
-                                                                    placeholder="Enter frequency"
-                                                                    className="col-span-4"
-                                                                    {...field}
-                                                                />
-                                                            </FormControl>
-                                                            <FormMessage className="col-span-4" />
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                                <FormField
-                                                    control={form.control}
-                                                    name="route"
-                                                    render={({ field }) => (
-                                                        <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                            <FormLabel htmlFor="route" className="text-right">
-                                                                Route
-                                                            </FormLabel>
-                                                            <FormControl>
-                                                                <Input
-                                                                    id="route"
-                                                                    placeholder="Enter route"
-                                                                    className="col-span-4"
-                                                                    {...field}
-                                                                />
-                                                            </FormControl>
-                                                            <FormMessage className="col-span-4" />
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                                <FormField
-                                                    control={form.control}
-                                                    name="clinician_id"
-                                                    render={({ field }) => (
-                                                        <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                            <FormLabel htmlFor="clinician_id" className="text-right">
-                                                                Clinician
-                                                            </FormLabel>
-                                                            <Select onValueChange={field.onChange} value={field.value}>
-                                                                <FormControl>
-                                                                    <SelectTrigger id="clinician_id" className="col-span-4">
-                                                                        <SelectValue placeholder="Select clinician" />
-                                                                    </SelectTrigger>
-                                                                </FormControl>
-                                                                <SelectContent>
-                                                                    <div className="relative">
-                                                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                                                        <Input
-                                                                            type="search"
-                                                                            placeholder="Search by name..."
-                                                                            className="w-full pl-8 rounded-lg bg-background"
-                                                                            // value={searchTerm}
-                                                                            // onChange={(e) => setSearchTerm(e.target.value)}
-                                                                        />
-                                                                    </div>
-                                                                    <div className="pt-2">
-                                                                    <Separator />
-                                                                    {clinicians.map((clinician) => (
-                                                                        <SelectItem key={clinician.id} value={clinician.id}>
-                                                                            {clinician.full_name}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                    </div>
-                                                                </SelectContent>
-                                                            </Select>
-                                                            <FormMessage className="col-span-4" />
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                            </div>
-                                            <DialogFooter>
-                                                <Button type="submit">Save supplement</Button>
-                                            </DialogFooter>
-                                        </form>
-                                    </Form>
-                                </FormProvider>
+                                <Form {...form}>
+                                    <form onSubmit={form.handleSubmit(onSubmitSupplement)}>
+                                        <div className="grid gap-4">
+                                            <FormField
+                                                control={form.control}
+                                                name="name"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Supplement Name</FormLabel>
+                                                        <FormControl>
+                                                            <Input {...field} />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="strength"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Strength</FormLabel>
+                                                        <FormControl>
+                                                            <Input {...field} />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="amount"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Amount</FormLabel>
+                                                        <FormControl>
+                                                            <Input {...field} />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="frequency"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Frequency</FormLabel>
+                                                        <FormControl>
+                                                            <Input {...field} />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="route"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Route</FormLabel>
+                                                        <FormControl>
+                                                            <Input {...field} />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                            <FormField
+                                                control={form.control}
+                                                name="clinician_id"
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <FormLabel>Clinician</FormLabel>
+                                                        <FormControl>
+                                                            <Select {...field} />
+                                                        </FormControl>
+                                                        <FormMessage />
+                                                    </FormItem>
+                                                )}
+                                            />
+                                        </div>
+                                        <DialogFooter>
+                                            <Button type="submit">Save</Button>
+                                        </DialogFooter>
+                                    </form>
+                                </Form>
                             </DialogContent>
                         </Dialog>
                     )}

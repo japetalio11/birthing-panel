@@ -290,9 +290,10 @@ export default function CliniciansTable() {
 
                 const clinicianIds = cliniciansData.map((p: any) => p.id);
                 const { data: appointmentsData, error: appointmentsError } = await supabase
-                    .from("appointments")
+                    .from("appointment")
                     .select("clinician_id, date")
-                    .in("clinician_id", clinicianIds);
+                    .in("clinician_id", clinicianIds)
+                    .order('date', { ascending: false });
 
                 if (appointmentsError) {
                     toast.warning(`Failed to fetch appointments: ${appointmentsError.message}`);
