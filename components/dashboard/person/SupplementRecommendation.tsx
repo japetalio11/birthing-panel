@@ -401,7 +401,7 @@ export default function SupplementRecommendation({
                 });
             }
 
-            toast("Status Updated", {
+            toast.success("Status Updated", {
                 description: `Supplement status changed to ${newStatus}.`,
             });
         } catch (err) {

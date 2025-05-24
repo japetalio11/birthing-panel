@@ -64,7 +64,6 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabase/client";
 import {
     ColumnDef,
@@ -128,19 +127,57 @@ const columns: ColumnDef<Patient>[] = [
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => {
-            const status = row.getValue("status") as string;
+            const patient = row.original;
+            const updatePatientStatus = async (newStatus: "Active" | "Inactive") => {
+                try {
+                    console.log(`Updating status for patient ID ${patient.id} to ${newStatus}`);
+                    const { error } = await supabase
+                        .from("person")
+                        .update({ status: newStatus })
+                        .eq("id", patient.id);
+
+                    if (error) {
+                        console.error("Patient status update error:", error);
+                        toast.error(`Failed to update patient status: ${error.message}`);
+                        return false;
+                    }
+
+                    return true;
+                } catch (err) {
+                    console.error("Unexpected error updating status:", err);
+                    toast.error("An unexpected error occurred while updating the status.");
+                    return false;
+                }
+            };
+
             return (
-                <Badge
-                    variant="outline"
-                    className="flex gap-1 px-1.5 text-muted-foreground [&_svg]:size-3"
+                <Select
+                    value={patient.status || "Unknown"}
+                    onValueChange={async (value) => {
+                        const newStatus = value as "Active" | "Inactive";
+                        const success = await updatePatientStatus(newStatus);
+                        if (success) {
+                            (window as any).updatePatientsState(patient.id, newStatus);
+                            toast.success("Status Updated", {
+                                description: `Patient status changed to ${newStatus}.`,
+                            });
+                        }
+                    }}
                 >
-                    <div
-                        className={`w-2 h-2 rounded-full ${
-                            status.toLowerCase() === "active" ? "bg-green-400" : "bg-red-400"
-                        }`}
-                    />
-                    <span className="hidden sm:inline">{status}</span>
-                </Badge>
+                    <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Active" className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-green-400" />
+                            Active
+                        </SelectItem>
+                        <SelectItem value="Inactive" className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-red-400" />
+                            Inactive
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
             );
         },
         enableSorting: false,
@@ -241,6 +278,21 @@ export default function PatientsTable() {
         limit: "",
     });
 
+    // Expose update function to window for column access
+    React.useEffect(() => {
+        (window as any).updatePatientsState = (patientId: number, newStatus: "Active" | "Inactive") => {
+            setPatients((prev) =>
+                prev.map((p) =>
+                    p.id === patientId ? { ...p, status: newStatus } : p
+                )
+            );
+        };
+
+        return () => {
+            delete (window as any).updatePatientsState;
+        };
+    }, []);
+
     React.useEffect(() => {
         async function fetchPatients() {
             try {
@@ -262,6 +314,7 @@ export default function PatientsTable() {
                     `);
 
                 if (patientsError) {
+                    console.error("Patients fetch error:", patientsError);
                     toast.error(`Failed to fetch patients: ${patientsError.message}`);
                     return;
                 }
@@ -273,30 +326,35 @@ export default function PatientsTable() {
                 }
 
                 const patientIds = patientsData.map((p: any) => p.id);
+
+                // Fetch the latest appointment date for each patient
                 const { data: appointmentsData, error: appointmentsError } = await supabase
-                    .from("appointments")
+                    .from("appointment")
                     .select("patient_id, date")
-                    .in("patient_id", patientIds);
+                    .in("patient_id", patientIds)
+                    .order("date", { ascending: false });
 
                 if (appointmentsError) {
+                    console.warn(`Failed to fetch appointments: ${appointmentsError.message}`);
                     toast.warning(`Failed to fetch appointments: ${appointmentsError.message}`);
                 }
 
+                // Create a map of patient_id to latest appointment date
+                const latestAppointments = new Map<number, string>();
+                appointmentsData?.forEach((appt: any) => {
+                    if (!latestAppointments.has(appt.patient_id)) {
+                        latestAppointments.set(appt.patient_id, appt.date);
+                    }
+                });
+
                 const formattedPatients: Patient[] = patientsData.map((patient: any) => {
                     const person = patient.person || {};
-                    const appointments = appointmentsData
-                        ?.filter((a: any) => a.patient_id === patient.id)
-                        .sort(
-                            (a: any, b: any) =>
-                                new Date(b.date).getTime() - new Date(a.date).getTime()
-                        );
-
-                    const lastAppointment = appointments?.[0]?.date;
+                    const lastAppointment = latestAppointments.get(patient.id);
 
                     return {
                         id: patient.id,
                         name: person.first_name
-                            ? `${person.first_name} ${person.middle_name} ${person.last_name || ""}`
+                            ? `${person.first_name} ${person.middle_name || ""} ${person.last_name || ""}`
                             : "Unknown",
                         status: person.status || "Unknown",
                         birth_date: person.birth_date
@@ -324,6 +382,7 @@ export default function PatientsTable() {
                 setPatients(formattedPatients);
                 toast.success("Patients fetched successfully.");
             } catch (err: any) {
+                console.error("Error fetching patients:", err);
                 toast.error(`Error fetching patients: ${err.message}`);
             }
         }
@@ -705,7 +764,7 @@ export default function PatientsTable() {
 
                 <TabsContent value={tab}>
                     <Card x-chunk="dashboard-06-chunk-alda">
-                        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md: justify-between">
+                        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                             <div className="space-y-1">
                                 <CardTitle>Patients</CardTitle>
                                 <CardDescription>

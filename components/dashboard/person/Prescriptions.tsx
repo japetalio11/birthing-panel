@@ -443,7 +443,7 @@ export default function Prescriptions({
         });
       }
 
-      toast("Status Updated", {
+      toast.success("Status Updated", {
         description: `Prescription status changed to ${newStatus}.`,
       });
     } catch (err) {
