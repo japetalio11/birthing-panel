@@ -6,7 +6,6 @@ import {
     Eye,
     Download,
     ListFilter,
-    MoreHorizontal,
     Search,
     Trash2,
     UserRoundPlus,
@@ -64,7 +63,6 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabase/client";
 import {
     ColumnDef,
@@ -74,6 +72,7 @@ import {
     useReactTable,
     flexRender
 } from "@tanstack/react-table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Clinician {
     id: number;
@@ -141,19 +140,57 @@ const columns: ColumnDef<Clinician>[] = [
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => {
-            const status = row.getValue("status") as string;
+            const clinician = row.original;
+            const updateClinicianStatus = async (newStatus: "Active" | "Inactive") => {
+                try {
+                    console.log(`Updating status for clinician ID ${clinician.id} to ${newStatus}`);
+                    const { error } = await supabase
+                        .from("person")
+                        .update({ status: newStatus })
+                        .eq("id", clinician.id);
+
+                    if (error) {
+                        console.error("Clinician status update error:", error);
+                        toast.error(`Failed to update clinician status: ${error.message}`);
+                        return false;
+                    }
+
+                    return true;
+                } catch (err) {
+                    console.error("Unexpected error updating status:", err);
+                    toast.error("An unexpected error occurred while updating the status.");
+                    return false;
+                }
+            };
+
             return (
-                <Badge
-                    variant="outline"
-                    className="flex gap-1 px-1.5 text-muted-foreground [&_svg]:size-3"
+                <Select
+                    value={clinician.status || "Unknown"}
+                    onValueChange={async (value) => {
+                        const newStatus = value as "Active" | "Inactive";
+                        const success = await updateClinicianStatus(newStatus);
+                        if (success) {
+                            (window as any).updateCliniciansState(clinician.id, newStatus);
+                            toast.success("Status Updated", {
+                                description: `Clinician status changed to ${newStatus}.`,
+                            });
+                        }
+                    }}
                 >
-                    <div
-                        className={`w-2 h-2 rounded-full ${
-                            status.toLowerCase() === "active" ? "bg-green-400" : "bg-red-400"
-                        }`}
-                    />
-                    <span className="hidden sm:inline">{status}</span>
-                </Badge>
+                    <SelectTrigger className="w-[120px]">
+                        <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="Active" className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-green-400" />
+                            Active
+                        </SelectItem>
+                        <SelectItem value="Inactive" className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-red-400" />
+                            Inactive
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
             );
         },
         enableSorting: false,
@@ -212,21 +249,6 @@ const columns: ColumnDef<Clinician>[] = [
             <div className="hidden md:block">{row.getValue("address") || "-"}</div>
         ),
     },
-    {
-        id: "actions",
-        cell: () => {
-            return (
-                <Button
-                    aria-haspopup="true"
-                    size="icon"
-                    variant="ghost"
-                >
-                    <MoreHorizontal className="h-4 w-4" />
-                </Button>
-            );
-        },
-        enableSorting: false,
-    },
 ];
 
 export default function CliniciansTable() {
@@ -244,6 +266,21 @@ export default function CliniciansTable() {
     const [sorting, setSorting] = React.useState<SortingState>([]);
     const [rowSelection, setRowSelection] = React.useState({});
     const [userData, setUserData] = React.useState<any>(null);
+
+    // Expose update function to window for column access
+    React.useEffect(() => {
+        (window as any).updateCliniciansState = (clinicianId: number, newStatus: "Active" | "Inactive") => {
+            setClinicians((prev) =>
+                prev.map((c) =>
+                    c.id === clinicianId ? { ...c, status: newStatus } : c
+                )
+            );
+        };
+
+        return () => {
+            delete (window as any).updateCliniciansState;
+        };
+    }, []);
 
     // Get user data from session storage
     React.useEffect(() => {
@@ -312,9 +349,9 @@ export default function CliniciansTable() {
                     return {
                         id: clinician.id,
                         name: person.first_name
-                            ? `${person.first_name} ${person.middle_name} ${person.last_name || ""}`
+                            ? `${person.first_name} ${person.middle_name || ""} ${person.last_name || ""}`
                             : "Unknown",
-                        role: clinician.role || "doctor", // Default to doctor if not specified
+                        role: clinician.role || "doctor",
                         password: clinician.password || "",
                         specialization: clinician.specialization || "",
                         status: person.status || "Unknown",
@@ -621,7 +658,7 @@ export default function CliniciansTable() {
                                                     className="cursor-pointer hover:bg-zinc-100"
                                                 >
                                                     {row.getVisibleCells().map((cell) => (
-                                                        <TableCell key={cell.id}>
+                                                        <TableCell key={cell.id} className="py-4">
                                                             {flexRender(
                                                                 cell.column.columnDef.cell,
                                                                 cell.getContext()

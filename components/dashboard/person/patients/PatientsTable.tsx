@@ -776,7 +776,7 @@ export default function PatientsTable() {
                                 <Button
                                     size="sm"
                                     className="h-8 ml-2 flex items-center gap-1"
-                                    onClick={() => router.push("/Patients/Patient-Form")}
+                                    onClick={() => router.push("/Dashboard/Patients/Patient-Form")}
                                 >
                                     <UserRoundPlus />
                                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">

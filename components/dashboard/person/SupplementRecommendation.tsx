@@ -440,13 +440,13 @@ export default function SupplementRecommendation({
 
     // Filter supplements based on search term and filters
     const filteredSupplements = displaySupplements.filter((supplement) => {
-        const matchesSearch = 
+        const matchesSearch =
             supplement.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             supplement.patient?.toLowerCase().includes(searchTerm.toLowerCase());
-        
+
         const matchesStatus = statusFilter === "all" || supplement.status === statusFilter;
-        
-        const matchesDate = !dateFilter || 
+
+        const matchesDate = !dateFilter ||
             (supplement.date && new Date(supplement.date).toLocaleDateString() === new Date(dateFilter).toLocaleDateString());
 
         return matchesSearch && matchesStatus && matchesDate;
@@ -454,24 +454,41 @@ export default function SupplementRecommendation({
 
     return (
         <Card>
-            <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="space-y-1">
                     <CardTitle>Supplements</CardTitle>
                     <CardDescription>
-                        {context === 'patient' 
+                        {context === 'patient'
                             ? "Identify your patient's supplements before it's too late"
                             : "View all supplements you have given to patients"}
                     </CardDescription>
                 </div>
-                <div className="relative flex items-center w-full max-w-sm md:w-auto">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-3 w-full md:w-auto">
+                    <div className="relative w-full md:w-64">
+                        <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            type="search"
+                            placeholder="Search supplements..."
+                            className="w-full pl-8 pr-4 py-2 rounded-lg bg-background"
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger className="w-full md:w-40">
+                            <SelectValue placeholder="Filter by status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="Active">Active</SelectItem>
+                            <SelectItem value="Completed">Completed</SelectItem>
+                            <SelectItem value="Discontinued">Discontinued</SelectItem>
+                        </SelectContent>
+                    </Select>
                     <Input
-                        type="search"
-                        placeholder="Search supplements..."
-                        className="w-full pl-8 rounded-lg bg-background"
-                        onChange={(e) => {
-                            // Implement search logic if needed
-                        }}
+                        type="date"
+                        value={dateFilter}
+                        onChange={(e) => setDateFilter(e.target.value)}
+                        className="w-full md:w-40"
                     />
                     {context === 'patient' && (
                         <Dialog
@@ -491,7 +508,7 @@ export default function SupplementRecommendation({
                             }}
                         >
                             <DialogTrigger asChild>
-                                <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
+                                <Button size="sm" className="h-8 flex items-center gap-1">
                                     <PillBottle className="h-4 w-4" />
                                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
                                         Add Supplement
@@ -640,12 +657,12 @@ export default function SupplementRecommendation({
                                                                         />
                                                                     </div>
                                                                     <div className="pt-2">
-                                                                    <Separator />
-                                                                    {clinicians.map((clinician) => (
-                                                                        <SelectItem key={clinician.id} value={clinician.id}>
-                                                                            {clinician.full_name}
-                                                                        </SelectItem>
-                                                                    ))}
+                                                                        <Separator />
+                                                                        {clinicians.map((clinician) => (
+                                                                            <SelectItem key={clinician.id} value={clinician.id}>
+                                                                                {clinician.full_name}
+                                                                            </SelectItem>
+                                                                        ))}
                                                                     </div>
                                                                 </SelectContent>
                                                             </Select>
@@ -666,37 +683,6 @@ export default function SupplementRecommendation({
                 </div>
             </CardHeader>
             <CardContent>
-                <div className="flex flex-col gap-4 mb-4">
-                    <div className="flex flex-wrap gap-4">
-                        <div className="flex-1 min-w-[200px]">
-                            <Input
-                                type="search"
-                                placeholder="Search by supplement name or patient..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full"
-                            />
-                        </div>
-                        <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Filter by status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Status</SelectItem>
-                                <SelectItem value="Active">Active</SelectItem>
-                                <SelectItem value="Completed">Completed</SelectItem>
-                                <SelectItem value="Discontinued">Discontinued</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Input
-                            type="date"
-                            value={dateFilter}
-                            onChange={(e) => setDateFilter(e.target.value)}
-                            className="w-[180px]"
-                        />
-                    </div>
-                </div>
-
                 {fetchError ? (
                     <p className="text-sm text-red-600">{fetchError}</p>
                 ) : filteredSupplements.length === 0 ? (
