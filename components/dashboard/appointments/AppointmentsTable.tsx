@@ -64,6 +64,7 @@ import {
   useReactTable,
   flexRender,
 } from "@tanstack/react-table";
+import AppointmentForm from "./AppointmentForm";
 
 interface Appointment {
   id: string;
@@ -237,6 +238,7 @@ export default function AppointmentsTable() {
   const [tab, setTab] = React.useState("all");
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [rowSelection, setRowSelection] = React.useState({});
+  const [showAppointmentForm, setShowAppointmentForm] = React.useState(false);
 
   // Fetch appointments from Supabase
   React.useEffect(() => {
@@ -515,7 +517,7 @@ export default function AppointmentsTable() {
                 <Button
                   size="sm"
                   className="h-8 ml-2 flex items-center gap-1"
-                  onClick={() => router.push("/Dashboard/Appointments/Appointment-Form")}
+                  onClick={() => setShowAppointmentForm(true)}
                 >
                   <UserRoundPlus />
                   <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
@@ -581,6 +583,82 @@ export default function AppointmentsTable() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Add Appointment Form Dialog */}
+      <AppointmentForm
+        open={showAppointmentForm}
+        onOpenChange={setShowAppointmentForm}
+        onSuccess={() => {
+          // Refresh appointments data after successful creation
+          const fetchAppointments = async () => {
+            try {
+              const { data: appointmentsData, error: appointmentsError } = await supabase
+                .from("appointment")
+                .select(`
+                  *,
+                  patient:patient_id (
+                    person (
+                      first_name,
+                      middle_name,
+                      last_name
+                    )
+                  ),
+                  clinician:clinician_id (
+                    person (
+                      first_name,
+                      middle_name,
+                      last_name
+                    )
+                  )
+                `)
+                .order("date", { ascending: false });
+
+              if (appointmentsError) {
+                console.error("Appointments fetch error:", appointmentsError);
+                toast.error(`Failed to fetch appointments: ${appointmentsError.message}`);
+                return;
+              }
+
+              if (!appointmentsData || appointmentsData.length === 0) {
+                console.log("No appointments data found");
+                toast.info("No appointments found.");
+                setAppointments([]);
+                return;
+              }
+
+              const formattedAppointments: Appointment[] = appointmentsData.map((appointment: any) => {
+                const patient = appointment.patient?.person || {};
+                const clinician = appointment.clinician?.person || {};
+
+                return {
+                  id: appointment.id,
+                  patient_id: appointment.patient_id,
+                  clinician_id: appointment.clinician_id,
+                  date: appointment.date,
+                  service: appointment.service,
+                  weight: appointment.weight,
+                  vitals: appointment.vitals,
+                  gestational_age: appointment.gestational_age,
+                  status: appointment.status,
+                  payment_status: appointment.payment_status,
+                  patient_name: `${patient.first_name || ""} ${patient.middle_name || ""} ${
+                    patient.last_name || ""
+                  }`.trim(),
+                  clinician_name: `${clinician.first_name || ""} ${clinician.middle_name || ""} ${
+                    clinician.last_name || ""
+                  }`.trim(),
+                };
+              });
+
+              setAppointments(formattedAppointments);
+              toast.success("Appointments refreshed successfully.");
+            } catch (err: any) {
+              toast.error(`Error fetching appointments: ${err.message}`);
+            }
+          };
+          fetchAppointments();
+        }}
+      />
     </main>
   );
 }

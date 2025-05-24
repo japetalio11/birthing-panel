@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Calendar, Trash2, RefreshCcw } from "lucide-react";
+import { Calendar, Trash2, RefreshCcw, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -27,8 +27,37 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import VitalsForm from "./VitalsForm";
+import UpdateAppointmentForm from "./UpdateAppointmentForm";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// Define appointment data type
+interface Person {
+  id: number;
+  first_name: string;
+  middle_name: string | null;
+  last_name: string;
+  birth_date: string;
+  age: string | null;
+  contact_number: string | null;
+  address: string | null;
+}
+
+interface Patient {
+  id: number;
+  person: Person;
+}
+
+interface Clinician {
+  role: string;
+  specialization: string;
+  person: {
+    first_name: string;
+    middle_name: string | null;
+    last_name: string;
+  };
+}
+
 interface Appointment {
   id: string;
   patient_id: string;
@@ -40,6 +69,17 @@ interface Appointment {
   gestational_age: string | null;
   status: string;
   payment_status: string;
+  patient?: Patient;
+  clinician?: Clinician;
+}
+
+interface Vitals {
+  id: string;
+  temperature: number | null;
+  pulse_rate: number | null;
+  blood_pressure: string | null;
+  respiration_rate: number | null;
+  oxygen_saturation: number | null;
 }
 
 export default function AppointmentView() {
@@ -51,6 +91,19 @@ export default function AppointmentView() {
   const [isCancelled, setIsCancelled] = useState(false);
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
+  const [vitals, setVitals] = useState<Vitals[]>([]);
+  const [showVitalsForm, setShowVitalsForm] = useState(false);
+  const [hasExistingVitals, setHasExistingVitals] = useState(false);
+  const [showUpdateForm, setShowUpdateForm] = useState(false);
+  const [openExportDialog, setOpenExportDialog] = useState(false);
+  const [exportOptions, setExportOptions] = useState({
+    appointmentInfo: true,
+    patientInfo: false,
+    clinicianInfo: false,
+    vitals: false
+  });
+  const [exportFormat, setExportFormat] = useState("pdf");
+  const [isExporting, setIsExporting] = useState(false);
 
   // Fetch appointment data from Supabase
   useEffect(() => {
@@ -62,21 +115,22 @@ export default function AppointmentView() {
 
     async function fetchAppointment() {
       try {
-        const { data, error } = await supabase
+        // First fetch the basic appointment data
+        const { data: appointmentData, error: appointmentError } = await supabase
           .from("appointment")
           .select("*")
           .eq("id", id)
           .single();
 
-        if (error) {
-          console.error("Supabase query error:", error);
-          toast.error(`Failed to fetch appointment: ${error.message}`);
+        if (appointmentError) {
+          console.error("Supabase query error:", appointmentError);
+          toast.error(`Failed to fetch appointment: ${appointmentError.message}`);
           setLoading(false);
           router.push("/Dashboard/Appointments");
           return;
         }
 
-        if (!data) {
+        if (!appointmentData) {
           console.warn("No appointment found with ID:", id);
           toast.error("Appointment not found.");
           setLoading(false);
@@ -84,12 +138,115 @@ export default function AppointmentView() {
           return;
         }
 
-        setAppointment(data);
-        setIsCancelled(data.status.toLowerCase() === "canceled");
+        // Fetch patient data
+        const { data: patientData, error: patientError } = await supabase
+          .from("patients")
+          .select(`
+            *,
+            person (
+              id,
+              first_name,
+              middle_name,
+              last_name,
+              birth_date,
+              age,
+              contact_number,
+              address
+            )
+          `)
+          .eq('id', appointmentData.patient_id)
+          .single();
+
+        if (patientError) {
+          console.error("Error fetching patient:", patientError);
+          toast.error(`Failed to fetch patient data: ${patientError.message}`);
+        }
+
+        // Fetch clinician data
+        const { data: clinicianData, error: cliniciansError } = await supabase
+          .from("clinicians")
+          .select(`
+            id,
+            role,
+            specialization,
+            person (
+              id,
+              first_name,
+              middle_name,
+              last_name
+            )
+          `)
+          .eq('id', appointmentData.clinician_id)
+          .single();
+
+        if (cliniciansError) {
+          console.error("Error fetching clinician:", cliniciansError);
+          toast.error(`Failed to fetch clinician data: ${cliniciansError.message}`);
+        }
+
+        // Transform the data
+        const transformedData: Appointment = {
+          ...appointmentData,
+          patient: patientData ? {
+            id: patientData.id,
+            person: patientData.person
+          } : undefined,
+          clinician: clinicianData ? {
+            role: clinicianData.role,
+            specialization: clinicianData.specialization,
+            person: clinicianData.person
+          } : undefined
+        };
+
+        console.log("Fetched Data:", {
+          appointment: appointmentData,
+          patient: patientData,
+          clinician: clinicianData,
+          transformed: transformedData
+        });
+
+        setAppointment(transformedData);
+        setIsCancelled(transformedData.status.toLowerCase() === "canceled");
+
+        console.log("Starting vitals fetch for appointment:", id);
+
+        // Fetch vitals for this appointment
+        try {
+          const { data: vitalsData, error: vitalsError } = await supabase
+            .from("vitals")
+            .select(`
+              id,
+              temperature,
+              pulse_rate,
+              blood_pressure,
+              respiration_rate,
+              oxygen_saturation
+            `)
+            .eq("id", id);
+
+          console.log("Raw vitals response:", vitalsData);
+
+          if (vitalsError) {
+            throw vitalsError;
+          }
+
+          setVitals(vitalsData || []);
+          setHasExistingVitals(vitalsData && vitalsData.length > 0);
+
+        } catch (error: any) {
+          console.error("Detailed vitals fetch error:", {
+            error,
+            errorType: typeof error,
+            errorKeys: error ? Object.keys(error) : 'no keys',
+            errorString: error ? error.toString() : 'no toString',
+            errorStack: error?.stack || 'no stack trace'
+          });
+        }
+
         setLoading(false);
       } catch (err) {
         console.error("Unexpected error fetching appointment:", err);
-        toast.error("An unexpected error occurred.");
+        toast.error("An unexpected error occurred while fetching the appointment.");
         setLoading(false);
         router.push("/Dashboard/Appointments");
       }
@@ -140,16 +297,144 @@ export default function AppointmentView() {
   // Redirect to update appointment form
   const handleUpdateAppointment = () => {
     if (appointment) {
-      // Fix the routing path to match where the UpdateAppointmentForm component is actually located
-      router.push(`/Dashboard/Appointments/Appointment-Update?id=${appointment.id}`);
+      setShowUpdateForm(true);
     }
   };
+
+  const handleUpdateSuccess = async () => {
+    // Refresh appointment data after update
+    if (!id) return;
+
+    try {
+      const { data: appointmentData, error: appointmentError } = await supabase
+        .from("appointment")
+        .select(`
+          *,
+          patient:patient_id (
+            person (
+              id,
+              first_name,
+              middle_name,
+              last_name,
+              birth_date,
+              age,
+              contact_number,
+              address
+            )
+          ),
+          clinician:clinician_id (
+            person (
+              id,
+              first_name,
+              middle_name,
+              last_name
+            )
+          )
+        `)
+        .eq("id", id)
+        .single();
+
+      if (appointmentError) throw appointmentError;
+
+      const transformedData = {
+        ...appointmentData,
+        patient: appointmentData.patient ? {
+          id: appointmentData.patient.id,
+          person: appointmentData.patient.person
+        } : undefined,
+        clinician: appointmentData.clinician ? {
+          role: appointmentData.clinician.role,
+          specialization: appointmentData.clinician.specialization,
+          person: appointmentData.clinician.person
+        } : undefined
+      };
+
+      setAppointment(transformedData);
+      setIsCancelled(transformedData.status.toLowerCase() === "canceled");
+    } catch (err: any) {
+      console.error("Error refreshing appointment data:", err);
+      toast.error("Failed to refresh appointment data");
+    }
+  };
+
+  async function handleExport() {
+    console.log("Starting export process...");
+    if (!appointment) {
+      console.error("No appointment data available.");
+      toast.error("No appointment data available for export.");
+      return;
+    }
+
+    const hasSelectedOptions = Object.values(exportOptions).some((option) => option);
+    if (!hasSelectedOptions) {
+      console.warn("No export options selected.");
+      toast.error("Please select at least one export option.");
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      console.log("Preparing export data with options:", exportOptions);
+
+      const exportData = {
+        appointment,
+        exportOptions
+      };
+
+      console.log("Sending request to /api/export/appointment...");
+      const response = await fetch("/api/export/appointment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(exportData),
+      });
+      console.log("API response status:", response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `API request failed with status ${response.status}`);
+      }
+
+      console.log("Processing PDF download...");
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const patientName = appointment.patient ? 
+        `${appointment.patient.person.first_name} ${appointment.patient.person.middle_name ? appointment.patient.person.middle_name + " " : ""}${appointment.patient.person.last_name}` : 
+        "Unknown";
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Appointment_Report_${patientName}_${new Date(appointment.date).toISOString().split('T')[0]}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+
+      console.log("Export successful.");
+      toast.success("Export generated successfully.");
+      setOpenExportDialog(false);
+    } catch (error: any) {
+      console.error("Export failed:", error);
+      const errorMessage = error.message || "An unexpected error occurred during export.";
+      toast.error(`Failed to generate export: ${errorMessage}`);
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   if (loading || !appointment) {
     return <div>Loading...</div>;
   }
 
   const isDeleteEnabled = deleteInput.trim().toLowerCase() === "confirm";
+
+  const getPatientName = () => {
+    const person = appointment?.patient?.person;
+    if (!person) return "Unknown Patient";
+    return `${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`;
+  };
+
+  const getClinicianName = () => {
+    const person = appointment?.clinician?.person;
+    if (!person) return "Unknown Clinician";
+    return `${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`;
+  };
 
   return (
     <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
@@ -247,7 +532,7 @@ export default function AppointmentView() {
     <DialogFooter>
       <Button
         variant="destructive"
-        onClick={() => handleDelete(appointment.id)}
+        onClick={() => appointment && handleDelete(appointment.id)}
       >
         Confirm Delete
       </Button>
@@ -269,70 +554,285 @@ export default function AppointmentView() {
               <TabsTrigger value="vitals">Vitals</TabsTrigger>
             </TabsList>
             <div className="ml-auto flex items-center gap-2">
-              <Button size="sm" variant="outline" className="h-8 gap-1">
-                <Calendar className="h-4 w-4" />
-                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Export</span>
-              </Button>
+              <Dialog open={openExportDialog} onOpenChange={setOpenExportDialog}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-8 gap-1">
+                    <Download className="h-4 w-4" />
+                    <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Export</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Export Appointment Data</DialogTitle>
+                    <DialogDescription>
+                      Select the data to include in the export and choose the format.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="appointmentInfo"
+                        checked={exportOptions.appointmentInfo}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, appointmentInfo: !!checked })
+                        }
+                      />
+                      <Label htmlFor="appointmentInfo">Appointment Information</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="patientInfo"
+                        checked={exportOptions.patientInfo}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, patientInfo: !!checked })
+                        }
+                      />
+                      <Label htmlFor="patientInfo">Patient Information</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="clinicianInfo"
+                        checked={exportOptions.clinicianInfo}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, clinicianInfo: !!checked })
+                        }
+                      />
+                      <Label htmlFor="clinicianInfo">Clinician Information</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="vitals"
+                        checked={exportOptions.vitals}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, vitals: !!checked })
+                        }
+                      />
+                      <Label htmlFor="vitals">Vitals</Label>
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="format" className="text-right">
+                        Format
+                      </Label>
+                      <Select value={exportFormat} onValueChange={setExportFormat}>
+                        <SelectTrigger className="col-span-3">
+                          <SelectValue placeholder="Select format" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pdf">PDF</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <DialogPrimitive.Close>
+                      <Button variant="outline">Cancel</Button>
+                    </DialogPrimitive.Close>
+                    <Button onClick={handleExport} disabled={isExporting}>
+                      {isExporting ? "Exporting..." : "Export"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
 
           <TabsContent value="overview">
-            <Card>
-              <CardHeader>
-                <CardTitle>Appointment Information</CardTitle>
-                <CardDescription>All details about this appointment</CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label className="text-right">Date</Label>
-                    <div className="col-span-3">
-                      {new Date(appointment.date).toLocaleString() || "Not specified"}
+            <div className="grid gap-4">
+              {/* Patient Information Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Patient Information</CardTitle>
+                  <CardDescription>All gathered patient information</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="font-semibold mr-2">Name</Label>
+                      <span className="text-sm">{getPatientName()}</span>
+                    </div>
+                    <div>
+                      <Label className="font-semibold mr-2">Date of Birth</Label>
+                      <span className="text-sm">
+                        {appointment?.patient?.person?.birth_date ? 
+                          new Date(appointment.patient.person.birth_date).toLocaleDateString() 
+                          : "Not provided"}
+                      </span>
+                    </div>
+                    <div>
+                      <Label className="font-semibold mr-2">Age</Label>
+                      <span className="text-sm">{appointment?.patient?.person?.age || "Not provided"}</span>
+                    </div>
+                    <div>
+                      <Label className="font-semibold mr-2">Contact Number</Label>
+                      <span className="text-sm">{appointment?.patient?.person?.contact_number || "Not provided"}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="font-semibold mr-2">Address</Label>
+                      <span className="text-sm">{appointment?.patient?.person?.address || "Not provided"}</span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label className="text-right">Service</Label>
-                    <div className="col-span-3">{appointment.service || "Not specified"}</div>
+                </CardContent>
+              </Card>
+
+              {/* Clinician Information Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Clinician Information</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="font-semibold mr-2">Name</Label>
+                      <span className="text-sm">{getClinicianName()}</span>
+                    </div>
+                    <div>
+                      <Label className="font-semibold mr-2">Role</Label>
+                      <span className="text-sm">{appointment?.clinician?.role || "Not specified"}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="font-semibold mr-2">Specialization</Label>
+                      <span className="text-sm">{appointment?.clinician?.specialization || "Not specified"}</span>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label className="text-right">Status</Label>
-                    <div className="col-span-3">{appointment.status || "Not specified"}</div>
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label className="text-right">Payment Status</Label>
-                    <div className="col-span-3">{appointment.payment_status || "Not specified"}</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="vitals">
             <Card>
-              <CardHeader>
-                <CardTitle>Vitals and Notes</CardTitle>
-                <CardDescription>Additional medical information for this appointment</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Vitals History</CardTitle>
+                  <CardDescription>Record and view patient vitals for this appointment</CardDescription>
+                </div>
+                <Button onClick={() => setShowVitalsForm(true)}>
+                  {hasExistingVitals ? "Update Vitals" : "Add Vitals"}
+                </Button>
               </CardHeader>
-              <CardContent className="text-sm">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label className="text-right">Weight</Label>
-                    <div className="col-span-3">{appointment.weight || "Not recorded"}</div>
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label className="text-right">Vitals</Label>
-                    <div className="col-span-3">{appointment.vitals || "Not recorded"}</div>
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label className="text-right">Gestational Age</Label>
-                    <div className="col-span-3">{appointment.gestational_age || "Not recorded"}</div>
-                  </div>
+              <CardContent>
+                <div className="space-y-6">
+                  {vitals.map((vital) => (
+                    <div key={vital.id} className="border rounded-lg p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Measurements Column */}
+                        <div className="space-y-4">
+                          <div>
+                            <Label className="font-semibold mr-2">Weight</Label>
+                            <span className="text-sm">{appointment?.weight ? `${appointment.weight} kg` : "Not recorded"}</span>
+                          </div>
+                          <div>
+                            <Label className="font-semibold mr-2">Gestational Age</Label>
+                            <span className="text-sm">{appointment?.gestational_age ? `${appointment.gestational_age} weeks` : "Not recorded"}</span>
+                          </div>
+                          <div>
+                            <Label className="font-semibold mr-2">Blood Pressure</Label>
+                            <span className="text-sm">{vital.blood_pressure || "Not recorded"}</span>
+                          </div>
+                        </div>
+
+                        {/* Vital Signs Column 1 */}
+                        <div className="space-y-4">
+                          <div>
+                            <Label className="font-semibold mr-2">Temperature</Label>
+                            <span className="text-sm">{vital.temperature ? `${vital.temperature} °C` : "Not recorded"}</span>
+                          </div>
+                          <div>
+                            <Label className="font-semibold mr-2">Pulse Rate</Label>
+                            <span className="text-sm">{vital.pulse_rate ? `${vital.pulse_rate} bpm` : "Not recorded"}</span>
+                          </div>
+                        </div>
+
+                        {/* Vital Signs Column 2 */}
+                        <div className="space-y-4">
+                          <div>
+                            <Label className="font-semibold mr-2">Respiration Rate</Label>
+                            <span className="text-sm">
+                              {vital.respiration_rate ? `${vital.respiration_rate} breaths/min` : "Not recorded"}
+                            </span>
+                          </div>
+                          <div>
+                            <Label className="font-semibold mr-2">Oxygen Saturation</Label>
+                            <span className="text-sm">
+                              {vital.oxygen_saturation ? `${vital.oxygen_saturation}%` : "Not recorded"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {vitals.length === 0 && (
+                    <div className="text-center text-muted-foreground py-4">
+                      No records yet
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Vitals Form Dialog */}
+      {appointment && (
+        <VitalsForm
+          open={showVitalsForm}
+          onOpenChange={setShowVitalsForm}
+          appointmentId={id!}
+          existingVitals={vitals[0]}
+          appointmentData={appointment ? {
+            weight: appointment.weight ? Number(appointment.weight) : null,
+            gestational_age: appointment.gestational_age ? Number(appointment.gestational_age) : null,
+          } : null}
+          onSuccess={() => {
+            // Refresh vitals data after successful submission
+            const fetchVitals = async () => {
+              console.log("Starting vitals refresh for appointment:", id);
+              
+              try {
+                const { data: vitalsData, error: vitalsError } = await supabase
+                  .from("vitals")
+                  .select(`
+                    id,
+                    temperature,
+                    pulse_rate,
+                    blood_pressure,
+                    respiration_rate,
+                    oxygen_saturation
+                  `)
+                  .eq("id", id);
+
+                if (vitalsError) throw vitalsError;
+
+                setVitals(vitalsData || []);
+                setHasExistingVitals(vitalsData && vitalsData.length > 0);
+
+              } catch (error: any) {
+                console.error("Detailed vitals refresh error:", error);
+                toast.error("Failed to refresh vitals data");
+              }
+            };
+            fetchVitals();
+          }}
+        />
+      )}
+
+      {appointment && (
+        <UpdateAppointmentForm
+          open={showUpdateForm}
+          onOpenChange={setShowUpdateForm}
+          appointmentData={{
+            id: appointment?.id || "",
+            patient_id: appointment?.patient_id || "",
+            clinician_id: appointment?.clinician_id || "",
+            date: appointment?.date || new Date().toISOString(),
+            service: appointment?.service || "",
+            status: appointment?.status || "",
+            payment_status: appointment?.payment_status || "",
+          }}
+          onSuccess={handleUpdateSuccess}
+        />
+      )}
     </main>
   );
 }

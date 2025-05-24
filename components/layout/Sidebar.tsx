@@ -5,9 +5,9 @@ import { usePathname, useRouter } from "next/navigation"
 import NavUser from "@/components/layout/NavUser"
 import { cn } from "@/lib/utils"
 import {
-  ClipboardList,
+  Calendar,
   LayoutDashboardIcon,
-  FilePenLine,
+  Stethoscope,
   Settings,
   UsersRound,
   LogOut
@@ -81,7 +81,7 @@ export default function Sidebar({ className }: SidebarProps) {
                     : "text-muted-foreground hover:text-primary"
                 )}
               >
-                <ClipboardList className="h-4 w-4" />
+                <Calendar className="h-4 w-4" />
                 Appointments
               </Link>
 
@@ -107,7 +107,7 @@ export default function Sidebar({ className }: SidebarProps) {
                     : "text-muted-foreground hover:text-primary"
                 )}
               >
-                <UsersRound className="h-4 w-4" />
+                <Stethoscope className="h-4 w-4" />
                 Clinicians
               </Link>
             </nav>
