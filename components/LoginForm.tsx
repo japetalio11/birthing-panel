@@ -54,7 +54,6 @@ export default function LoginForm({
       const result = await response.json();
       if (result.success) {
         toast.success("Login successful!");
-<<<<<<< HEAD
         // Store user data in session storage with additional information
         sessionStorage.setItem('user', JSON.stringify({
           name: result.user.name,
@@ -64,12 +63,6 @@ export default function LoginForm({
           userType: result.user.userType,
           isAdmin: result.user.isAdmin,
           isDoctor: result.user.isDoctor
-=======
-        // Store user data in session storage
-        sessionStorage.setItem('user', JSON.stringify({
-          name: result.user.name,
-          role: result.user.role
->>>>>>> bcb83ee4ad44959a2f7e3ed2e3ba7beb65195a23
         }));
         router.push("/Dashboard");
       } else {
