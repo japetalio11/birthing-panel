@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import NavUser from "@/components/layout/NavUser"
 import { cn } from "@/lib/utils"
 import {
@@ -10,32 +10,50 @@ import {
   Stethoscope,
   Settings,
   UsersRound,
+  LogOut
 } from "lucide-react"
 import {
   SidebarGroupLabel,
   SidebarProvider,
 } from "@/components/ui/sidebar"
+import { toast } from "sonner"
 
 type SidebarProps = {
   className?: string
-  user?: {
-    name?: string
-    email?: string
-    avatar?: string
-  }
 }
 
-export default function Sidebar({ className, user }: SidebarProps) {
+export default function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
 
   const isRouteActive = (prefix: string) => pathname.startsWith(prefix)
+
+  const handleLogout = async () => {
+    try {
+      const response = await fetch('/api/logout', {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        // Clear session storage
+        sessionStorage.removeItem('user');
+        // Redirect to login page
+        router.push('/');
+        toast.success('Logged out successfully');
+      } else {
+        toast.error('Failed to logout');
+      }
+    } catch (error) {
+      toast.error('Error during logout');
+    }
+  };
 
   return (
     <SidebarProvider>
       <div className={cn("hidden border-r bg-muted/40 md:block w-[300px]", className)}>
         <div className="flex h-full max-h-screen flex-col gap-2">
           <div className="flex h-14 items-center px-1 lg:h-[60px] border-b">
-            <NavUser user={user} />
+            <NavUser />
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -96,7 +114,7 @@ export default function Sidebar({ className, user }: SidebarProps) {
           </div>
 
           <div className="flex h-14 items-center border-t">
-            <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
+            <nav className="grid w-full items-start px-2 text-sm font-medium lg:px-4">
               <Link
                 href="/Settings"
                 className={cn(
@@ -109,6 +127,16 @@ export default function Sidebar({ className, user }: SidebarProps) {
                 <Settings className="h-4 w-4" />
                 Settings
               </Link>
+              <button
+                onClick={handleLogout}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 transition-all text-left w-full",
+                  "text-muted-foreground hover:text-primary hover:bg-muted"
+                )}
+              >
+                <LogOut className="h-4 w-4" />
+                Logout
+              </button>
             </nav>
           </div>
         </div>

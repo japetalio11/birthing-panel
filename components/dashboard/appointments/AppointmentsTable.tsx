@@ -3,635 +3,584 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
-    Eye,
-    Download,
-    ListFilter,
-    MoreHorizontal,
-    Search,
-    Trash2,
-    UserRoundPlus,
-    ChevronDownIcon,
-    TextSearch,
-    ArrowUpDown,
+  Eye,
+  Download,
+  ListFilter,
+  MoreHorizontal,
+  Search,
+  Trash2,
+  UserRoundPlus,
+  ChevronDownIcon,
+  TextSearch,
+  ArrowUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-    DropdownMenuRadioGroup,
-    DropdownMenuRadioItem,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-    AlertDialog,
-    AlertDialogContent,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogCancel,
-    AlertDialogAction,
-} from "@/components/ui/alert-dialog";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabase/client";
 import {
-    ColumnDef,
-    SortingState,
-    getCoreRowModel,
-    getSortedRowModel,
-    useReactTable,
-    flexRender
+  ColumnDef,
+  SortingState,
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
+  flexRender,
 } from "@tanstack/react-table";
-interface Patient {
-    id: number;
-    name: string;
-    status: string;
-    birth_date: string | null;
-    age: string | null;
-    last_appointment: string | null;
-    contact_number: string | null;
-    address: string | null;
+
+interface Appointment {
+  id: string;
+  patient_id: string;
+  clinician_id: string;
+  date: string;
+  service: string;
+  weight: string | null;
+  vitals: string | null;
+  gestational_age: string | null;
+  status: string;
+  payment_status: string;
+  patient_name?: string;
+  clinician_name?: string;
 }
 
-const columns: ColumnDef<Patient>[] = [
-    {
-        id: "select",
-        header: ({ table }) => (
-            <Checkbox
-                checked={
-                    table.getIsAllPageRowsSelected() ||
-                    (table.getIsSomePageRowsSelected() && "indeterminate")
-                }
-                onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-                aria-label="Select all"
-            />
-        ),
-        cell: ({ row }) => (
-            <Checkbox
-                checked={row.getIsSelected()}
-                onCheckedChange={(value) => row.toggleSelected(!!value)}
-                aria-label="Select row"
-            />
-        ),
-        enableSorting: false,
+const columns: ColumnDef<Appointment>[] = [
+  {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={
+          table.getIsAllPageRowsSelected() ||
+          (table.getIsSomePageRowsSelected() && "indeterminate")
+        }
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+  },
+  {
+    accessorKey: "patient_name",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      >
+        Patient Name
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => <div className="font-medium">{row.getValue("patient_name")}</div>,
+  },
+  {
+    accessorKey: "clinician_name",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      >
+        Clinician Name
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => <div className="font-medium">{row.getValue("clinician_name")}</div>,
+  },
+  {
+    accessorKey: "date",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      >
+        Date
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div>{new Date(row.getValue("date")).toLocaleDateString()}</div>
+    ),
+    sortingFn: (rowA, rowB, columnId) => {
+      return new Date(rowA.getValue(columnId)).getTime() - new Date(rowB.getValue(columnId)).getTime();
     },
-    {
-        accessorKey: "name",
-        header: ({ column }) => (
-            <Button
-                variant="ghost"
-                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            >
-                Name
-                <ArrowUpDown className="ml-2 h-4 w-4" />
-            </Button>
-        ),
-        cell: ({ row }) => <div className="font-medium">{row.getValue("name")}</div>,
+  },
+  {
+    id: "time",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      >
+        Time
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div>
+        {new Date(row.original.date).toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        })}
+      </div>
+    ),
+    sortingFn: (rowA, rowB) => {
+      return new Date(rowA.original.date).getTime() - new Date(rowB.original.date).getTime();
     },
-    {
-        accessorKey: "status",
-        header: "Status",
-        cell: ({ row }) => {
-            const status = row.getValue("status") as string;
-            return (
-                <Badge
-                    variant="outline"
-                    className="flex gap-1 px-1.5 text-muted-foreground [&_svg]:size-3"
-                >
-                    <div
-                        className={`w-2 h-2 rounded-full ${
-                            status.toLowerCase() === "active" ? "bg-green-400" : "bg-red-400"
-                        }`}
-                    />
-                    <span className="hidden sm:inline">{status}</span>
-                </Badge>
-            );
-        },
-        enableSorting: false,
+  },
+  {
+    accessorKey: "service",
+    header: "Service",
+    cell: ({ row }) => <div>{row.getValue("service")}</div>,
+  },
+  {
+    accessorKey: "status",
+    header: "Status",
+    cell: ({ row }) => {
+      const status = row.getValue("status") as string;
+      return (
+        <Badge
+          variant="outline"
+          className="flex gap-1 px-1.5 text-muted-foreground [&_svg]:size-3"
+        >
+          <div
+            className={`w-2 h-2 rounded-full ${
+              status.toLowerCase() === "completed"
+                ? "bg-green-400"
+                : status.toLowerCase() === "scheduled"
+                ? "bg-blue-400"
+                : "bg-red-400"
+            }`}
+          />
+          <span className="hidden sm:inline">{status}</span>
+        </Badge>
+      );
     },
-    {
-        accessorKey: "last_appointment",
-        header: ({ column }) => (
-            <Button
-                variant="ghost"
-                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-                className="hidden sm:flex"
-            >
-                Last Appointment
-                <ArrowUpDown className="ml-2 h-4 w-4" />
-            </Button>
-        ),
-        cell: ({ row }) => (
-            <div className="hidden sm:block">{row.getValue("last_appointment") || "-"}</div>
-        ),
+  },
+  {
+    accessorKey: "payment_status",
+    header: "Payment Status",
+    cell: ({ row }) => {
+      const status = row.getValue("payment_status") as string;
+      return (
+        <Badge
+          variant="outline"
+          className="flex gap-1 px-1.5 text-muted-foreground [&_svg]:size-3"
+        >
+          <div
+            className={`w-2 h-2 rounded-full ${
+              status.toLowerCase() === "completed"
+                ? "bg-green-400"
+                : status.toLowerCase() === "pending"
+                ? "bg-yellow-400"
+                : "bg-red-400"
+            }`}
+          />
+          <span className="hidden sm:inline">{status}</span>
+        </Badge>
+      );
     },
-    {
-        accessorKey: "birth_date",
-        header: ({ column }) => (
-            <Button
-                variant="ghost"
-                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-                className="hidden md:flex"
-            >
-                Birth Date
-                <ArrowUpDown className="ml-2 h-4 w-4" />
-            </Button>
-        ),
-        cell: ({ row }) => (
-            <div className="hidden md:block">{row.getValue("birth_date") || "-"}</div>
-        ),
-    },
-    {
-        accessorKey: "age",
-        header: ({ column }) => (
-            <Button
-                variant="ghost"
-                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-                className="hidden md:flex"
-            >
-                Age
-                <ArrowUpDown className="ml-2 h-4 w-4" />
-            </Button>
-        ),
-        cell: ({ row }) => <div className="hidden md:block">{row.getValue("age") || "-"}</div>,
-    },
-    {
-        accessorKey: "contact_number",
-        header: () => <div className="hidden md:block">Contact Number</div>,
-        cell: ({ row }) => (
-            <div className="hidden md:block">{row.getValue("contact_number") || "-"}</div>
-        ),
-        enableSorting: false,
-    },
-    {
-        accessorKey: "address",
-        header: ({ column }) => (
-            <Button
-                variant="ghost"
-                onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-                className="hidden md:flex"
-            >
-                Home Address
-                <ArrowUpDown className="ml-2 h-4 w-4" />
-            </Button>
-        ),
-        cell: ({ row }) => (
-            <div className="hidden md:block">{row.getValue("address") || "-"}</div>
-        ),
-    },
-    {
-        id: "actions",
-        cell: ({ row }) => {
-            const patient = row.original;
-            const router = useRouter();
-            return (
-                <Button
-                    aria-haspopup="true"
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => router.push(``)}
-                >
-                    <MoreHorizontal className="h-4 w-4" />
-                </Button>
-            );
-        },
-        enableSorting: false,
-    },
+  },
 ];
 
 export default function AppointmentsTable() {
-    const router = useRouter();
-    const [patients, setPatients] = React.useState<Patient[]>([]);
-    const [searchTerm, setSearchTerm] = React.useState("");
-    const [advancedSearch, setAdvancedSearch] = React.useState({
-        last_appointment: "",
-        birth_date: "",
-        age: "",
-        contact: "",
-        address: "",
-    });
-    const [tab, setTab] = React.useState("all");
-    const [sorting, setSorting] = React.useState<SortingState>([]);
-    const [rowSelection, setRowSelection] = React.useState({});
+  const router = useRouter();
+  const [appointments, setAppointments] = React.useState<Appointment[]>([]);
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const [advancedSearch, setAdvancedSearch] = React.useState({
+    service: "",
+    status: "",
+    payment_status: "",
+  });
+  const [tab, setTab] = React.useState("all");
+  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [rowSelection, setRowSelection] = React.useState({});
 
-    // Fetch patients from Supabase
-    React.useEffect(() => {
-        async function fetchPatients() {
-            try {
-                const { data: patientsData, error: patientsError } = await supabase
-                    .from("patients")
-                    .select(`
-                        id,
-                        person (
-                            id,
-                            first_name,
-                            middle_name,
-                            last_name,
-                            birth_date,
-                            age,
-                            status,
-                            contact_number,
-                            address
-                        )
-                    `);
+  // Fetch appointments from Supabase
+  React.useEffect(() => {
+    async function fetchAppointments() {
+      try {
+        const { data: appointmentsData, error: appointmentsError } = await supabase
+          .from("appointment")
+          .select(`
+            *,
+            patient:patient_id (
+              person (
+                first_name,
+                middle_name,
+                last_name
+              )
+            ),
+            clinician:clinician_id (
+              person (
+                first_name,
+                middle_name,
+                last_name
+              )
+            )
+          `)
+          .order("date", { ascending: false });
 
-                if (patientsError) {
-                    toast.error(`Failed to fetch patients: ${patientsError.message}`);
-                    return;
-                }
-
-                if (!patientsData || patientsData.length === 0) {
-                    toast.info("No patients found.");
-                    setPatients([]);
-                    return;
-                }
-
-                const patientIds = patientsData.map((p: any) => p.id);
-                const { data: appointmentsData, error: appointmentsError } = await supabase
-                    .from("appointments")
-                    .select("patient_id, date")
-                    .in("patient_id", patientIds);
-
-                if (appointmentsError) {
-                    toast.warning(`Failed to fetch appointments: ${appointmentsError.message}`);
-                }
-
-                const formattedPatients: Patient[] = patientsData.map((patient: any) => {
-                    const person = patient.person || {};
-                    const appointments = appointmentsData
-                        ?.filter((a: any) => a.patient_id === patient.id)
-                        .sort(
-                            (a: any, b: any) =>
-                                new Date(b.date).getTime() - new Date(a.date).getTime()
-                        );
-
-                    const lastAppointment = appointments?.[0]?.date;
-
-                    return {
-                        id: patient.id,
-                        name: person.first_name
-                            ? `${person.first_name} ${person.middle_name} ${person.last_name || ""}`
-                            : "Unknown",
-                        status: person.status || "Unknown",
-                        birth_date: person.birth_date
-                            ? new Date(person.birth_date).toLocaleDateString("en-US", {
-                                  month: "long",
-                                  day: "numeric",
-                                  year: "numeric",
-                              })
-                            : null,
-                        age: person.age || null,
-                        last_appointment: lastAppointment
-                            ? new Date(lastAppointment).toLocaleString("en-US", {
-                                  month: "long",
-                                  day: "numeric",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                              })
-                            : null,
-                        contact_number: person.contact_number || null,
-                        address: person.address || null,
-                    };
-                });
-
-                setPatients(formattedPatients);
-                toast.success("Patients fetched successfully.");
-            } catch (err: any) {
-                toast.error(`Error fetching patients: ${err.message}`);
-            }
+        if (appointmentsError) {
+          console.error("Appointments fetch error:", appointmentsError);
+          toast.error(`Failed to fetch appointments: ${appointmentsError.message}`);
+          return;
         }
 
-        fetchPatients();
-    }, []);
-
-    // Handle search and filtering
-    const filteredPatients = React.useMemo(() => {
-        let result = [...patients];
-
-        // Apply search term
-        if (searchTerm) {
-            result = result.filter((patient) =>
-                patient.name.toLowerCase().includes(searchTerm.toLowerCase())
-            );
+        if (!appointmentsData || appointmentsData.length === 0) {
+          console.log("No appointments data found");
+          toast.info("No appointments found.");
+          setAppointments([]);
+          return;
         }
 
-        // Apply advanced search
-        if (advancedSearch.birth_date) {
-            result = result.filter((patient) =>
-                patient.birth_date?.toLowerCase().includes(advancedSearch.birth_date.toLowerCase())
-            );
-        }
-        if (advancedSearch.age) {
-            result = result.filter((patient) =>
-                patient.age?.toLowerCase().includes(advancedSearch.age.toLowerCase())
-            );
-        }
-        if (advancedSearch.contact) {
-            result = result.filter((patient) =>
-                patient.contact_number?.toLowerCase().includes(advancedSearch.contact.toLowerCase())
-            );
-        }
-        if (advancedSearch.address) {
-            result = result.filter((patient) =>
-                patient.address?.toLowerCase().includes(advancedSearch.address.toLowerCase())
-            );
-        }
+        const formattedAppointments: Appointment[] = appointmentsData.map((appointment: any) => {
+          const patient = appointment.patient?.person || {};
+          const clinician = appointment.clinician?.person || {};
 
-        // Apply tab filter
-        if (tab === "active") {
-            result = result.filter((patient) => patient.status.toLowerCase() === "active");
-        } else if (tab === "inactive") {
-            result = result.filter((patient) => patient.status.toLowerCase() === "inactive");
-        }
+          return {
+            id: appointment.id,
+            patient_id: appointment.patient_id,
+            clinician_id: appointment.clinician_id,
+            date: appointment.date,
+            service: appointment.service,
+            weight: appointment.weight,
+            vitals: appointment.vitals,
+            gestational_age: appointment.gestational_age,
+            status: appointment.status,
+            payment_status: appointment.payment_status,
+            patient_name: `${patient.first_name || ""} ${patient.middle_name || ""} ${
+              patient.last_name || ""
+            }`.trim(),
+            clinician_name: `${clinician.first_name || ""} ${clinician.middle_name || ""} ${
+              clinician.last_name || ""
+            }`.trim(),
+          };
+        });
 
-        return result;
-    }, [searchTerm, advancedSearch, tab, patients]);
+        setAppointments(formattedAppointments);
+        toast.success("Appointments fetched successfully.");
+      } catch (err: any) {
+        toast.error(`Error fetching appointments: ${err.message}`);
+      }
+    }
 
-    // Initialize table
-    const table = useReactTable({
-        data: filteredPatients,
-        columns,
-        onSortingChange: setSorting,
-        getCoreRowModel: getCoreRowModel(),
-        getSortedRowModel: getSortedRowModel(),
-        onRowSelectionChange: setRowSelection,
-        state: {
-            sorting,
-            rowSelection,
-        },
-    });
+    fetchAppointments();
+  }, []);
 
-    // Handle export
-    const handleExport = () => {
-        const headers = [
-            "Name",
-            "Status",
-            "Last Appointment",
-            "Birth Date",
-            "Age",
-            "Contact Number",
-            "Home Address",
-        ];
-        const rows = filteredPatients.map((patient) => [
-            patient.name,
-            patient.status,
-            patient.last_appointment || "",
-            patient.birth_date || "",
-            patient.age || "",
-            patient.contact_number || "",
-            patient.address || "",
-        ]);
+  // Handle search and filtering
+  const filteredAppointments = React.useMemo(() => {
+    let result = [...appointments];
 
-        const csvContent = [
-            headers.join(","),
-            ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
-        ].join("\n");
+    // Apply search term
+    if (searchTerm) {
+      result = result.filter(
+        (appointment) =>
+          appointment.patient_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          appointment.clinician_name?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
 
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "patients_export.csv";
-        link.click();
-        toast.success("Data exported successfully.");
-    };
+    // Apply advanced search
+    if (advancedSearch.service) {
+      result = result.filter((appointment) =>
+        appointment.service.toLowerCase().includes(advancedSearch.service.toLowerCase())
+      );
+    }
+    if (advancedSearch.status) {
+      result = result.filter((appointment) =>
+        appointment.status.toLowerCase().includes(advancedSearch.status.toLowerCase())
+      );
+    }
+    if (advancedSearch.payment_status) {
+      result = result.filter((appointment) =>
+        appointment.payment_status
+          .toLowerCase()
+          .includes(advancedSearch.payment_status.toLowerCase())
+      );
+    }
 
-    return (
-        <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
-            <Tabs value={tab} onValueChange={setTab}>
-                <div className="flex items-center">
-                    <TabsList>
-                        <TabsTrigger value="all">All</TabsTrigger>
-                        <TabsTrigger value="active">Active</TabsTrigger>
-                        <TabsTrigger value="inactive">Inactive</TabsTrigger>
-                    </TabsList>
+    // Apply tab filter
+    if (tab === "scheduled") {
+      result = result.filter((appointment) => appointment.status.toLowerCase() === "scheduled");
+    } else if (tab === "completed") {
+      result = result.filter((appointment) => appointment.status.toLowerCase() === "completed");
+    } else if (tab === "canceled") {
+      result = result.filter((appointment) => appointment.status.toLowerCase() === "canceled");
+    }
 
-                    <div className="ml-auto flex items-center gap-2">
-                        <div className="relative">
-                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                type="search"
-                                placeholder="Search by name..."
-                                className="w-full pl-8 rounded-lg bg-background"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
+    return result;
+  }, [searchTerm, advancedSearch, tab, appointments]);
 
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm">
-                                    <TextSearch />
-                                    <span className="hidden lg:inline">Advanced Search</span>
-                                    <span className="lg:hidden">Columns</span>
-                                    <ChevronDownIcon />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56">
-                                <DropdownMenuLabel>Filter by</DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                <div className="p-2">
-                                    <Input
-                                        placeholder="Last appointment..."
-                                        value={advancedSearch.last_appointment}
-                                        onChange={(e) =>
-                                            setAdvancedSearch({
-                                                ...advancedSearch,
-                                                last_appointment: e.target.value,
-                                            })
-                                        }
-                                        className="mb-2"
-                                    />
-                                    <Input
-                                        placeholder="Birth Date..."
-                                        value={advancedSearch.birth_date}
-                                        onChange={(e) =>
-                                            setAdvancedSearch({
-                                                ...advancedSearch,
-                                                birth_date: e.target.value,
-                                            })
-                                        }
-                                        className="mb-2"
-                                    />
-                                    <Input
-                                        placeholder="Age..."
-                                        value={advancedSearch.age}
-                                        onChange={(e) =>
-                                            setAdvancedSearch({
-                                                ...advancedSearch,
-                                                age: e.target.value,
-                                            })
-                                        }
-                                        className="mb-2"
-                                    />
-                                    <Input
-                                        placeholder="Phone number..."
-                                        value={advancedSearch.contact}
-                                        onChange={(e) =>
-                                            setAdvancedSearch({
-                                                ...advancedSearch,
-                                                contact: e.target.value,
-                                            })
-                                        }
-                                        className="mb-2"
-                                    />
-                                    <Input
-                                        placeholder="Address..."
-                                        value={advancedSearch.address}
-                                        onChange={(e) =>
-                                            setAdvancedSearch({
-                                                ...advancedSearch,
-                                                address: e.target.value,
-                                            })
-                                        }
-                                    />
-                                </div>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+  // Initialize table
+  const table = useReactTable({
+    data: filteredAppointments,
+    columns,
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    onRowSelectionChange: setRowSelection,
+    state: {
+      sorting,
+      rowSelection,
+    },
+  });
 
-                        <Dialog>
-                            <DialogTrigger asChild>
-                                <Button size="sm" variant="outline" className="h-8 gap-1">
-                                    <Download />
-                                    <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                                        Export
-                                    </span>
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                                <DialogHeader>
-                                    <DialogTitle>Export Data</DialogTitle>
-                                    <DialogDescription>
-                                        Export the current patient list as a CSV file.
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <DialogFooter>
-                                    <Button variant="outline" onClick={() => {}}>
-                                        Cancel
-                                    </Button>
-                                    <Button onClick={handleExport}>Export</Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
-                    </div>
+  // Handle export
+  const handleExport = () => {
+    const headers = [
+      "Patient Name",
+      "Clinician Name",
+      "Date",
+      "Time",
+      "Service",
+      "Status",
+      "Payment Status",
+    ];
+    const rows = filteredAppointments.map((appointment) => [
+      appointment.patient_name,
+      appointment.clinician_name,
+      new Date(appointment.date).toLocaleDateString(),
+      new Date(appointment.date).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      }),
+      appointment.service,
+      appointment.status,
+      appointment.payment_status,
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "appointments_export.csv";
+    link.click();
+    toast.success("Data exported successfully.");
+  };
+
+  return (
+    <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+      <Tabs value={tab} onValueChange={setTab}>
+        <div className="flex items-center">
+          <TabsList>
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
+            <TabsTrigger value="completed">Completed</TabsTrigger>
+            <TabsTrigger value="canceled">Canceled</TabsTrigger>
+          </TabsList>
+
+          <div className="ml-auto flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search by name..."
+                className="w-full pl-8 rounded-lg bg-background"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <TextSearch />
+                  <span className="hidden lg:inline">Advanced Search</span>
+                  <span className="lg:hidden">Columns</span>
+                  <ChevronDownIcon />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Filter by</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <div className="p-2">
+                  <Input
+                    placeholder="Service..."
+                    value={advancedSearch.service}
+                    onChange={(e) =>
+                      setAdvancedSearch({
+                        ...advancedSearch,
+                        service: e.target.value,
+                      })
+                    }
+                    className="mb-2"
+                  />
+                  <Input
+                    placeholder="Status..."
+                    value={advancedSearch.status}
+                    onChange={(e) =>
+                      setAdvancedSearch({
+                        ...advancedSearch,
+                        status: e.target.value,
+                      })
+                    }
+                    className="mb-2"
+                  />
+                  <Input
+                    placeholder="Payment Status..."
+                    value={advancedSearch.payment_status}
+                    onChange={(e) =>
+                      setAdvancedSearch({
+                        ...advancedSearch,
+                        payment_status: e.target.value,
+                      })
+                    }
+                  />
                 </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-                <TabsContent value={tab}>
-                    <Card x-chunk="dashboard-06-chunk-0">
-                        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                            <div className="space-y-1">
-                                <CardTitle>Patients</CardTitle>
-                                <CardDescription>
-                                    Manage your patients and view their records.
-                                </CardDescription>
-                            </div>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline" className="h-8 gap-1">
+                  <Download />
+                  <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Export</span>
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Export Data</DialogTitle>
+                  <DialogDescription>
+                    Export the current appointment list as a CSV file.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => {}}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleExport}>Export</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
 
-                            <div className="relative flex items-center w-full max-w-sm md:w-auto">
-                                <Button
-                                    size="sm"
-                                    className="h-8 ml-2 flex items-center gap-1"
-                                    onClick={() => router.push("/Appointments/Appointment-Form")}
-                                >
-                                    <UserRoundPlus />
-                                    <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                                        Set Appointment
-                                    </span>
-                                </Button>
-                            </div>
-                        </CardHeader>
+        <TabsContent value={tab}>
+          <Card x-chunk="dashboard-06-chunk-0">
+            <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <CardTitle>Appointments</CardTitle>
+                <CardDescription>Manage your appointments and view their details.</CardDescription>
+              </div>
 
-                        <CardContent>
-                            {filteredPatients.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">
-                                    No patients found.
-                                </p>
-                            ) : (
-                                <Table>
-                                    <TableHeader>
-                                        {table.getHeaderGroups().map((headerGroup) => (
-                                            <TableRow key={headerGroup.id}>
-                                                {headerGroup.headers.map((header) => (
-                                                    <TableHead key={header.id}>
-                                                        {header.isPlaceholder
-                                                            ? null
-                                                            : flexRender(
-                                                                  header.column.columnDef.header,
-                                                                  header.getContext()
-                                                              )}
-                                                    </TableHead>
-                                                ))}
-                                            </TableRow>
-                                        ))}
-                                    </TableHeader>
-                                    <TableBody>
-                                        {table.getRowModel().rows?.length ? (
-                                            table.getRowModel().rows.map((row) => (
-                                                <TableRow
-                                                    key={row.id}
-                                                    data-state={row.getIsSelected() && "selected"}
-                                                >
-                                                    {row.getVisibleCells().map((cell) => (
-                                                        <TableCell key={cell.id}>
-                                                            {flexRender(
-                                                                cell.column.columnDef.cell,
-                                                                cell.getContext()
-                                                            )}
-                                                        </TableCell>
-                                                    ))}
-                                                </TableRow>
-                                            ))
-                                        ) : (
-                                            <TableRow>
-                                                <TableCell colSpan={columns.length} className="h-24 text-center">
-                                                    No results.
-                                                </TableCell>
-                                            </TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            )}
-                        </CardContent>
-                        <CardFooter>
-                            <div className="text-xs text-muted-foreground">
-                                Showing <strong>1-{filteredPatients.length}</strong> of{" "}
-                                <strong>{patients.length}</strong> patients
-                            </div>
-                        </CardFooter>
-                    </Card>
-                </TabsContent>
-            </Tabs>
-        </main>
-    );
+              <div className="relative flex items-center w-full max-w-sm md:w-auto">
+                <Button
+                  size="sm"
+                  className="h-8 ml-2 flex items-center gap-1"
+                  onClick={() => router.push("/Dashboard/Appointments/Appointment-Form")}
+                >
+                  <UserRoundPlus />
+                  <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+                    New Appointment
+                  </span>
+                </Button>
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              {filteredAppointments.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No appointments found.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    {table.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                          <TableHead key={header.id}>
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(header.column.columnDef.header, header.getContext())}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {table.getRowModel().rows?.length ? (
+                      table.getRowModel().rows.map((row) => (
+                        <TableRow
+                          key={row.id}
+                          data-state={row.getIsSelected() && "selected"}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() =>
+                            router.push(`/Dashboard/Appointments/Appointment-View?id=${row.original.id}`)
+                          }
+                        >
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell key={cell.id}>
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={columns.length} className="h-24 text-center">
+                          No results.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+            <CardFooter>
+              <div className="text-xs text-muted-foreground">
+                Showing <strong>1-{filteredAppointments.length}</strong> of{" "}
+                <strong>{appointments.length}</strong> appointments
+              </div>
+            </CardFooter>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </main>
+  );
 }

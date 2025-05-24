@@ -4,7 +4,7 @@ import {
   ChevronsUpDown,
   LogOut,
 } from "lucide-react"
-
+import { useEffect, useState } from "react"
 import {
   Avatar,
   AvatarFallback,
@@ -23,26 +23,53 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
-export default function NavUser({
-  user,
-}: {
-  user?: {
-    name?: string
-    role?: string
-    avatar?: string
-  }
-}) {
+type UserData = {
+  name: string;
+  firstName: string;
+  role: string;
+  avatar: string | null;
+  userType: 'admin' | 'clinician';
+  isAdmin: boolean;
+  isDoctor: boolean;
+}
+
+export default function NavUser() {
   const { isMobile } = useSidebar()
   const router = useRouter()
-  const displayName = user?.name || "Loading..."
-  const displayRole = user?.role || "Loading..."
-  const displayAvatar = user?.avatar || ""
+  const [userData, setUserData] = useState<UserData | null>(null)
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('user'); // Clear session storage
-    router.push("/")
+  useEffect(() => {
+    // Get user data from session storage
+    const storedUser = sessionStorage.getItem('user')
+    if (storedUser) {
+      setUserData(JSON.parse(storedUser))
+    }
+  }, [])
+
+  const handleLogout = async () => {
+    try {
+      const response = await fetch('/api/logout', {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        sessionStorage.removeItem('user');
+        router.push("/")
+        toast.success('Logged out successfully');
+      } else {
+        toast.error('Failed to logout');
+      }
+    } catch (error) {
+      toast.error('Error during logout');
+    }
   }
+
+  const displayName = userData?.name || "Loading..."
+  const displayRole = userData?.role || "Loading..."
+  const displayAvatar = userData?.avatar || ""
+  const firstLetter = userData?.firstName?.charAt(0).toUpperCase() || "?"
 
   return (
     <DropdownMenu>
@@ -52,9 +79,11 @@ export default function NavUser({
           className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
         >
           <Avatar className="h-8 w-8 rounded-lg">
-            <AvatarImage src={displayAvatar} alt={displayName} />
+            {displayAvatar ? (
+              <AvatarImage src={displayAvatar} alt={displayName} />
+            ) : null}
             <AvatarFallback className="rounded-lg">
-              {displayName.charAt(0).toUpperCase() || "?"}
+              {firstLetter}
             </AvatarFallback>
           </Avatar>
           <div className="grid flex-1 text-left text-sm leading-tight">
@@ -73,9 +102,11 @@ export default function NavUser({
         <DropdownMenuLabel className="p-0 font-normal">
           <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
             <Avatar className="h-8 w-8 rounded-lg">
-              <AvatarImage src={displayAvatar} alt={displayName} />
+              {displayAvatar ? (
+                <AvatarImage src={displayAvatar} alt={displayName} />
+              ) : null}
               <AvatarFallback className="rounded-lg">
-                {displayName.charAt(0).toUpperCase() || "?"}
+                {firstLetter}
               </AvatarFallback>
             </Avatar>
             <div className="grid flex-1 text-left text-sm leading-tight">

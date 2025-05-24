@@ -51,9 +51,10 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { supabase } from "@/lib/supabase/client";
 import { Separator } from "@radix-ui/react-dropdown-menu";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 
 type Props = {
-    context: "patient";
+    context: "patient" | "clinician";
     id: string | null;
     fields?: any[];
     append?: (supplement: any) => void;
@@ -87,6 +88,10 @@ export default function SupplementRecommendation({
     const [supplementsData, setSupplementsData] = useState<any[]>([]);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [clinicians, setClinicians] = useState<Clinician[]>([]);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [statusFilter, setStatusFilter] = useState<string>("all");
+    const [dateFilter, setDateFilter] = useState<string>("");
+    const { isAdmin } = useIsAdmin();
 
     const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
@@ -162,7 +167,7 @@ export default function SupplementRecommendation({
                 return;
             }
             try {
-                const { data, error } = await supabase
+                const query = supabase
                     .from("supplements")
                     .select(`
                         *,
@@ -173,9 +178,25 @@ export default function SupplementRecommendation({
                                 middle_name,
                                 last_name
                             )
+                        ),
+                        patients!patient_id (
+                            id,
+                            person (
+                                first_name,
+                                middle_name,
+                                last_name
+                            )
                         )
-                    `)
-                    .eq("patient_id", id);
+                    `);
+
+                // Apply filter based on context
+                if (context === 'patient') {
+                    query.eq("patient_id", id);
+                } else {
+                    query.eq("clinician_id", id);
+                }
+
+                const { data, error } = await query;
 
                 if (error) {
                     console.error("Supplement fetch error:", error);
@@ -184,47 +205,50 @@ export default function SupplementRecommendation({
                         description: "Failed to fetch supplements.",
                     });
                     setSupplementsData([]);
-                } else {
-                    const formattedData = data.map((supplement: any) => {
-                        const clinicianName = supplement.clinicians?.person
-                            ? [
-                                  supplement.clinicians.person.first_name,
-                                  supplement.clinicians.person.middle_name,
-                                  supplement.clinicians.person.last_name,
-                              ]
-                                  .filter((part) => part != null && part !== "")
-                                  .join(" ") || "Unknown Clinician"
-                            : "Unknown Clinician";
+                    return;
+                }
 
-                        if (!supplement.clinicians?.person?.first_name) {
-                            console.warn(`Missing clinician name for supplement ID ${supplement.id}:`, supplement.clinicians);
-                        }
+                const formattedData = data.map((supplement: any) => {
+                    const clinicianName = supplement.clinicians?.person
+                        ? [
+                              supplement.clinicians.person.first_name,
+                              supplement.clinicians.person.middle_name,
+                              supplement.clinicians.person.last_name,
+                          ]
+                              .filter((part) => part != null && part !== "")
+                              .join(" ") || "Unknown Clinician"
+                        : "Unknown Clinician";
 
-                        return {
-                            ...supplement,
-                            clinician: clinicianName,
-                            date: supplement.date ? new Date(supplement.date).toLocaleDateString() : "N/A",
-                            status: supplement.status || "Active",
-                        };
-                    });
-                    setSupplementsData(formattedData);
-                    setFetchError(null);
-                    if (append) {
-                        formattedData.forEach((supplement: any) => {
-                            append({
-                                id: supplement.id,
-                                name: supplement.name,
-                                strength: supplement.strength,
-                                amount: supplement.amount,
-                                frequency: supplement.frequency,
-                                route: supplement.route,
-                                clinician_id: supplement.clinician_id?.toString(),
-                                clinician: supplement.clinician,
-                                date: supplement.date,
-                                status: supplement.status,
-                            });
-                        });
+                    const patientName = supplement.patients?.person
+                        ? [
+                              supplement.patients.person.first_name,
+                              supplement.patients.person.middle_name,
+                              supplement.patients.person.last_name,
+                          ]
+                              .filter((part) => part != null && part !== "")
+                              .join(" ") || "Unknown Patient"
+                        : "Unknown Patient";
+
+                    if (!supplement.clinicians?.person?.first_name) {
+                        console.warn(`Missing clinician name for supplement ID ${supplement.id}:`, supplement.clinicians);
                     }
+
+                    return {
+                        ...supplement,
+                        clinician: clinicianName,
+                        patient: patientName,
+                        date: supplement.date ? new Date(supplement.date).toLocaleDateString() : "N/A",
+                        status: supplement.status || "Active",
+                    };
+                });
+                setSupplementsData(formattedData);
+                setFetchError(null);
+                if (append) {
+                    formattedData.forEach((supplement: any) => {
+                        append({
+                            ...supplement
+                        });
+                    });
                 }
             } catch (err) {
                 console.error("Unexpected error fetching supplements:", err);
@@ -237,7 +261,7 @@ export default function SupplementRecommendation({
         }
 
         fetchSupplements();
-    }, [id, fields, append]);
+    }, [id, fields, append, context]);
 
     const onSubmitSupplement = async (data: FormValues) => {
         if (!id && !append) {
@@ -414,13 +438,29 @@ export default function SupplementRecommendation({
 
     const displaySupplements = fields.length > 0 ? fields : supplementsData;
 
+    // Filter supplements based on search term and filters
+    const filteredSupplements = displaySupplements.filter((supplement) => {
+        const matchesSearch = 
+            supplement.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            supplement.patient?.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        const matchesStatus = statusFilter === "all" || supplement.status === statusFilter;
+        
+        const matchesDate = !dateFilter || 
+            (supplement.date && new Date(supplement.date).toLocaleDateString() === new Date(dateFilter).toLocaleDateString());
+
+        return matchesSearch && matchesStatus && matchesDate;
+    });
+
     return (
         <Card>
             <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div className="space-y-1">
                     <CardTitle>Supplements</CardTitle>
                     <CardDescription>
-                        Identify your patient's supplements before it's too late
+                        {context === 'patient' 
+                            ? "Identify your patient's supplements before it's too late"
+                            : "View all supplements you have given to patients"}
                     </CardDescription>
                 </div>
                 <div className="relative flex items-center w-full max-w-sm md:w-auto">
@@ -433,214 +473,246 @@ export default function SupplementRecommendation({
                             // Implement search logic if needed
                         }}
                     />
-                    <Dialog
-                        open={openDialog}
-                        onOpenChange={(open) => {
-                            setOpenDialog(open);
-                            if (!open) {
-                                form.reset({
-                                    name: "",
-                                    strength: "",
-                                    amount: "",
-                                    frequency: "",
-                                    route: "",
-                                    clinician_id: "",
-                                });
-                            }
-                        }}
-                    >
-                        <DialogTrigger asChild>
-                            <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
-                                <PillBottle className="h-4 w-4" />
-                                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                                    Add Supplement
-                                </span>
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[1000px]">
-                            <DialogHeader>
-                                <DialogTitle>Add Supplement</DialogTitle>
-                                <DialogDescription>
-                                    Add a new supplement to your patient. Click save when you're done!
-                                </DialogDescription>
-                            </DialogHeader>
-                            <FormProvider {...form}>
-                                <Form {...form}>
-                                    <form
-                                        onSubmit={form.handleSubmit(onSubmitSupplement)}
-                                        className="grid gap-4 py-4"
-                                    >
-                                        <div className="grid grid-cols-3 gap-4">
-                                            <FormField
-                                                control={form.control}
-                                                name="name"
-                                                render={({ field }) => (
-                                                    <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                        <FormLabel htmlFor="supplement" className="text-right">
-                                                            Supplement
-                                                        </FormLabel>
-                                                        <FormControl>
-                                                            <Input
-                                                                id="supplement"
-                                                                placeholder="Enter supplement"
-                                                                className="col-span-4"
-                                                                {...field}
-                                                            />
-                                                        </FormControl>
-                                                        <FormMessage className="col-span-4" />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={form.control}
-                                                name="strength"
-                                                render={({ field }) => (
-                                                    <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                        <FormLabel htmlFor="strength" className="text-right">
-                                                            Strength
-                                                        </FormLabel>
-                                                        <FormControl>
-                                                            <Input
-                                                                id="strength"
-                                                                placeholder="Enter strength"
-                                                                className="col-span-4"
-                                                                {...field}
-                                                            />
-                                                        </FormControl>
-                                                        <FormMessage className="col-span-4" />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={form.control}
-                                                name="amount"
-                                                render={({ field }) => (
-                                                    <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                        <FormLabel htmlFor="amount" className="text-right">
-                                                            Amount
-                                                        </FormLabel>
-                                                        <FormControl>
-                                                            <Input
-                                                                id="amount"
-                                                                placeholder="Enter amount"
-                                                                className="col-span-4"
-                                                                {...field}
-                                                            />
-                                                        </FormControl>
-                                                        <FormMessage className="col-span-4" />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                        </div>
-                                        <div className="grid grid-cols-3 gap-4">
-                                            <FormField
-                                                control={form.control}
-                                                name="frequency"
-                                                render={({ field }) => (
-                                                    <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                        <FormLabel htmlFor="frequency" className="text-right">
-                                                            Frequency
-                                                        </FormLabel>
-                                                        <FormControl>
-                                                            <Input
-                                                                id="frequency"
-                                                                placeholder="Enter frequency"
-                                                                className="col-span-4"
-                                                                {...field}
-                                                            />
-                                                        </FormControl>
-                                                        <FormMessage className="col-span-4" />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={form.control}
-                                                name="route"
-                                                render={({ field }) => (
-                                                    <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                        <FormLabel htmlFor="route" className="text-right">
-                                                            Route
-                                                        </FormLabel>
-                                                        <FormControl>
-                                                            <Input
-                                                                id="route"
-                                                                placeholder="Enter route"
-                                                                className="col-span-4"
-                                                                {...field}
-                                                            />
-                                                        </FormControl>
-                                                        <FormMessage className="col-span-4" />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                            <FormField
-                                                control={form.control}
-                                                name="clinician_id"
-                                                render={({ field }) => (
-                                                    <FormItem className="grid grid-cols-4 items-center gap-2">
-                                                        <FormLabel htmlFor="clinician_id" className="text-right">
-                                                            Clinician
-                                                        </FormLabel>
-                                                        <Select onValueChange={field.onChange} value={field.value}>
+                    {context === 'patient' && (
+                        <Dialog
+                            open={openDialog}
+                            onOpenChange={(open) => {
+                                setOpenDialog(open);
+                                if (!open) {
+                                    form.reset({
+                                        name: "",
+                                        strength: "",
+                                        amount: "",
+                                        frequency: "",
+                                        route: "",
+                                        clinician_id: "",
+                                    });
+                                }
+                            }}
+                        >
+                            <DialogTrigger asChild>
+                                <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
+                                    <PillBottle className="h-4 w-4" />
+                                    <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+                                        Add Supplement
+                                    </span>
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[1000px]">
+                                <DialogHeader>
+                                    <DialogTitle>Add Supplement</DialogTitle>
+                                    <DialogDescription>
+                                        Add a new supplement to your patient. Click save when you're done!
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <FormProvider {...form}>
+                                    <Form {...form}>
+                                        <form
+                                            onSubmit={form.handleSubmit(onSubmitSupplement)}
+                                            className="grid gap-4 py-4"
+                                        >
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <FormField
+                                                    control={form.control}
+                                                    name="name"
+                                                    render={({ field }) => (
+                                                        <FormItem className="grid grid-cols-4 items-center gap-2">
+                                                            <FormLabel htmlFor="supplement" className="text-right">
+                                                                Supplement
+                                                            </FormLabel>
                                                             <FormControl>
-                                                                <SelectTrigger id="clinician_id" className="col-span-4">
-                                                                    <SelectValue placeholder="Select clinician" />
-                                                                </SelectTrigger>
+                                                                <Input
+                                                                    id="supplement"
+                                                                    placeholder="Enter supplement"
+                                                                    className="col-span-4"
+                                                                    {...field}
+                                                                />
                                                             </FormControl>
-                                                            <SelectContent>
-                                                                <div className="relative">
-                                                                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                                                    <Input
-                                                                        type="search"
-                                                                        placeholder="Search by name..."
-                                                                        className="w-full pl-8 rounded-lg bg-background"
-                                                                        // value={searchTerm}
-                                                                        // onChange={(e) => setSearchTerm(e.target.value)}
-                                                                    />
-                                                                </div>
-                                                                <div className="pt-2">
-                                                                <Separator />
-                                                                {clinicians.map((clinician) => (
-                                                                    <SelectItem key={clinician.id} value={clinician.id}>
-                                                                        {clinician.full_name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                                </div>
-                                                            </SelectContent>
-                                                        </Select>
-                                                        <FormMessage className="col-span-4" />
-                                                    </FormItem>
-                                                )}
-                                            />
-                                        </div>
-                                        <DialogFooter>
-                                            <Button type="submit">Save supplement</Button>
-                                        </DialogFooter>
-                                    </form>
-                                </Form>
-                            </FormProvider>
-                        </DialogContent>
-                    </Dialog>
+                                                            <FormMessage className="col-span-4" />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                                <FormField
+                                                    control={form.control}
+                                                    name="strength"
+                                                    render={({ field }) => (
+                                                        <FormItem className="grid grid-cols-4 items-center gap-2">
+                                                            <FormLabel htmlFor="strength" className="text-right">
+                                                                Strength
+                                                            </FormLabel>
+                                                            <FormControl>
+                                                                <Input
+                                                                    id="strength"
+                                                                    placeholder="Enter strength"
+                                                                    className="col-span-4"
+                                                                    {...field}
+                                                                />
+                                                            </FormControl>
+                                                            <FormMessage className="col-span-4" />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                                <FormField
+                                                    control={form.control}
+                                                    name="amount"
+                                                    render={({ field }) => (
+                                                        <FormItem className="grid grid-cols-4 items-center gap-2">
+                                                            <FormLabel htmlFor="amount" className="text-right">
+                                                                Amount
+                                                            </FormLabel>
+                                                            <FormControl>
+                                                                <Input
+                                                                    id="amount"
+                                                                    placeholder="Enter amount"
+                                                                    className="col-span-4"
+                                                                    {...field}
+                                                                />
+                                                            </FormControl>
+                                                            <FormMessage className="col-span-4" />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <FormField
+                                                    control={form.control}
+                                                    name="frequency"
+                                                    render={({ field }) => (
+                                                        <FormItem className="grid grid-cols-4 items-center gap-2">
+                                                            <FormLabel htmlFor="frequency" className="text-right">
+                                                                Frequency
+                                                            </FormLabel>
+                                                            <FormControl>
+                                                                <Input
+                                                                    id="frequency"
+                                                                    placeholder="Enter frequency"
+                                                                    className="col-span-4"
+                                                                    {...field}
+                                                                />
+                                                            </FormControl>
+                                                            <FormMessage className="col-span-4" />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                                <FormField
+                                                    control={form.control}
+                                                    name="route"
+                                                    render={({ field }) => (
+                                                        <FormItem className="grid grid-cols-4 items-center gap-2">
+                                                            <FormLabel htmlFor="route" className="text-right">
+                                                                Route
+                                                            </FormLabel>
+                                                            <FormControl>
+                                                                <Input
+                                                                    id="route"
+                                                                    placeholder="Enter route"
+                                                                    className="col-span-4"
+                                                                    {...field}
+                                                                />
+                                                            </FormControl>
+                                                            <FormMessage className="col-span-4" />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                                <FormField
+                                                    control={form.control}
+                                                    name="clinician_id"
+                                                    render={({ field }) => (
+                                                        <FormItem className="grid grid-cols-4 items-center gap-2">
+                                                            <FormLabel htmlFor="clinician_id" className="text-right">
+                                                                Clinician
+                                                            </FormLabel>
+                                                            <Select onValueChange={field.onChange} value={field.value}>
+                                                                <FormControl>
+                                                                    <SelectTrigger id="clinician_id" className="col-span-4">
+                                                                        <SelectValue placeholder="Select clinician" />
+                                                                    </SelectTrigger>
+                                                                </FormControl>
+                                                                <SelectContent>
+                                                                    <div className="relative">
+                                                                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                                                        <Input
+                                                                            type="search"
+                                                                            placeholder="Search by name..."
+                                                                            className="w-full pl-8 rounded-lg bg-background"
+                                                                            // value={searchTerm}
+                                                                            // onChange={(e) => setSearchTerm(e.target.value)}
+                                                                        />
+                                                                    </div>
+                                                                    <div className="pt-2">
+                                                                    <Separator />
+                                                                    {clinicians.map((clinician) => (
+                                                                        <SelectItem key={clinician.id} value={clinician.id}>
+                                                                            {clinician.full_name}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                    </div>
+                                                                </SelectContent>
+                                                            </Select>
+                                                            <FormMessage className="col-span-4" />
+                                                        </FormItem>
+                                                    )}
+                                                />
+                                            </div>
+                                            <DialogFooter>
+                                                <Button type="submit">Save supplement</Button>
+                                            </DialogFooter>
+                                        </form>
+                                    </Form>
+                                </FormProvider>
+                            </DialogContent>
+                        </Dialog>
+                    )}
                 </div>
             </CardHeader>
             <CardContent>
+                <div className="flex flex-col gap-4 mb-4">
+                    <div className="flex flex-wrap gap-4">
+                        <div className="flex-1 min-w-[200px]">
+                            <Input
+                                type="search"
+                                placeholder="Search by supplement name or patient..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full"
+                            />
+                        </div>
+                        <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="Filter by status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Status</SelectItem>
+                                <SelectItem value="Active">Active</SelectItem>
+                                <SelectItem value="Completed">Completed</SelectItem>
+                                <SelectItem value="Discontinued">Discontinued</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Input
+                            type="date"
+                            value={dateFilter}
+                            onChange={(e) => setDateFilter(e.target.value)}
+                            className="w-[180px]"
+                        />
+                    </div>
+                </div>
+
                 {fetchError ? (
                     <p className="text-sm text-red-600">{fetchError}</p>
-                ) : displaySupplements.length === 0 ? (
+                ) : filteredSupplements.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                        No supplements recorded for this patient.
+                        {searchTerm || statusFilter !== "all" || dateFilter
+                            ? "No supplements found matching the search criteria."
+                            : context === 'patient'
+                                ? "No supplements recorded for this patient."
+                                : "No supplements given by this clinician."}
                     </p>
                 ) : (
                     <Table>
                         <TableHeader>
                             <TableRow>
                                 <TableCell>
-                                    <Checkbox
-                                        id="select-all"
-                                        onCheckedChange={(checked) => {
-                                            // Implement select all logic if needed
-                                        }}
-                                    />
+                                    <Checkbox id="select-all" />
                                 </TableCell>
                                 <TableHead>Supplement</TableHead>
                                 <TableHead>Strength</TableHead>
@@ -648,13 +720,17 @@ export default function SupplementRecommendation({
                                 <TableHead>Frequency</TableHead>
                                 <TableHead>Route</TableHead>
                                 <TableHead>Status</TableHead>
-                                <TableHead>Clinician</TableHead>
+                                {context === 'patient' ? (
+                                    <TableHead>Clinician</TableHead>
+                                ) : (
+                                    <TableHead>Patient</TableHead>
+                                )}
                                 <TableHead>Issued on</TableHead>
-                                <TableHead>Actions</TableHead>
+                                {isAdmin && <TableHead>Actions</TableHead>}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {displaySupplements.map((supplement, index) => (
+                            {filteredSupplements.map((supplement, index) => (
                                 <TableRow key={supplement.id || index}>
                                     <TableCell>
                                         <Checkbox id={`supplement-${supplement.id || index}`} />
@@ -688,17 +764,21 @@ export default function SupplementRecommendation({
                                             </SelectContent>
                                         </Select>
                                     </TableCell>
-                                    <TableCell>{supplement.clinician || "Unknown Clinician"}</TableCell>
-                                    <TableCell>{supplement.date}</TableCell>
                                     <TableCell>
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => handleDelete(index)}
-                                        >
-                                            <Trash2 />
-                                            Delete
-                                        </Button>
+                                        {context === 'patient' ? supplement.clinician : supplement.patient}
                                     </TableCell>
+                                    <TableCell>{supplement.date}</TableCell>
+                                    {isAdmin && (
+                                        <TableCell>
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => handleDelete(index)}
+                                            >
+                                                <Trash2 />
+                                                Delete
+                                            </Button>
+                                        </TableCell>
+                                    )}
                                 </TableRow>
                             ))}
                         </TableBody>
@@ -707,7 +787,7 @@ export default function SupplementRecommendation({
             </CardContent>
             <CardFooter>
                 <div className="text-xs text-muted-foreground">
-                    Showing <strong>{displaySupplements.length}</strong> of{" "}
+                    Showing <strong>{filteredSupplements.length}</strong> of{" "}
                     <strong>{displaySupplements.length}</strong> Supplements
                 </div>
             </CardFooter>

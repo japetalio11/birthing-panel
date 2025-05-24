@@ -26,14 +26,15 @@ import {
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { Users, Stethoscope, Calendar } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 // Define the shape of the chart data
 interface ChartData {
   age: string;
   numberOfPatients: number;
 }
-
 export default function Dashboard() {
+  const router = useRouter();
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [activePatients, setActivePatients] = useState<number>(0);
   const [activeClinicians, setActiveClinicians] = useState<number>(0);

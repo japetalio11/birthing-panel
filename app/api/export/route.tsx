@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
         doc.text(row[1], leftMargin + 50, y);
         y += 10;
       });
-      y += 20;
+      y += 50;
 
       // Emergency Contact
       doc.setFontSize(16);
