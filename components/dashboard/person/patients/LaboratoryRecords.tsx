@@ -187,14 +187,12 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
 
   const formatDate = (date: string | Date): string => {
     if (!date) return today
-
     if (typeof date === 'string') {
       if (date.includes('T')) {
         return date.split('T')[0]
       }
       return date
     }
-
     return date.toISOString().split('T')[0]
   }
 
@@ -436,7 +434,6 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
         company: "",
         notes: "",
       })
-
       setSelectedFile(null)
       setFilePreview(null)
       setOpenDialog(false)
