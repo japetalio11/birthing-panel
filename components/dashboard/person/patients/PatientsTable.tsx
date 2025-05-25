@@ -278,6 +278,7 @@ export default function PatientsTable() {
         sort: "none" as "none" | "asc" | "desc",
         limit: "",
         exportFormat: "csv" as "csv" | "pdf",
+        onlyWithAppointments: false,
         exportContent: {
             basicInfo: true,
             appointments: false,
@@ -441,18 +442,60 @@ export default function PatientsTable() {
 
     const getExportPatients = () => {
         let result = [...filteredPatients];
+        console.log('Initial patients count:', result.length);
+
+        // Filter patients with appointments if the option is selected
+        if (exportFilters.onlyWithAppointments) {
+            result = result.filter(patient => patient.last_appointment !== null);
+            console.log('Patients with appointments:', result.length);
+        }
 
         if (exportFilters.startDate || exportFilters.endDate) {
             result = result.filter((patient) => {
                 if (!patient.last_appointment) return false;
-                const apptDate = new Date(patient.last_appointment);
-                const start = exportFilters.startDate
-                    ? new Date(exportFilters.startDate).setHours(0, 0, 0, 0)
-                    : -Infinity;
-                const end = exportFilters.endDate
-                    ? new Date(exportFilters.endDate).setHours(23, 59, 59, 999)
-                    : Infinity;
-                return apptDate.getTime() >= start && apptDate.getTime() <= end;
+                
+                try {
+                    // Parse the appointment date and time
+                    const [datePart, timePart] = patient.last_appointment.split(' at ');
+                    const [month, day, year] = datePart.split(' ');
+                    
+                    // Convert month name to month number
+                    const months = {
+                        'January': 0, 'February': 1, 'March': 2, 'April': 3,
+                        'May': 4, 'June': 5, 'July': 6, 'August': 7,
+                        'September': 8, 'October': 9, 'November': 10, 'December': 11
+                    };
+                    
+                    // Create date object from appointment
+                    const apptDate = new Date(
+                        parseInt(year),
+                        months[month as keyof typeof months],
+                        parseInt(day)
+                    );
+                    
+                    // Create date objects from filters
+                    const startDate = exportFilters.startDate ? new Date(exportFilters.startDate) : null;
+                    const endDate = exportFilters.endDate ? new Date(exportFilters.endDate) : null;
+                    
+                    // Set times for consistent comparison
+                    apptDate.setHours(0, 0, 0, 0);
+                    if (startDate) startDate.setHours(0, 0, 0, 0);
+                    if (endDate) endDate.setHours(23, 59, 59, 999);
+                    
+                    // Compare dates
+                    if (startDate && endDate) {
+                        return apptDate >= startDate && apptDate <= endDate;
+                    } else if (startDate) {
+                        return apptDate >= startDate;
+                    } else if (endDate) {
+                        return apptDate <= endDate;
+                    }
+                    
+                    return true;
+                } catch (error) {
+                    console.error('Error parsing date:', error);
+                    return false;
+                }
             });
         }
 
@@ -486,11 +529,18 @@ export default function PatientsTable() {
             }
         }
 
+        console.log('Final export patients:', result);
         return result;
     };
 
     const handleExport = async () => {
         const patientsToExport = getExportPatients();
+        console.log('Patients to export:', patientsToExport.length);
+        
+        if (patientsToExport.length === 0) {
+            toast.error("No patients match the selected criteria for export");
+            return;
+        }
         
         if (exportFilters.exportFormat === "csv") {
             try {
@@ -765,6 +815,7 @@ export default function PatientsTable() {
             try {
                 // For each patient, fetch their additional data based on export content options
                 for (const patient of patientsToExport) {
+                    console.log('Processing patient for PDF:', patient.name);
                     const exportData: any = {
                         patient: {
                             first_name: patient.name.split(" ")[0],
@@ -858,12 +909,14 @@ export default function PatientsTable() {
                     const url = window.URL.createObjectURL(pdfBlob);
                     const a = document.createElement("a");
                     a.href = url;
-                    a.download = `Patient_Report_${patient.name}.pdf`;
+                    a.download = `Patient_Report_${patient.name}_${new Date().toISOString().split('T')[0]}.pdf`;
+                    document.body.appendChild(a); // Add to document
                     a.click();
+                    document.body.removeChild(a); // Remove from document
                     window.URL.revokeObjectURL(url);
                 }
 
-                toast.success("PDF(s) exported successfully.");
+                toast.success(`Successfully exported ${patientsToExport.length} patient(s) to PDF`);
                 setOpenExportDialog(false);
             } catch (error: any) {
                 console.error("Export failed:", error);
@@ -1234,6 +1287,21 @@ export default function PatientsTable() {
                                                     })
                                                 }
                                             />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id="onlyWithAppointments"
+                                                checked={exportFilters.onlyWithAppointments}
+                                                onCheckedChange={(checked) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        onlyWithAppointments: !!checked,
+                                                    })
+                                                }
+                                            />
+                                            <Label htmlFor="onlyWithAppointments">Only Patients with Appointments</Label>
                                         </div>
                                     </div>
                                 </div>

@@ -259,6 +259,7 @@ export default function CliniciansTable() {
         role: "all" as "all" | "doctor" | "midwife",
         sort: "none" as "none" | "asc" | "desc",
         limit: "",
+        onlyWithAppointments: false,
         exportFormat: "csv" as "csv" | "pdf",
         exportContent: {
             basicInfo: true,
@@ -436,17 +437,57 @@ export default function CliniciansTable() {
     const getExportClinicians = () => {
         let result = [...filteredClinicians];
 
+        // Filter clinicians with appointments if the option is selected
+        if (exportFilters.onlyWithAppointments) {
+            result = result.filter(clinician => clinician.last_appointment !== null);
+        }
+
         if (exportFilters.startDate || exportFilters.endDate) {
             result = result.filter((clinician) => {
                 if (!clinician.last_appointment) return false;
-                const apptDate = new Date(clinician.last_appointment);
-                const start = exportFilters.startDate
-                    ? new Date(exportFilters.startDate).setHours(0, 0, 0, 0)
-                    : -Infinity;
-                const end = exportFilters.endDate
-                    ? new Date(exportFilters.endDate).setHours(23, 59, 59, 999)
-                    : Infinity;
-                return apptDate.getTime() >= start && apptDate.getTime() <= end;
+                
+                try {
+                    // Parse the appointment date and time
+                    const [datePart, timePart] = clinician.last_appointment.split(' at ');
+                    const [month, day, year] = datePart.split(' ');
+                    
+                    // Convert month name to month number
+                    const months = {
+                        'January': 0, 'February': 1, 'March': 2, 'April': 3,
+                        'May': 4, 'June': 5, 'July': 6, 'August': 7,
+                        'September': 8, 'October': 9, 'November': 10, 'December': 11
+                    };
+                    
+                    // Create date object from appointment
+                    const apptDate = new Date(
+                        parseInt(year),
+                        months[month as keyof typeof months],
+                        parseInt(day)
+                    );
+                    
+                    // Create date objects from filters
+                    const startDate = exportFilters.startDate ? new Date(exportFilters.startDate) : null;
+                    const endDate = exportFilters.endDate ? new Date(exportFilters.endDate) : null;
+                    
+                    // Set times for consistent comparison
+                    apptDate.setHours(0, 0, 0, 0);
+                    if (startDate) startDate.setHours(0, 0, 0, 0);
+                    if (endDate) endDate.setHours(23, 59, 59, 999);
+                    
+                    // Compare dates
+                    if (startDate && endDate) {
+                        return apptDate >= startDate && apptDate <= endDate;
+                    } else if (startDate) {
+                        return apptDate >= startDate;
+                    } else if (endDate) {
+                        return apptDate <= endDate;
+                    }
+                    
+                    return true;
+                } catch (error) {
+                    console.error('Error parsing date:', error);
+                    return false;
+                }
             });
         }
 
@@ -967,6 +1008,23 @@ export default function CliniciansTable() {
                                                 </SelectContent>
                                             </Select>
                                         </div>
+
+                                        <div className="space-y-2">
+                                            <div className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id="onlyWithAppointments"
+                                                    checked={exportFilters.onlyWithAppointments}
+                                                    onCheckedChange={(checked) =>
+                                                        setExportFilters({
+                                                            ...exportFilters,
+                                                            onlyWithAppointments: !!checked,
+                                                        })
+                                                    }
+                                                />
+                                                <Label htmlFor="onlyWithAppointments">Only Clinicians with Appointments</Label>
+                                            </div>
+                                        </div>
+
                                         <div className="space-y-2 mb-6">
                                             <Label>Export Content</Label>
                                             <div className="grid grid-cols-3 gap-4">
@@ -1114,7 +1172,7 @@ export default function CliniciansTable() {
                                             />
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                                         <div className="space-y-2">
                                             <Label>Status</Label>
                                             <Select
@@ -1178,20 +1236,20 @@ export default function CliniciansTable() {
                                                 </SelectContent>
                                             </Select>
                                         </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Export Limit</Label>
-                                        <Input
-                                            type="number"
-                                            placeholder="e.g., 3"
-                                            value={exportFilters.limit}
-                                            onChange={(e) =>
-                                                setExportFilters({
-                                                    ...exportFilters,
-                                                    limit: e.target.value,
-                                                })
-                                            }
-                                        />
+                                        <div className="space-y-2">
+                                            <Label>Export Limit</Label>
+                                            <Input
+                                                type="number"
+                                                placeholder="e.g., 3"
+                                                value={exportFilters.limit}
+                                                onChange={(e) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        limit: e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                                 <DialogFooter>
