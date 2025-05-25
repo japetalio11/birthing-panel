@@ -100,6 +100,7 @@ export default function PatientView() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
   const [showAppointmentForm, setShowAppointmentForm] = useState(false);
+  const [appointmentRefreshCounter, setAppointmentRefreshCounter] = useState(0);
 
   useEffect(() => {
     // Get user data from session storage
@@ -830,7 +831,11 @@ export default function PatientView() {
           </TabsContent>
 
           <TabsContent value="appointments">
-            <Appointments context="patient" id={id} />
+            <Appointments 
+              context="patient" 
+              id={id} 
+              refreshTrigger={appointmentRefreshCounter}
+            />
           </TabsContent>
 
           <TabsContent value="supplements">
@@ -856,6 +861,7 @@ export default function PatientView() {
           onOpenChange={setShowAppointmentForm}
           onSuccess={() => {
             setShowAppointmentForm(false);
+            setAppointmentRefreshCounter(prev => prev + 1);
             // Refresh patient data
             const fetchPatient = async () => {
               try {

@@ -992,6 +992,14 @@ export default function AppointmentView() {
             service: appointment?.service || "",
             status: appointment?.status || "",
             payment_status: appointment?.payment_status || "",
+            patient: appointment?.patient ? {
+              id: appointment.patient_id,
+              display: `${appointment.patient.person.first_name} ${appointment.patient.person.middle_name ? appointment.patient.person.middle_name + ' ' : ''}${appointment.patient.person.last_name}`
+            } : undefined,
+            clinician: appointment?.clinician ? {
+              id: appointment.clinician_id,
+              display: `${appointment.clinician.person.first_name} ${appointment.clinician.person.middle_name ? appointment.clinician.person.middle_name + ' ' : ''}${appointment.clinician.person.last_name}`
+            } : undefined
           }}
           onSuccess={handleUpdateSuccess}
         />

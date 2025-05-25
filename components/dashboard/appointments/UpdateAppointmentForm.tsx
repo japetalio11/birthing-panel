@@ -54,6 +54,14 @@ interface UpdateAppointmentFormProps {
     service: string;
     status: string;
     payment_status: string;
+    patient?: {
+      id: string;
+      display: string;
+    };
+    clinician?: {
+      id: string;
+      display: string;
+    };
   };
 }
 
@@ -72,14 +80,21 @@ export default function UpdateAppointmentForm({ open, onOpenChange, onSuccess, a
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentFormSchema),
     defaultValues: {
-      patient_id: appointmentData.patient_id,
-      clinician_id: appointmentData.clinician_id,
+      patient_id: appointmentData.patient_id.toString(),
+      clinician_id: appointmentData.clinician_id.toString(),
       date: new Date(appointmentData.date),
       service: appointmentData.service,
       status: appointmentData.status,
       payment_status: appointmentData.payment_status,
     },
   });
+
+  // Log form initialization
+  React.useEffect(() => {
+    console.log("=== Form Initialization ===");
+    console.log("Initial Form Values:", form.getValues());
+    console.log("Appointment Data received:", appointmentData);
+  }, []);
 
   // Add console logs to check user data
   React.useEffect(() => {
@@ -91,12 +106,14 @@ export default function UpdateAppointmentForm({ open, onOpenChange, onSuccess, a
 
   React.useEffect(() => {
     const fetchData = async () => {
-      console.log("=== Update Appointment Form - User Authentication State ===");
-      console.log("Current User Data:", userData);
-      console.log("Is Admin?", userData?.isAdmin);
-      console.log("User Name:", userData?.name);
+      console.log("=== Update Appointment Form - Starting Data Fetch ===");
+      console.log("Current Form Values:", form.getValues());
+      console.log("Appointment Data:", appointmentData);
+      console.log("User Data:", userData);
 
       try {
+        // Fetch patients data
+        console.log("Fetching patients data...");
         const { data: patientsData, error: patientsError } = await supabase
           .from("patients")
           .select(`
@@ -115,17 +132,24 @@ export default function UpdateAppointmentForm({ open, onOpenChange, onSuccess, a
         }
 
         if (patientsData) {
-          setPatients(
-            patientsData.map((p: any) => ({
-              id: p.id.toString(),
-              first_name: p.person.first_name || "",
-              middle_name: p.person.middle_name || null,
-              last_name: p.person.last_name || "",
-            }))
-          );
+          console.log("Raw Patients Data:", patientsData);
+          const formattedPatients = patientsData.map((p: any) => ({
+            id: p.id.toString(),
+            first_name: p.person.first_name || "",
+            middle_name: p.person.middle_name || null,
+            last_name: p.person.last_name || "",
+          }));
+          console.log("Formatted Patients:", formattedPatients);
+          console.log("Expected Patient ID:", appointmentData.patient_id);
+          setPatients(formattedPatients);
+
+          // Compare as strings
+          const patientExists = formattedPatients.some(p => p.id === appointmentData.patient_id.toString());
+          console.log("Patient exists in list:", patientExists);
         }
 
-        // If not admin, only show current clinician
+        // Fetch clinicians data
+        console.log("Starting clinician data fetch...");
         if (!userData?.isAdmin && userData?.name) {
           console.log("Fetching single clinician data for name:", userData.name);
           
@@ -163,11 +187,9 @@ export default function UpdateAppointmentForm({ open, onOpenChange, onSuccess, a
             };
             console.log("Single Clinician Data:", clinician);
             setClinicians([clinician]);
-            form.setValue("clinician_id", cliniciansData.id.toString());
           }
         } else {
           console.log("Fetching all clinicians (Admin view)");
-          // Admin can see all clinicians
           const { data: cliniciansData, error: cliniciansError } = await supabase
             .from("clinicians")
             .select(`
@@ -186,16 +208,29 @@ export default function UpdateAppointmentForm({ open, onOpenChange, onSuccess, a
           }
 
           if (cliniciansData) {
+            console.log("Raw Clinicians Data:", cliniciansData);
             const formattedClinicians = cliniciansData.map((c: any) => ({
               id: c.id.toString(),
               first_name: c.person.first_name || "",
               middle_name: c.person.middle_name || null,
               last_name: c.person.last_name || "",
             }));
-            console.log("All Clinicians Data:", formattedClinicians);
+            console.log("Formatted Clinicians:", formattedClinicians);
+            console.log("Expected Clinician ID:", appointmentData.clinician_id);
             setClinicians(formattedClinicians);
+
+            // Compare as strings
+            const clinicianExists = formattedClinicians.some(c => c.id === appointmentData.clinician_id.toString());
+            console.log("Clinician exists in list:", clinicianExists);
           }
         }
+
+        // Log final form state after data fetch
+        console.log("=== Final Form State After Data Fetch ===");
+        console.log("Form Values:", form.getValues());
+        console.log("Patients List:", patients);
+        console.log("Clinicians List:", clinicians);
+
       } catch (err) {
         console.error("Error fetching data:", err);
         toast.error("Failed to fetch data");
@@ -205,7 +240,15 @@ export default function UpdateAppointmentForm({ open, onOpenChange, onSuccess, a
     if (open) {
       fetchData();
     }
-  }, [open, userData, form]);
+  }, [open, userData]);
+
+  // Add effect to monitor form value changes
+  React.useEffect(() => {
+    const subscription = form.watch((value) => {
+      console.log("Form values changed:", value);
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
 
   const onSubmit = async (data: AppointmentFormValues) => {
     try {

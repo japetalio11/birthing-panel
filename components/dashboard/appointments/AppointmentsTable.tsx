@@ -121,6 +121,8 @@ interface Appointment {
   payment_status: string;
   patient?: Patient;
   clinician?: Clinician;
+  patient_name?: string;
+  clinician_name?: string;
 }
 
 interface AdvancedSearch {
@@ -181,17 +183,10 @@ const columns: Column[] = [
         <ArrowUpDown className="ml-2 h-4 w-4" />
       </Button>
     ),
-    accessorFn: (row: Appointment) => {
-      const person = row.patient?.person;
-      if (!person) return "Unknown Patient";
-      return `${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`;
-    },
-    cell: ({ row }) => {
-      const appointment = row.original;
-      const person = appointment.patient?.person;
-      if (!person) return "Unknown Patient";
-      return <div className="font-medium">{`${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`}</div>;
-    },
+    accessorKey: "patient_name",
+    cell: ({ row }) => (
+      <div className="font-medium">{row.getValue("patient_name")}</div>
+    ),
   },
   {
     id: "clinician_name",
@@ -204,17 +199,10 @@ const columns: Column[] = [
         <ArrowUpDown className="ml-2 h-4 w-4" />
       </Button>
     ),
-    accessorFn: (row: Appointment) => {
-      const person = row.clinician?.person;
-      if (!person) return "Unknown Clinician";
-      return `${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`;
-    },
-    cell: ({ row }) => {
-      const appointment = row.original;
-      const person = appointment.clinician?.person;
-      if (!person) return "Unknown Clinician";
-      return <div className="font-medium">{`${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`}</div>;
-    },
+    accessorKey: "clinician_name",
+    cell: ({ row }) => (
+      <div className="font-medium">{row.getValue("clinician_name")}</div>
+    ),
   },
   {
     accessorKey: "date",
@@ -573,9 +561,9 @@ export default function AppointmentsTable() {
 
   // Fetch appointments from Supabase
   const fetchAppointments = React.useCallback(async () => {
-    if (!userData) return; // Don't fetch if user data isn't available yet
-  
-    setLoading(true); // Set loading state before fetching
+    if (!userData) return;
+
+    setLoading(true);
     let isMounted = true;
     try {
       let query = supabase
@@ -604,39 +592,44 @@ export default function AppointmentsTable() {
             )
           )
         `);
-  
-      // If user is not admin, only show their appointments
+
       if (!userData.isAdmin && userData.clinicianId) {
         query = query.eq('clinician_id', userData.clinicianId);
       }
-  
+
       const { data, error } = await query;
-  
+
       if (error) {
         throw error;
       }
-  
+
       if (isMounted) {
-        // Transform the data
-        const transformedData = data.map((appointment) => ({
-          ...appointment,
-          patient_name: appointment.patients?.person ? 
-            `${appointment.patients.person.first_name}${appointment.patients.person.middle_name ? ` ${appointment.patients.person.middle_name}` : ""} ${appointment.patients.person.last_name}` : 
-            "Unknown Patient",
-          clinician_name: appointment.clinicians?.person ? 
-            `${appointment.clinicians.person.first_name}${appointment.clinicians.person.middle_name ? ` ${appointment.clinicians.person.middle_name}` : ""} ${appointment.clinicians.person.last_name}` : 
-            "Unknown Clinician",
-          patient: appointment.patients ? {
-            id: appointment.patients.person.id,
-            person: appointment.patients.person
-          } : undefined,
-          clinician: appointment.clinicians ? {
-            role: appointment.clinicians.role,
-            specialization: appointment.clinicians.specialization,
-            person: appointment.clinicians.person
-          } : undefined
-        }));
-  
+        // Transform the data and pre-compute names
+        const transformedData = data.map((appointment) => {
+          const patientName = appointment.patients?.person ? 
+            `${appointment.patients.person.first_name}${appointment.patients.person.middle_name ? ` ${appointment.patients.person.middle_name}` : ""} ${appointment.patients.person.last_name}`.trim() : 
+            "Unknown Patient";
+          
+          const clinicianName = appointment.clinicians?.person ? 
+            `${appointment.clinicians.person.first_name}${appointment.clinicians.person.middle_name ? ` ${appointment.clinicians.person.middle_name}` : ""} ${appointment.clinicians.person.last_name}`.trim() : 
+            "Unknown Clinician";
+
+          return {
+            ...appointment,
+            patient_name: patientName,
+            clinician_name: clinicianName,
+            patient: appointment.patients ? {
+              id: appointment.patients.person.id,
+              person: appointment.patients.person
+            } : undefined,
+            clinician: appointment.clinicians ? {
+              role: appointment.clinicians.role,
+              specialization: appointment.clinicians.specialization,
+              person: appointment.clinicians.person
+            } : undefined
+          };
+        });
+
         setAppointments(transformedData);
       }
     } catch (error) {
@@ -644,7 +637,7 @@ export default function AppointmentsTable() {
       toast.error('Failed to fetch appointments');
     } finally {
       if (isMounted) {
-        setLoading(false); // Set loading state to false after fetch completes
+        setLoading(false);
       }
     }
   }, [userData]);

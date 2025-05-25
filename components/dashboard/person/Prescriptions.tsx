@@ -53,6 +53,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { supabase } from "@/lib/supabase/client";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { DatePicker } from "@/components/ui/date-picker";
 
 type Props = {
   context: "patient" | "clinician";
@@ -113,6 +114,7 @@ export default function Prescriptions({
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<string>("");
+  const [showPrescriptionDropdown, setShowPrescriptionDropdown] = useState(false);
   const { isAdmin } = useIsAdmin();
   const { userData } = useCurrentUser();
 
@@ -622,33 +624,13 @@ export default function Prescriptions({
                           control={form.control}
                           name="name"
                           render={({ field }) => (
-                            <FormItem>
+                            <FormItem className="flex flex-col">
                               <FormLabel>Prescription</FormLabel>
-                              <Select
-                                value={field.value}
-                                onValueChange={(value) => {
-                                  const prescription = COMMON_PRESCRIPTIONS.find(p => p.name === value);
-                                  if (prescription) {
-                                    form.setValue("name", prescription.name);
-                                    form.setValue("strength", prescription.strength);
-                                    form.setValue("amount", prescription.amount);
-                                    form.setValue("frequency", prescription.frequency);
-                                    form.setValue("route", prescription.route);
-                                  }
-                                }}
-                              >
+                              <div className="relative">
                                 <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue>
-                                      {field.value || "Select or type prescription"}
-                                    </SelectValue>
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  <input
-                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 mb-2"
-                                    placeholder="Type custom prescription..."
-                                    value={field.value}
+                                  <Input
+                                    {...field}
+                                    placeholder="Type or select prescription..."
                                     onChange={(e) => {
                                       field.onChange(e.target.value);
                                       // Clear other fields when typing custom
@@ -657,15 +639,43 @@ export default function Prescriptions({
                                       form.setValue("frequency", "");
                                       form.setValue("route", "");
                                     }}
+                                    onFocus={() => setShowPrescriptionDropdown(true)}
+                                    onBlur={(e) => {
+                                      // Check if the related target is in the dropdown
+                                      const dropdown = e.currentTarget.parentElement?.querySelector('.prescription-dropdown');
+                                      if (!dropdown?.contains(e.relatedTarget)) {
+                                        setShowPrescriptionDropdown(false);
+                                      }
+                                    }}
                                   />
-                                  <SelectSeparator className="my-2" />
-                                  {COMMON_PRESCRIPTIONS.map((prescription) => (
-                                    <SelectItem key={prescription.name} value={prescription.name}>
-                                      {prescription.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                </FormControl>
+                                {showPrescriptionDropdown && (
+                                  <div 
+                                    className="prescription-dropdown absolute w-full z-10 top-[100%] max-h-[200px] overflow-auto rounded-md border bg-popover p-0 text-popover-foreground shadow-md"
+                                    onMouseDown={(e) => {
+                                      // Prevent blur from hiding dropdown when clicking options
+                                      e.preventDefault();
+                                    }}
+                                  >
+                                    {COMMON_PRESCRIPTIONS.map((prescription) => (
+                                      <div
+                                        key={prescription.name}
+                                        className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                                        onMouseDown={() => {
+                                          form.setValue("name", prescription.name);
+                                          form.setValue("strength", prescription.strength);
+                                          form.setValue("amount", prescription.amount);
+                                          form.setValue("frequency", prescription.frequency);
+                                          form.setValue("route", prescription.route);
+                                          setShowPrescriptionDropdown(false);
+                                        }}
+                                      >
+                                        {prescription.name}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                               <FormMessage />
                             </FormItem>
                           )}
@@ -795,7 +805,7 @@ export default function Prescriptions({
       <CardContent>
         <div className="flex flex-col gap-4 mb-4">
           <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]">
+            <div className="flex-1 min-w-[180px] max-w-[790px]">
               <Input
                 type="search"
                 placeholder="Search by prescription name or patient..."
@@ -804,23 +814,34 @@ export default function Prescriptions({
                 className="w-full"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Completed">Completed</SelectItem>
-                <SelectItem value="Discontinued">Discontinued</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="w-[180px]"
-            />
+            <div className="flex-none w-[180px]">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="Active" className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-green-400" />
+                    Active
+                  </SelectItem>
+                  <SelectItem value="Completed" className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-blue-400" />
+                    Completed
+                  </SelectItem>
+                  <SelectItem value="Discontinued" className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-red-400" />
+                    Discontinued
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex-none w-[200px]">
+              <DatePicker
+                value={dateFilter ? new Date(dateFilter) : undefined}
+                onChange={(date) => setDateFilter(date ? date.toISOString() : "")}
+              />
+            </div>
           </div>
         </div>
         {fetchError ? (
