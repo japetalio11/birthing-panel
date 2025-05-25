@@ -13,6 +13,7 @@ import Allergy from "../Allergy";
 import SupplementRecommendation from "../SupplementRecommendation";
 import Prescriptions from "../Prescriptions";
 import LaboratoryRecords from "../patients/LaboratoryRecords";
+import Appointments from "../Appointments";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import {
@@ -82,6 +83,7 @@ export default function PatientView() {
     supplements: false,
     labRecords: false,
     prescriptions: false,
+    appointments: false
   });
   const [exportFormat, setExportFormat] = useState("pdf");
   const [isExporting, setIsExporting] = useState(false);
@@ -267,6 +269,7 @@ export default function PatientView() {
       let supplements: any[] = [];
       let labRecords: any[] = [];
       let prescriptions: any[] = [];
+      let appointments: any[] = [];
 
       if (exportOptions.allergies) {
         console.log("Fetching allergies...");
@@ -352,6 +355,36 @@ export default function PatientView() {
         console.log("Prescriptions fetched:", prescriptions);
       }
 
+      if (exportOptions.appointments) {
+        console.log("Fetching appointments...");
+        const { data, error } = await supabase
+          .from("appointment")
+          .select(`
+            *,
+            clinicians!clinician_id (
+              person (
+                first_name,
+                middle_name,
+                last_name
+              )
+            )
+          `)
+          .eq("patient_id", id);
+        if (error) throw new Error(`Failed to fetch appointments: ${error.message}`);
+        appointments = data.map((app: any) => ({
+          ...app,
+          clinician: [
+            app.clinicians.person.first_name,
+            app.clinicians.person.middle_name,
+            app.clinicians.person.last_name,
+          ]
+            .filter((part) => part)
+            .join(" ") || "Unknown Clinician",
+          date: new Date(app.date).toLocaleDateString()
+        }));
+        console.log("Appointments fetched:", appointments);
+      }
+
       const exportData = {
         patient,
         exportOptions,
@@ -359,6 +392,7 @@ export default function PatientView() {
         supplements,
         labRecords,
         prescriptions,
+        appointments
       };
       console.log("Export data prepared:", exportData);
 
@@ -584,6 +618,24 @@ export default function PatientView() {
                   <div className="grid gap-4 py-4">
                     <div className="flex items-center space-x-2">
                       <Checkbox
+                        id="selectAll"
+                        checked={Object.values(exportOptions).every(Boolean)}
+                        onCheckedChange={(checked) => {
+                          setExportOptions({
+                            basicInfo: !!checked,
+                            allergies: !!checked,
+                            supplements: !!checked,
+                            labRecords: !!checked,
+                            prescriptions: !!checked,
+                            appointments: !!checked
+                          });
+                        }}
+                      />
+                      <Label htmlFor="selectAll" className="font-semibold">Select All</Label>
+                    </div>
+                    <div className="h-px bg-border" /> {/* Divider */}
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
                         id="basicInfo"
                         checked={exportOptions.basicInfo}
                         onCheckedChange={(checked) =>
@@ -631,6 +683,16 @@ export default function PatientView() {
                         }
                       />
                       <Label htmlFor="labRecords">Laboratory Records</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="appointments"
+                        checked={exportOptions.appointments}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, appointments: !!checked })
+                        }
+                      />
+                      <Label htmlFor="appointments">Appointments</Label>
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                       <Label htmlFor="format" className="text-right">
@@ -745,7 +807,9 @@ export default function PatientView() {
             </div>
           </TabsContent>
 
-          <TabsContent value="appointments"></TabsContent>
+          <TabsContent value="appointments">
+            <Appointments context="patient" id={id} />
+          </TabsContent>
 
           <TabsContent value="supplements">
             <SupplementRecommendation context="patient" id={id} />

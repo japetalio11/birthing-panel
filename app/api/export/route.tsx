@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing patient data or export options" }, { status: 400 });
     }
 
-    const { patient, exportOptions, allergies, supplements, labRecords, prescriptions } = data;
+    const { patient, exportOptions, allergies, supplements, labRecords, prescriptions, appointments } = data;
     const fullName = `${patient.first_name} ${patient.middle_name ? patient.middle_name + " " : ""}${patient.last_name}`;
     const ecFullName = patient.ec_first_name
       ? `${patient.ec_first_name} ${patient.ec_middle_name ? patient.ec_middle_name + " " : ""}${patient.ec_last_name}`
@@ -232,6 +232,28 @@ export async function POST(req: NextRequest) {
         checkPageBreak(15);
         doc.text(
           `Prescription ${index + 1}: ${pres.name || "N/A"} (Strength: ${pres.strength || "N/A"}, Amount: ${pres.amount || "N/A"}, Frequency: ${pres.frequency || "N/A"}, Route: ${pres.route || "N/A"}, Clinician: ${pres.clinician || "N/A"}, Status: ${pres.status || "N/A"}, Issued: ${pres.date ? new Date(pres.date).toLocaleDateString() : "N/A"})`,
+          leftMargin,
+          y,
+          { maxWidth: tableWidth }
+        );
+        y += 15;
+      });
+      y += 20;
+    }
+
+    if (exportOptions.appointments && appointments.length > 0) {
+      console.log("Adding appointments to PDF...");
+      doc.setFontSize(16);
+      checkPageBreak(20);
+      doc.setFillColor(220, 235, 255); // Light blue background for section title
+      doc.rect(leftMargin, y - 10, tableWidth, 20, "F");
+      doc.text("Appointments", leftMargin, y);
+      y += 20;
+      doc.setFontSize(12);
+      appointments.forEach((app: any, index: number) => {
+        checkPageBreak(15);
+        doc.text(
+          `Appointment ${index + 1}: ${app.service || "N/A"} (Date: ${app.date || "N/A"}, Clinician: ${app.clinician || "N/A"}, Status: ${app.status || "N/A"}, Payment Status: ${app.payment_status || "N/A"})`,
           leftMargin,
           y,
           { maxWidth: tableWidth }

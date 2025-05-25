@@ -72,7 +72,10 @@ import {
     useReactTable,
     flexRender
 } from "@tanstack/react-table";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useState } from "react";
 
 interface Clinician {
     id: number;
@@ -266,6 +269,25 @@ export default function CliniciansTable() {
     const [sorting, setSorting] = React.useState<SortingState>([]);
     const [rowSelection, setRowSelection] = React.useState({});
     const [userData, setUserData] = React.useState<any>(null);
+    const [openExportDialog, setOpenExportDialog] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
+    const [exportFilters, setExportFilters] = useState({
+        startDate: undefined as Date | undefined,
+        endDate: undefined as Date | undefined,
+        minAge: "",
+        maxAge: "",
+        status: "all" as "all" | "active" | "inactive",
+        role: "all" as "all" | "doctor" | "midwife",
+        sort: "none" as "none" | "asc" | "desc",
+        limit: "",
+        exportFormat: "csv" as "csv" | "pdf",
+        exportContent: {
+            basicInfo: true,
+            appointments: false,
+            supplements: false,
+            prescriptions: false
+        }
+    });
 
     // Expose update function to window for column access
     React.useEffect(() => {
@@ -327,9 +349,10 @@ export default function CliniciansTable() {
 
                 const clinicianIds = cliniciansData.map((p: any) => p.id);
                 const { data: appointmentsData, error: appointmentsError } = await supabase
-                    .from("appointments")
+                    .from("appointment")
                     .select("clinician_id, date")
-                    .in("clinician_id", clinicianIds);
+                    .in("clinician_id", clinicianIds)
+                    .order('date', { ascending: false });
 
                 if (appointmentsError) {
                     toast.warning(`Failed to fetch appointments: ${appointmentsError.message}`);
@@ -446,38 +469,410 @@ export default function CliniciansTable() {
         },
     });
 
-    // Handle export
-    const handleExport = () => {
-        const headers = [
-            "Name",
-            "Role",
-            "Status",
-            "Last Appointment",
-            "Age",
-            "Contact Number",
-            "Home Address",
-        ];
-        const rows = filteredClinicians.map((clinician) => [
-            clinician.name,
-            clinician.role,
-            clinician.status,
-            clinician.last_appointment || "",
-            clinician.age || "",
-            clinician.contact_number || "",
-            clinician.address || "",
-        ]);
+    const getExportClinicians = () => {
+        let result = [...filteredClinicians];
 
-        const csvContent = [
-            headers.join(","),
-            ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
-        ].join("\n");
+        if (exportFilters.startDate || exportFilters.endDate) {
+            result = result.filter((clinician) => {
+                if (!clinician.last_appointment) return false;
+                const apptDate = new Date(clinician.last_appointment);
+                const start = exportFilters.startDate
+                    ? new Date(exportFilters.startDate).setHours(0, 0, 0, 0)
+                    : -Infinity;
+                const end = exportFilters.endDate
+                    ? new Date(exportFilters.endDate).setHours(23, 59, 59, 999)
+                    : Infinity;
+                return apptDate.getTime() >= start && apptDate.getTime() <= end;
+            });
+        }
 
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "clinicians_export.csv";
-        link.click();
-        toast.success("Data exported successfully.");
+        if (exportFilters.minAge || exportFilters.maxAge) {
+            result = result.filter((clinician) => {
+                if (!clinician.age) return false;
+                const age = parseInt(clinician.age);
+                const min = exportFilters.minAge ? parseInt(exportFilters.minAge) : -Infinity;
+                const max = exportFilters.maxAge ? parseInt(exportFilters.maxAge) : Infinity;
+                return age >= min && age <= max;
+            });
+        }
+
+        if (exportFilters.status !== "all") {
+            result = result.filter((clinician) =>
+                clinician.status.toLowerCase() === exportFilters.status
+            );
+        }
+
+        if (exportFilters.role !== "all") {
+            result = result.filter((clinician) =>
+                clinician.role.toLowerCase() === exportFilters.role
+            );
+        }
+
+        if (exportFilters.sort !== "none") {
+            result.sort((a, b) => {
+                const comparison = a.name.localeCompare(b.name);
+                return exportFilters.sort === "asc" ? comparison : -comparison;
+            });
+        }
+
+        if (exportFilters.limit) {
+            const limit = parseInt(exportFilters.limit);
+            if (!isNaN(limit) && limit > 0) {
+                result = result.slice(0, limit);
+            }
+        }
+
+        return result;
+    };
+
+    const handleExport = async () => {
+        const cliniciansToExport = getExportClinicians();
+        
+        if (exportFilters.exportFormat === "csv") {
+            try {
+                // For each clinician, fetch their additional data based on export content options
+                const allCliniciansData = await Promise.all(cliniciansToExport.map(async (clinician) => {
+                    const nameParts = clinician.name.split(" ").filter(Boolean);
+                    const clinicianData: any = {
+                        basic: {
+                            name: clinician.name,
+                            role: clinician.role || "",
+                            status: clinician.status || "",
+                            last_appointment: clinician.last_appointment || "",
+                            age: clinician.age || "",
+                            contact_number: clinician.contact_number || "",
+                            address: clinician.address || ""
+                        }
+                    };
+
+                    // Fetch appointments if needed
+                    if (exportFilters.exportContent.appointments) {
+                        const { data: appointments } = await supabase
+                            .from("appointment")
+                            .select(`
+                                *,
+                                patients!patient_id (
+                                    person (
+                                        first_name,
+                                        middle_name,
+                                        last_name
+                                    )
+                                )
+                            `)
+                            .eq("clinician_id", clinician.id);
+                        clinicianData.appointments = appointments || [];
+                    }
+
+                    // Fetch supplements if needed
+                    if (exportFilters.exportContent.supplements) {
+                        const { data: supplements } = await supabase
+                            .from("supplements")
+                            .select(`
+                                *,
+                                patients (
+                                    person (
+                                        first_name,
+                                        middle_name,
+                                        last_name
+                                    )
+                                )
+                            `)
+                            .eq("clinician_id", clinician.id);
+                        clinicianData.supplements = supplements || [];
+                    }
+
+                    // Fetch prescriptions if needed
+                    if (exportFilters.exportContent.prescriptions && clinician.role === "Doctor") {
+                        const { data: prescriptions } = await supabase
+                            .from("prescriptions")
+                            .select(`
+                                *,
+                                patients!patient_id (
+                                    person (
+                                        first_name,
+                                        middle_name,
+                                        last_name
+                                    )
+                                )
+                            `)
+                            .eq("clinician_id", clinician.id);
+                        clinicianData.prescriptions = prescriptions || [];
+                    }
+
+                    return clinicianData;
+                }));
+
+                // Generate CSV content
+                let csvContent = "";
+                let headers: string[] = [];
+                let rows: string[][] = [];
+
+                // Add basic info headers if selected
+                if (exportFilters.exportContent.basicInfo) {
+                    headers = headers.concat([
+                        "Name",
+                        "Role",
+                        "Status",
+                        "Last Appointment",
+                        "Age",
+                        "Contact Number",
+                        "Home Address"
+                    ]);
+                }
+
+                // Add appointments headers if selected
+                if (exportFilters.exportContent.appointments) {
+                    headers = headers.concat([
+                        "Appointment Date",
+                        "Appointment Service",
+                        "Appointment Status",
+                        "Appointment Payment Status",
+                        "Appointment Patient"
+                    ]);
+                }
+
+                // Add supplements headers if selected
+                if (exportFilters.exportContent.supplements) {
+                    headers = headers.concat([
+                        "Supplement Name",
+                        "Supplement Strength",
+                        "Supplement Amount",
+                        "Supplement Frequency",
+                        "Supplement Route",
+                        "Supplement Status",
+                        "Supplement Patient",
+                        "Supplement Date"
+                    ]);
+                }
+
+                // Add prescriptions headers if selected
+                if (exportFilters.exportContent.prescriptions) {
+                    headers = headers.concat([
+                        "Prescription Name",
+                        "Prescription Strength",
+                        "Prescription Amount",
+                        "Prescription Frequency",
+                        "Prescription Route",
+                        "Prescription Status",
+                        "Prescription Patient",
+                        "Prescription Date"
+                    ]);
+                }
+
+                // Process each clinician's data
+                allCliniciansData.forEach((clinicianData) => {
+                    if (!clinicianData || !clinicianData.basic) return; // Skip if data is invalid
+
+                    const maxRows = Math.max(
+                        1,
+                        exportFilters.exportContent.appointments ? (clinicianData.appointments?.length || 0) : 0,
+                        exportFilters.exportContent.supplements ? (clinicianData.supplements?.length || 0) : 0,
+                        exportFilters.exportContent.prescriptions ? (clinicianData.prescriptions?.length || 0) : 0
+                    );
+
+                    // Create rows for each clinician
+                    for (let i = 0; i < maxRows; i++) {
+                        const row: string[] = [];
+
+                        // Add basic info (only on first row)
+                        if (exportFilters.exportContent.basicInfo) {
+                            if (i === 0) {
+                                row.push(
+                                    clinicianData.basic.name || "",
+                                    clinicianData.basic.role || "",
+                                    clinicianData.basic.status || "",
+                                    clinicianData.basic.last_appointment || "",
+                                    clinicianData.basic.age || "",
+                                    clinicianData.basic.contact_number || "",
+                                    clinicianData.basic.address || ""
+                                );
+                            } else {
+                                row.push("", "", "", "", "", "", "");
+                            }
+                        }
+
+                        // Add appointment data
+                        if (exportFilters.exportContent.appointments) {
+                            const appointment = clinicianData.appointments?.[i] || {};
+                            const patientName = appointment.patients?.person ? 
+                                `${appointment.patients.person.first_name || ''} ${appointment.patients.person.middle_name || ''} ${appointment.patients.person.last_name || ''}`.trim() : "";
+                            row.push(
+                                appointment.date || "",
+                                appointment.service || "",
+                                appointment.status || "",
+                                appointment.payment_status || "",
+                                patientName || ""
+                            );
+                        }
+
+                        // Add supplement data
+                        if (exportFilters.exportContent.supplements) {
+                            const supplement = clinicianData.supplements?.[i] || {};
+                            const patientName = supplement.patients?.person ? 
+                                `${supplement.patients.person.first_name || ''} ${supplement.patients.person.middle_name || ''} ${supplement.patients.person.last_name || ''}`.trim() : "";
+                            row.push(
+                                supplement.name || "",
+                                supplement.strength || "",
+                                supplement.amount || "",
+                                supplement.frequency || "",
+                                supplement.route || "",
+                                supplement.status || "",
+                                patientName || "",
+                                supplement.date || ""
+                            );
+                        }
+
+                        // Add prescription data
+                        if (exportFilters.exportContent.prescriptions) {
+                            const prescription = clinicianData.prescriptions?.[i] || {};
+                            const patientName = prescription.patients?.person ? 
+                                `${prescription.patients.person.first_name || ''} ${prescription.patients.person.middle_name || ''} ${prescription.patients.person.last_name || ''}`.trim() : "";
+                            row.push(
+                                prescription.name || "",
+                                prescription.strength || "",
+                                prescription.amount || "",
+                                prescription.frequency || "",
+                                prescription.route || "",
+                                prescription.status || "",
+                                patientName || "",
+                                prescription.date || ""
+                            );
+                        }
+
+                        rows.push(row);
+                    }
+                });
+
+                // Create CSV content
+                csvContent = [
+                    headers.join(","),
+                    ...rows.map(row => row.map(cell => `"${(cell || "").replace(/"/g, '""')}"`).join(","))
+                ].join("\n");
+
+                // Download CSV file
+                const csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                const link = document.createElement("a");
+                const today = new Date().toISOString().split('T')[0];
+                link.href = URL.createObjectURL(csvBlob);
+                link.download = `clinicians_export_${today}.csv`;
+                link.click();
+                toast.success("CSV exported successfully.");
+                setOpenExportDialog(false);
+            } catch (error: any) {
+                console.error("CSV export failed:", error);
+                toast.error(`Failed to generate CSV: ${error.message}`);
+            }
+        } else {
+            try {
+                let exportPromises = cliniciansToExport.map(async (clinician) => {
+                    const exportData: any = {
+                        clinician: {
+                            first_name: clinician.name.split(" ")[0] || "",
+                            middle_name: clinician.name.split(" ").length > 2 ? clinician.name.split(" ")[1] : "",
+                            last_name: clinician.name.split(" ").pop() || "",
+                            role: clinician.role || "",
+                            status: clinician.status || "",
+                            age: clinician.age || "",
+                            contact_number: clinician.contact_number || "",
+                            address: clinician.address || ""
+                        },
+                        exportOptions: exportFilters.exportContent
+                    };
+
+                    if (exportFilters.exportContent.appointments) {
+                        const { data: appointments } = await supabase
+                            .from("appointment")
+                            .select(`
+                                *,
+                                patients!patient_id (
+                                    person (
+                                        first_name,
+                                        middle_name,
+                                        last_name
+                                    )
+                                )
+                            `)
+                            .eq("clinician_id", clinician.id);
+                        exportData.appointments = appointments || [];
+                    }
+
+                    if (exportFilters.exportContent.supplements) {
+                        const { data: supplements } = await supabase
+                            .from("supplements")
+                            .select(`
+                                *,
+                                patients (
+                                    person (
+                                        first_name,
+                                        middle_name,
+                                        last_name
+                                    )
+                                )
+                            `)
+                            .eq("clinician_id", clinician.id);
+                        exportData.supplements = supplements || [];
+                    }
+
+                    if (exportFilters.exportContent.prescriptions && clinician.role === "Doctor") {
+                        const { data: prescriptions } = await supabase
+                            .from("prescriptions")
+                            .select(`
+                                *,
+                                patients!patient_id (
+                                    person (
+                                        first_name,
+                                        middle_name,
+                                        last_name
+                                    )
+                                )
+                            `)
+                            .eq("clinician_id", clinician.id);
+                        exportData.prescriptions = prescriptions || [];
+                    }
+
+                    try {
+                        const response = await fetch("/api/export/clinician", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(exportData),
+                        });
+
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.error || `Failed to export PDF for ${clinician.name}`);
+                        }
+
+                        const pdfBlob = await response.blob();
+                        const url = window.URL.createObjectURL(pdfBlob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `Clinician_Report_${clinician.name}.pdf`;
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        return true;
+                    } catch (error) {
+                        console.error(`Error exporting PDF for ${clinician.name}:`, error);
+                        return false;
+                    }
+                });
+
+                const results = await Promise.all(exportPromises);
+                const successCount = results.filter(Boolean).length;
+                
+                if (successCount === cliniciansToExport.length) {
+                    toast.success("All PDFs exported successfully.");
+                } else if (successCount > 0) {
+                    toast.warning(`${successCount} out of ${cliniciansToExport.length} PDFs exported successfully.`);
+                } else {
+                    toast.error("Failed to export any PDFs.");
+                }
+                
+                setOpenExportDialog(false);
+            } catch (error: any) {
+                console.error("Export failed:", error);
+                toast.error(`Failed to generate export: ${error.message}`);
+            }
+        }
     };
 
     return (
@@ -572,27 +967,276 @@ export default function CliniciansTable() {
                             </DropdownMenuContent>
                         </DropdownMenu>
 
-                        <Dialog>
+                        <Dialog open={openExportDialog} onOpenChange={setOpenExportDialog}>
                             <DialogTrigger asChild>
-                                <Button size="sm" variant="outline" className="h-8 gap-1">
+                                <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => setOpenExportDialog(true)}>
                                     <Download />
-                                    <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                                        Export
-                                    </span>
+                                    <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Export</span>
                                 </Button>
                             </DialogTrigger>
-                            <DialogContent>
+                            <DialogContent className="sm:max-w-[600px]">
                                 <DialogHeader>
-                                    <DialogTitle>Export Data</DialogTitle>
+                                    <DialogTitle>Export Clinicians</DialogTitle>
                                     <DialogDescription>
-                                        Export the current clinician list as a CSV file.
+                                        Customize your export by applying filters and selecting export options.
                                     </DialogDescription>
                                 </DialogHeader>
+                                <div className="grid gap-4 py-4">
+                                    <div className="grid grid-cols-1 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Export Format</Label>
+                                            <Select
+                                                value={exportFilters.exportFormat}
+                                                onValueChange={(value) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        exportFormat: value as "csv" | "pdf",
+                                                    })
+                                                }
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select format" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="csv">CSV</SelectItem>
+                                                    <SelectItem value="pdf">PDF</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2 mb-6">
+                                            <Label>Export Content</Label>
+                                            <div className="grid grid-cols-3 gap-4">
+                                                {/* First Row */}
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox
+                                                        id="selectAllContent"
+                                                        checked={Object.values(exportFilters.exportContent).every(Boolean)}
+                                                        onCheckedChange={(checked) =>
+                                                            setExportFilters({
+                                                                ...exportFilters,
+                                                                exportContent: {
+                                                                    basicInfo: !!checked,
+                                                                    appointments: !!checked,
+                                                                    supplements: !!checked,
+                                                                    prescriptions: !!checked,
+                                                                },
+                                                            })
+                                                        }
+                                                    />
+                                                    <Label htmlFor="selectAllContent">Select All</Label>
+                                                </div>
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox
+                                                        id="basicInfo"
+                                                        checked={exportFilters.exportContent.basicInfo}
+                                                        onCheckedChange={(checked) =>
+                                                            setExportFilters({
+                                                                ...exportFilters,
+                                                                exportContent: {
+                                                                    ...exportFilters.exportContent,
+                                                                    basicInfo: !!checked,
+                                                                },
+                                                            })
+                                                        }
+                                                    />
+                                                    <Label htmlFor="basicInfo">Basic Information</Label>
+                                                </div>
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox
+                                                        id="appointments"
+                                                        checked={exportFilters.exportContent.appointments}
+                                                        onCheckedChange={(checked) =>
+                                                            setExportFilters({
+                                                                ...exportFilters,
+                                                                exportContent: {
+                                                                    ...exportFilters.exportContent,
+                                                                    appointments: !!checked,
+                                                                },
+                                                            })
+                                                        }
+                                                    />
+                                                    <Label htmlFor="appointments">Appointments</Label>
+                                                </div>
+
+                                                {/* Second Row */}
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox
+                                                        id="supplements"
+                                                        checked={exportFilters.exportContent.supplements}
+                                                        onCheckedChange={(checked) =>
+                                                            setExportFilters({
+                                                                ...exportFilters,
+                                                                exportContent: {
+                                                                    ...exportFilters.exportContent,
+                                                                    supplements: !!checked,
+                                                                },
+                                                            })
+                                                        }
+                                                    />
+                                                    <Label htmlFor="supplements">Supplements</Label>
+                                                </div>
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox
+                                                        id="prescriptions"
+                                                        checked={exportFilters.exportContent.prescriptions}
+                                                        onCheckedChange={(checked) =>
+                                                            setExportFilters({
+                                                                ...exportFilters,
+                                                                exportContent: {
+                                                                    ...exportFilters.exportContent,
+                                                                    prescriptions: !!checked,
+                                                                },
+                                                            })
+                                                        }
+                                                    />
+                                                    <Label htmlFor="prescriptions">Prescriptions</Label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Last Appointment Start Date</Label>
+                                            <DatePicker
+                                                value={exportFilters.startDate}
+                                                onChange={(date) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        startDate: date,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Last Appointment End Date</Label>
+                                            <DatePicker
+                                                value={exportFilters.endDate}
+                                                onChange={(date) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        endDate: date,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Minimum Age</Label>
+                                            <Input
+                                                type="number"
+                                                placeholder="e.g., 18"
+                                                value={exportFilters.minAge}
+                                                onChange={(e) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        minAge: e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Maximum Age</Label>
+                                            <Input
+                                                type="number"
+                                                placeholder="e.g., 65"
+                                                value={exportFilters.maxAge}
+                                                onChange={(e) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        maxAge: e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <Label>Status</Label>
+                                            <Select
+                                                value={exportFilters.status}
+                                                onValueChange={(value) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        status: value as "all" | "active" | "inactive",
+                                                    })
+                                                }
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select status" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">All</SelectItem>
+                                                    <SelectItem value="active">Active</SelectItem>
+                                                    <SelectItem value="inactive">Inactive</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Role</Label>
+                                            <Select
+                                                value={exportFilters.role}
+                                                onValueChange={(value) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        role: value as "all" | "doctor" | "midwife",
+                                                    })
+                                                }
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select role" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="all">All</SelectItem>
+                                                    <SelectItem value="doctor">Doctor</SelectItem>
+                                                    <SelectItem value="midwife">Midwife</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Sort by Name</Label>
+                                            <Select
+                                                value={exportFilters.sort}
+                                                onValueChange={(value) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        sort: value as "none" | "asc" | "desc",
+                                                    })
+                                                }
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select sorting" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="none">None</SelectItem>
+                                                    <SelectItem value="asc">A-Z</SelectItem>
+                                                    <SelectItem value="desc">Z-A</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Export Limit</Label>
+                                        <Input
+                                            type="number"
+                                            placeholder="e.g., 3"
+                                            value={exportFilters.limit}
+                                            onChange={(e) =>
+                                                setExportFilters({
+                                                    ...exportFilters,
+                                                    limit: e.target.value,
+                                                })
+                                            }
+                                        />
+                                    </div>
+                                </div>
                                 <DialogFooter>
-                                    <Button variant="outline" onClick={() => {}}>
+                                    <Button variant="outline" onClick={() => setOpenExportDialog(false)}>
                                         Cancel
                                     </Button>
-                                    <Button onClick={handleExport}>Export</Button>
+                                    <Button onClick={handleExport} disabled={isExporting}>
+                                        {isExporting ? "Exporting..." : "Export"}
+                                    </Button>
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
@@ -658,7 +1302,7 @@ export default function CliniciansTable() {
                                                     className="cursor-pointer hover:bg-zinc-100"
                                                 >
                                                     {row.getVisibleCells().map((cell) => (
-                                                        <TableCell key={cell.id} className="py-4">
+                                                        <TableCell key={cell.id}>
                                                             {flexRender(
                                                                 cell.column.columnDef.cell,
                                                                 cell.getContext()

@@ -19,6 +19,8 @@ const appointmentFormSchema = z.object({
   clinician_id: z.coerce.string().min(1, "Clinician is required"),
   date: z.coerce.date(),
   service: z.string().min(1, "Service is required"),
+  status: z.string().min(1, "Status is required"),
+  payment_status: z.string().min(1, "Payment status is required"),
 });
 
 type AppointmentFormValues = z.infer<typeof appointmentFormSchema>;
@@ -30,29 +32,41 @@ interface Person {
   last_name: string;
 }
 
-interface AppointmentFormProps {
+interface UpdateAppointmentFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  appointmentData: {
+    id: string;
+    patient_id: string;
+    clinician_id: string;
+    date: string;
+    service: string;
+    status: string;
+    payment_status: string;
+  };
 }
 
-// Add a utility class for consistent input/select height and width
-const inputClass = "h-10 w-full min-w-[140px]"; // adjust min-w as needed
+const inputClass = "h-10 w-full min-w-[140px]";
 
-export default function AppointmentForm({ open, onOpenChange, onSuccess }: AppointmentFormProps) {
+export default function UpdateAppointmentForm({ open, onOpenChange, onSuccess, appointmentData }: UpdateAppointmentFormProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [patients, setPatients] = React.useState<Person[]>([]);
   const [clinicians, setClinicians] = React.useState<Person[]>([]);
 
   const services = ["Prenatal Care", "Postpartum Care", "Consultation", "Ultrasound", "Lab Test"];
+  const statuses = ["Scheduled", "Completed", "Canceled"];
+  const paymentStatuses = ["Paid", "Unpaid", "Partial"];
 
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentFormSchema),
     defaultValues: {
-      patient_id: "",
-      clinician_id: "",
-      date: new Date(),
-      service: "",
+      patient_id: appointmentData.patient_id,
+      clinician_id: appointmentData.clinician_id,
+      date: new Date(appointmentData.date),
+      service: appointmentData.service,
+      status: appointmentData.status,
+      payment_status: appointmentData.payment_status,
     },
   });
 
@@ -110,8 +124,6 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
             first_name: c.person.first_name || "",
             middle_name: c.person.middle_name || "",
             last_name: c.person.last_name || "",
-            role: c.role,
-            specialization: c.specialization
           }))
         );
       }
@@ -129,12 +141,14 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
       const appointmentDate = new Date(data.date);
       appointmentDate.setHours(0, 0, 0, 0);
 
+      // Check for existing appointments on the same date (excluding current appointment)
       const { data: existingAppointment, error: checkError } = await supabase
         .from("appointment")
         .select("id")
         .eq("patient_id", data.patient_id)
         .eq("clinician_id", data.clinician_id)
         .eq("date", appointmentDate.toISOString())
+        .neq("id", appointmentData.id)
         .single();
 
       if (checkError && checkError.code !== "PGRST116") {
@@ -146,30 +160,32 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
         throw new Error("An appointment already exists for this patient, clinician, and date.");
       }
 
-      const newAppointment = {
+      const updatedAppointment = {
         patient_id: data.patient_id,
         clinician_id: data.clinician_id,
         date: appointmentDate.toISOString(),
         service: data.service,
-        status: "Scheduled",
-        payment_status: "Unpaid",
+        status: data.status,
+        payment_status: data.payment_status,
       };
 
-      const { error } = await supabase.from("appointment").insert([newAppointment]);
+      const { error } = await supabase
+        .from("appointment")
+        .update(updatedAppointment)
+        .eq("id", appointmentData.id);
 
       if (error) throw error;
 
       const patient = patients.find((p) => p.id === data.patient_id);
-      toast.success("Appointment created successfully", {
+      toast.success("Appointment updated successfully", {
         description: `Appointment for ${patient?.first_name} ${patient?.last_name} on ${appointmentDate.toLocaleDateString()}`,
       });
       
-      form.reset();
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
-      console.error("Create error:", error);
-      toast.error("Failed to create appointment", {
+      console.error("Update error:", error);
+      toast.error("Failed to update appointment", {
         description: error instanceof Error ? error.message : "Unknown error occurred",
       });
     } finally {
@@ -181,9 +197,9 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[725px]">
         <DialogHeader>
-          <DialogTitle>Add New Appointment</DialogTitle>
+          <DialogTitle>Update Appointment</DialogTitle>
           <DialogDescription>
-            Create a new appointment by filling in the basic details below.
+            Update the appointment details below.
           </DialogDescription>
         </DialogHeader>
         
@@ -278,6 +294,51 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
               />
             </div>
 
+            {/* Third Row: Status and Payment Status */}
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger className={inputClass}>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statuses.map((s) => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="payment_status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Payment Status</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger className={inputClass}>
+                        <SelectValue placeholder="Select payment status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {paymentStatuses.map((s) => (
+                          <SelectItem key={s} value={s}>{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
@@ -286,10 +347,10 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Creating...
+                    Updating...
                   </>
                 ) : (
-                  "Create Appointment"
+                  "Update Appointment"
                 )}
               </Button>
             </DialogFooter>
@@ -298,4 +359,4 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
       </DialogContent>
     </Dialog>
   );
-}
+} 

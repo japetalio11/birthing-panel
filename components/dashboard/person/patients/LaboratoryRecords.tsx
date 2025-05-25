@@ -85,6 +85,9 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
   const [selectedRecord, setSelectedRecord] = useState<any>(null)
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [dateFilter, setDateFilter] = useState<string>("")
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -133,7 +136,7 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                   doctor: record.doctor,
                   ordered_date: record.ordered_date,
                   received_date: record.received_date,
-                  reported_date: record.received_date,
+                  reported_date: record.reported_date,
                   impressions: record.impressions,
                   remarks: record.remarks,
                   recommendations: record.recommendations,
@@ -482,39 +485,62 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
     await openPreview(record.fileurl)
   }
 
-  const displayRecords = fields.length > 0 ? fields : recordsData
+  // Filter records based on search term, status, and date
+  const displayRecords = React.useMemo(() => {
+    const data = fields.length > 0 ? fields : recordsData
+    if (!searchTerm && statusFilter === "all" && !dateFilter) return data
+
+    return data.filter((record) => {
+      const matchesSearch =
+        record.filename.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        record.doctor.toLowerCase().includes(searchTerm.toLowerCase())
+
+      const matchesStatus = statusFilter === "all" ||
+        (statusFilter === "Ordered" && record.ordered_date) ||
+        (statusFilter === "Received" && record.received_date) ||
+        (statusFilter === "Reported" && record.reported_date)
+
+      const matchesDate = !dateFilter ||
+        (record.ordered_date && formatDate(record.ordered_date) === formatDate(dateFilter))
+
+      return matchesSearch && matchesStatus && matchesDate
+    })
+  }, [fields, recordsData, searchTerm, statusFilter, dateFilter])
 
   return (
-    <div className="relative">
-      <Card>
-        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <CardTitle>Laboratory Records</CardTitle>
-            <CardDescription>Store your patient&apos;s records for safe keeping</CardDescription>
-          </div>
-          <div className="relative flex items-center w-full max-w-sm md:w-auto">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search records..."
-              className="w-full pl-8 rounded-lg bg-background"
-              onChange={(e) => {
-                // Implement search logic if needed
-              }}
-            />
+    <Card>
+      <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <CardTitle>Laboratory Records</CardTitle>
+          <CardDescription>Store your patient's records for safe keeping</CardDescription>
+        </div>
+        <div className="relative flex items-center">
+          {context === "patient" && (
             <Dialog
               open={openDialog}
               onOpenChange={(open) => {
                 setOpenDialog(open)
                 if (!open) {
-                  form.reset()
+                  form.reset({
+                    filename: "",
+                    type: "",
+                    doctor: "",
+                    ordered_date: today,
+                    received_date: today,
+                    reported_date: today,
+                    impressions: "",
+                    remarks: "",
+                    recommendations: "",
+                    company: "",
+                    notes: "",
+                  })
                   setSelectedFile(null)
                   setFilePreview(null)
                 }
               }}
             >
               <DialogTrigger asChild>
-                <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
+                <Button size="sm" className="h-8 flex items-center gap-1">
                   <MonitorUp className="h-4 w-4" />
                   <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Add Record</span>
                 </Button>
@@ -720,60 +746,91 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                 </Form>
               </DialogContent>
             </Dialog>
-          </div>
-        </CardHeader>
-
-        <CardContent>
-          {fetchError ? (
-            <p className="text-sm text-red-600">{fetchError}</p>
-          ) : displayRecords.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No laboratory records for this patient.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableCell>
-                    <Checkbox
-                      id="select-all"
-                      onCheckedChange={(checked) => {
-                        // Implement select all logic if needed
-                      }}
-                    />
-                  </TableCell>
-                  <TableHead>File Name</TableHead>
-                  <TableHead>Record Type</TableHead>
-                  <TableHead>Doctor</TableHead>
-                  <TableHead>Ordered Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {displayRecords.map((record, index) => (
-                  <TableRow
-                    key={record.id || index}
-                    onClick={() => openRecordDetails(record)}
-                    className="cursor-pointer hover:bg-zinc-100"
-                  >
-                    <TableCell className="py-4">
-                      <Checkbox id={`record-${record.id || index}`} />
-                    </TableCell>
-                    <TableCell className="font-medium">{record.filename}</TableCell>
-                    <TableCell>{record.type}</TableCell>
-                    <TableCell>{record.doctor}</TableCell>
-                    <TableCell>{record.ordered_date}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
           )}
-        </CardContent>
-
-        <CardFooter>
-          <div className="text-xs text-muted-foreground">
-            Showing <strong>{displayRecords.length}</strong> of <strong>{displayRecords.length}</strong> Records
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col gap-4 mb-4">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <Input
+                type="search"
+                placeholder="Search by file name or doctor..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="Ordered">Ordered</SelectItem>
+                <SelectItem value="Received">Received</SelectItem>
+                <SelectItem value="Reported">Reported</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="w-[180px]"
+            />
           </div>
-        </CardFooter>
-      </Card>
-
+        </div>
+        {fetchError ? (
+          <p className="text-sm text-red-600">{fetchError}</p>
+        ) : displayRecords.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {searchTerm || statusFilter !== "all" || dateFilter
+              ? "No laboratory records found matching the search criteria."
+              : "No laboratory records for this patient."}
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableCell>
+                  <Checkbox
+                    id="select-all"
+                    onCheckedChange={(checked) => {
+                      // Implement select all logic if needed
+                    }}
+                  />
+                </TableCell>
+                <TableHead>File Name</TableHead>
+                <TableHead>Record Type</TableHead>
+                <TableHead>Doctor</TableHead>
+                <TableHead>Ordered Date</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {displayRecords.map((record, index) => (
+                <TableRow
+                  key={record.id || index}
+                  onClick={() => openRecordDetails(record)}
+                  className="cursor-pointer hover:bg-zinc-100"
+                >
+                  <TableCell className="py-4">
+                    <Checkbox id={`record-${record.id || index}`} />
+                  </TableCell>
+                  <TableCell className="font-medium">{record.filename}</TableCell>
+                  <TableCell>{record.type}</TableCell>
+                  <TableCell>{record.doctor}</TableCell>
+                  <TableCell>{record.ordered_date}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+      <CardFooter>
+        <div className="text-xs text-muted-foreground">
+          Showing <strong>{displayRecords.length}</strong> of <strong>{fields.length > 0 ? fields.length : recordsData.length}</strong> Records
+        </div>
+      </CardFooter>
       <div
         className={`fixed right-0 top-0 h-full w-96 bg-background shadow-lg transform transition-transform duration-300 ${
           isSidebarOpen ? 'translate-x-0' : 'translate-x-full'
@@ -784,7 +841,7 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
             <div className="p-4 flex flex-row justify-between items-start">
               <div className="flex flex-col">
                 <h2 className="font-semibold">Record Details</h2>
-                <p className="text-sm text-muted-foreground pt-1">Here&apos;s all you need to know about your patient&apos;s record</p>
+                <p className="text-sm text-muted-foreground pt-1">Here's all you need to know about your patient's record</p>
               </div>
               <Button variant="ghost" size="icon" onClick={closeSidebar}>
                 <X />
@@ -818,14 +875,12 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                 </div>
                 <div>
                   <Label className="font-semibold mb-2">Reported Date</Label>
-                  <p className="text-sm">{selectedRecord.reported_date}</p>
+                  <p className="text-sm">{selectedRecord.received_date}</p>
                 </div>
               </div>
-
               <div className="col-span-2 my-4">
                 <Separator className="border-t" />
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                 <div>
                   <Label className="font-semibold mb-2">Remarks</Label>
@@ -841,7 +896,6 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                 </div>
               </div>
             </div>
-
             <div className="p-4 space-y-2">
               <Button
                 className="w-full"
@@ -851,7 +905,6 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                 <Trash2 />
                 Delete File
               </Button>
-
               <Button
                 className="w-full"
                 onClick={() => handleDownload(selectedRecord.fileurl, selectedRecord.filename)}
@@ -864,7 +917,6 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
           </div>
         )}
       </div>
-
       {isPreviewOpen && (
         <div className="fixed inset-0 z-50">
           <div
@@ -901,6 +953,6 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
           </div>
         </div>
       )}
-    </div>
+    </Card>
   )
 }

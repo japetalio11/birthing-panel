@@ -149,7 +149,7 @@ export default function Prescriptions({
 
         setClinicians(clinicianList);
       } catch (err) {
-        console.error("Unexpected error fetching clinicians:", err);
+        console.error("Unexpected error fetching cliniciansI:", err);
         toast("Error", {
           description: "Unexpected error fetching clinicians.",
         });
@@ -473,7 +473,7 @@ export default function Prescriptions({
     } catch (err) {
       console.error("Unexpected error updating status:", err);
       toast("Error", {
-        description: "An unexpected error occurred while updating the status.",
+        description: "An unexpected React.createElement updating the status.",
       });
     }
   };
@@ -486,16 +486,12 @@ export default function Prescriptions({
       const searchString = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm || (
         prescription.name?.toLowerCase().includes(searchString) ||
-        prescription.strength?.toLowerCase().includes(searchString) ||
-        prescription.amount?.toLowerCase().includes(searchString) ||
-        prescription.frequency?.toLowerCase().includes(searchString) ||
-        prescription.route?.toLowerCase().includes(searchString) ||
-        prescription.clinician?.toLowerCase().includes(searchString) ||
-        prescription.patient?.toLowerCase().includes(searchString) ||
-        prescription.status?.toLowerCase().includes(searchString)
+        (context === 'patient' 
+          ? prescription.clinician?.toLowerCase().includes(searchString)
+          : prescription.patient?.toLowerCase().includes(searchString))
       );
 
-      const matchesStatus = statusFilter === "all" || prescription.status === statusFilter;
+      const matchesStatus = statusFilter === "all" || prescription.status.toLowerCase() === statusFilter.toLowerCase();
       
       const matchesDate = !dateFilter || 
         (prescription.date && new Date(prescription.date).toLocaleDateString() === new Date(dateFilter).toLocaleDateString());
@@ -515,15 +511,7 @@ export default function Prescriptions({
               : "View all prescriptions you have given to patients"}
           </CardDescription>
         </div>
-        <div className="relative flex items-center w-full max-w-sm md:w-auto">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search by prescription name or patient..."
-            className="w-full pl-8 rounded-lg bg-background"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="relative flex items-center">
           {context === 'patient' && (
             <Dialog
               open={openDialog}
@@ -542,7 +530,7 @@ export default function Prescriptions({
               }}
             >
               <DialogTrigger asChild>
-                <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
+                <Button size="sm" className="h-8 flex items-center gap-1">
                   <PillBottle className="h-4 w-4" />
                   <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
                     Add Prescription
@@ -709,7 +697,7 @@ export default function Prescriptions({
             <div className="flex-1 min-w-[200px]">
               <Input
                 type="search"
-                placeholder="Search by prescription name or patient..."
+                placeholder="Search by name or clinician/patient..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full"
@@ -734,7 +722,6 @@ export default function Prescriptions({
             />
           </div>
         </div>
-
         {fetchError ? (
           <p className="text-sm text-red-600">{fetchError}</p>
         ) : displayPrescriptions.length === 0 ? (
@@ -783,7 +770,7 @@ export default function Prescriptions({
                       value={prescription.status}
                       onValueChange={(value) => handleStatusChange(index, value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="w-[140px]">
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -812,7 +799,7 @@ export default function Prescriptions({
                         variant="outline"
                         onClick={() => handleDelete(index)}
                       >
-                        <Trash2 />
+                        <Trash2 className="h-4 w-4" />
                         Delete
                       </Button>
                     </TableCell>
@@ -826,7 +813,7 @@ export default function Prescriptions({
       <CardFooter>
         <div className="text-xs text-muted-foreground">
           Showing <strong>{displayPrescriptions.length}</strong> of{" "}
-          <strong>{fields.length > 0 ? fields.length : prescriptionsData.length}</strong> Prescriptions
+          <strong>{fields.length > 0 ? fields.length : prescriptionsData.length}</strong>
         </div>
       </CardFooter>
     </Card>
