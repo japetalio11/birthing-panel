@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Search, TextSearch, ChevronDownIcon, ArrowUpDown, UserRoundPlus } from "lucide-react";
+import { Download, Search, TextSearch, ChevronDownIcon, ArrowUpDown, UserRoundPlus, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -78,6 +78,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import React from "react";
 
 // Define the shape of the chart data
 interface ChartData {
@@ -130,13 +131,13 @@ export default function Dashboard() {
   const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [advancedSearch, setAdvancedSearch] = useState({
-    service: "",
-    status: "",
-    payment_status: "",
-  });
   const [tab, setTab] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [advancedSearch, setAdvancedSearch] = useState<{
+    service?: string;
+    status?: string;
+    payment_status?: string;
+  }>({});
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState({});
   const [showAppointmentForm, setShowAppointmentForm] = useState(false);
@@ -254,8 +255,13 @@ export default function Dashboard() {
         setClinicianData(top5Clinicians);
       }
 
-      // Fetch today's appointments
-      const today = new Date().toISOString().split('T')[0];
+      // Get today's date in UTC
+      const now = new Date();
+      const todayStart = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+      const todayEnd = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1));
+
+      console.log('Fetching appointments between:', todayStart.toISOString(), 'and', todayEnd.toISOString());
+
       const { data: appointmentsData, error: todayAppointmentsError } = await supabase
         .from("appointment")
         .select(`
@@ -273,20 +279,16 @@ export default function Dashboard() {
               middle_name,
               last_name
             )
-          ),
-          vitals (
-            temperature,
-            pulse_rate,
-            blood_pressure,
-            respiration_rate,
-            oxygen_saturation
           )
         `)
-        .eq("date", today);
+        .gte('date', todayStart.toISOString())
+        .lt('date', todayEnd.toISOString());
 
       if (todayAppointmentsError) throw new Error(`Today's appointments query error: ${todayAppointmentsError.message}`);
 
-      const formattedAppointments: Appointment[] = appointmentsData?.map((appointment: any) => {
+      console.log('Fetched appointments:', appointmentsData);
+
+      const formattedAppointments = appointmentsData?.map((appointment) => {
         const patient = appointment.patient?.person || {};
         const clinician = appointment.clinician?.person || {};
         return {
@@ -305,6 +307,7 @@ export default function Dashboard() {
         };
       }) || [];
 
+      console.log('Formatted appointments:', formattedAppointments);
       setTodayAppointments(formattedAppointments);
 
     } catch (err: any) {
@@ -572,7 +575,10 @@ export default function Dashboard() {
   ];
 
   // Handle search and filtering
-  const filteredAppointments = useMemo(() => {
+  const filteredAppointments = React.useMemo(() => {
+    console.log('Filtering appointments:', { tab, searchTerm, advancedSearch });
+    console.log('Current appointments:', todayAppointments);
+    
     let result = [...todayAppointments];
 
     // Apply search term
@@ -580,26 +586,25 @@ export default function Dashboard() {
       result = result.filter(
         (appointment) =>
           appointment.patient_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          appointment.clinician_name?.toLowerCase().includes(searchTerm.toLowerCase())
+          appointment.clinician_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          appointment.service?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
     // Apply advanced search
-    if (advancedSearch.service) {
+    if (advancedSearch.service && advancedSearch.service !== "all_services") {
       result = result.filter((appointment) =>
-        appointment.service.toLowerCase().includes(advancedSearch.service.toLowerCase())
+        appointment.service.toLowerCase() === advancedSearch.service?.toLowerCase()
       );
     }
-    if (advancedSearch.status) {
+    if (advancedSearch.status && advancedSearch.status !== "all_statuses") {
       result = result.filter((appointment) =>
-        appointment.status.toLowerCase().includes(advancedSearch.status.toLowerCase())
+        appointment.status.toLowerCase() === advancedSearch.status?.toLowerCase()
       );
     }
-    if (advancedSearch.payment_status) {
+    if (advancedSearch.payment_status && advancedSearch.payment_status !== "all_payment_statuses") {
       result = result.filter((appointment) =>
-        appointment.payment_status
-          .toLowerCase()
-          .includes(advancedSearch.payment_status.toLowerCase())
+        appointment.payment_status.toLowerCase() === advancedSearch.payment_status?.toLowerCase()
       );
     }
 
@@ -612,8 +617,9 @@ export default function Dashboard() {
       result = result.filter((appointment) => appointment.status.toLowerCase() === "canceled");
     }
 
+    console.log('Filtered result:', result);
     return result;
-  }, [searchTerm, advancedSearch, tab, todayAppointments]);
+  }, [todayAppointments, searchTerm, advancedSearch, tab]);
 
   // Initialize table
   const table = useReactTable({
@@ -760,7 +766,7 @@ export default function Dashboard() {
       {/* Chart and Appointments stacked vertically */}
       <div className="w-full space-y-4">
         {/* Patient Distribution Analysis Card */}
-        <Card className="@container/card rounded-lg border border-gray-200">
+        <Card className="@container/card rounded-lg border border-gray-200 relative z-0">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Patient Distribution Analysis</CardTitle>
@@ -995,167 +1001,215 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        {/* Appointments Today Card */}
-        <Tabs value={tab} onValueChange={setTab} className="mt-8">
-          <div className="flex items-center">
-            <TabsList>
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
-              <TabsTrigger value="completed">Completed</TabsTrigger>
-              <TabsTrigger value="canceled">Canceled</TabsTrigger>
-            </TabsList>
+        {/* Appointments Today Card - Add z-index to ensure it's above the chart */}
+        <div className="relative z-10">
+          <Tabs value={tab} onValueChange={setTab} className="mt-8">
+            <div className="flex items-center">
+              <TabsList>
+                <TabsTrigger value="all">All</TabsTrigger>
+                <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
+                <TabsTrigger value="completed">Completed</TabsTrigger>
+                <TabsTrigger value="canceled">Canceled</TabsTrigger>
+              </TabsList>
 
-            <div className="ml-auto flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Search by name..."
-                  className="w-full pl-8 rounded-lg bg-background"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+              <div className="ml-auto flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search by name..."
+                    className="w-full pl-8 rounded-lg bg-background"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <TextSearch />
+                      <span className="hidden lg:inline">Advanced Search</span>
+                      <span className="lg:hidden">Columns</span>
+                      <ChevronDownIcon />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>Filter by</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <div className="p-2">
+                      <Select
+                        value={advancedSearch.service || ""}
+                        onValueChange={(value) =>
+                          setAdvancedSearch({
+                            ...advancedSearch,
+                            service: value,
+                          })
+                        }
+                      >
+                        <SelectTrigger className="mb-2">
+                          <SelectValue placeholder="Select service" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all_services">All Services</SelectItem>
+                          <SelectItem value="Prenatal Care">Prenatal Care</SelectItem>
+                          <SelectItem value="Postpartum Care">Postpartum Care</SelectItem>
+                          <SelectItem value="Consultation">Consultation</SelectItem>
+                          <SelectItem value="Ultrasound">Ultrasound</SelectItem>
+                          <SelectItem value="Lab Test">Lab Test</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      <Select
+                        value={advancedSearch.status || ""}
+                        onValueChange={(value) =>
+                          setAdvancedSearch({
+                            ...advancedSearch,
+                            status: value,
+                          })
+                        }
+                      >
+                        <SelectTrigger className="mb-2">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all_statuses">All Statuses</SelectItem>
+                          <SelectItem value="Scheduled">Scheduled</SelectItem>
+                          <SelectItem value="Completed">Completed</SelectItem>
+                          <SelectItem value="Canceled">Canceled</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      <Select
+                        value={advancedSearch.payment_status || ""}
+                        onValueChange={(value) =>
+                          setAdvancedSearch({
+                            ...advancedSearch,
+                            payment_status: value,
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select payment status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all_payment_statuses">All Payment Statuses</SelectItem>
+                          <SelectItem value="Pending">Pending</SelectItem>
+                          <SelectItem value="Paid">Paid</SelectItem>
+                          <SelectItem value="Unpaid">Unpaid</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 flex items-center gap-1"
+                  onClick={() => router.push("/Dashboard/Appointments")}
+                >
+                  <Eye className="h-4 w-4" />
+                  <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+                    View All
+                  </span>
+                </Button>
               </div>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <TextSearch />
-                    <span className="hidden lg:inline">Advanced Search</span>
-                    <span className="lg:hidden">Columns</span>
-                    <ChevronDownIcon />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>Filter by</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <div className="p-2">
-                    <Input
-                      placeholder="Service..."
-                      value={advancedSearch.service}
-                      onChange={(e) =>
-                        setAdvancedSearch({
-                          ...advancedSearch,
-                          service: e.target.value,
-                        })
-                      }
-                      className="mb-2"
-                    />
-                    <Input
-                      placeholder="Status..."
-                      value={advancedSearch.status}
-                      onChange={(e) =>
-                        setAdvancedSearch({
-                          ...advancedSearch,
-                          status: e.target.value,
-                        })
-                      }
-                      className="mb-2"
-                    />
-                    <Input
-                      placeholder="Payment Status..."
-                      value={advancedSearch.payment_status}
-                      onChange={(e) =>
-                        setAdvancedSearch({
-                          ...advancedSearch,
-                          payment_status: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 flex items-center gap-1"
-                onClick={() => router.push("/Dashboard/Appointments")}
-              >
-                <Download />
-                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                  View All
-                </span>
-              </Button>
             </div>
-          </div>
 
-          <TabsContent value={tab}>
-            <Card x-chunk="dashboard-06-chunk-0">
-              <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div className="space-y-1">
-                  <CardTitle>Appointments Today</CardTitle>
-                  <CardDescription>Appointments scheduled for today</CardDescription>
-                </div>
-                <div className="relative flex items-center w-full max-w-sm md:w-auto">
-                  <Button
-                    size="sm"
-                    className="h-8 ml-2 flex items-center gap-1"
-                    onClick={() => setShowAppointmentForm(true)}
-                  >
-                    <UserRoundPlus />
-                    <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                      New Appointment
-                    </span>
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {filteredAppointments.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No appointments today.</p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      {table.getHeaderGroups().map((headerGroup) => (
-                        <TableRow key={headerGroup.id}>
-                          {headerGroup.headers.map((header) => (
-                            <TableHead key={header.id}>
-                              {header.isPlaceholder
-                                ? null
-                                : flexRender(header.column.columnDef.header, header.getContext())}
-                            </TableHead>
-                          ))}
-                        </TableRow>
-                      ))}
-                    </TableHeader>
-                    <TableBody>
-                      {table.getRowModel().rows?.length ? (
-                        table.getRowModel().rows.map((row) => (
-                          <TableRow
-                            key={row.id}
-                            data-state={row.getIsSelected() && "selected"}
-                            className="cursor-pointer hover:bg-muted/50"
-                            onClick={() =>
-                              router.push(`/Dashboard/Appointments/Appointment-View?id=${row.original.id}`)
-                            }
-                          >
-                            {row.getVisibleCells().map((cell) => (
-                              <TableCell key={cell.id}>
-                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                              </TableCell>
+            <TabsContent value={tab}>
+              <Card>
+                <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="space-y-1">
+                    <CardTitle>Appointments Today</CardTitle>
+                    <CardDescription>Appointments scheduled for today</CardDescription>
+                  </div>
+                  <div className="relative flex items-center w-full max-w-sm md:w-auto">
+                    <Button
+                      size="sm"
+                      className="h-8 ml-2 flex items-center gap-1"
+                      onClick={() => setShowAppointmentForm(true)}
+                    >
+                      <UserRoundPlus />
+                      <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+                        New Appointment
+                      </span>
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {loading ? (
+                    <div className="flex items-center justify-center h-32">
+                      <div className="text-sm text-muted-foreground">Loading appointments...</div>
+                    </div>
+                  ) : filteredAppointments.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No appointments found.</p>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        {table.getHeaderGroups().map((headerGroup) => (
+                          <TableRow key={headerGroup.id}>
+                            {headerGroup.headers.map((header) => (
+                              <TableHead key={header.id}>
+                                {header.isPlaceholder
+                                  ? null
+                                  : flexRender(header.column.columnDef.header, header.getContext())}
+                              </TableHead>
                             ))}
                           </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={columns.length} className="h-24 text-center">
-                            No results.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-              <CardFooter>
-                <div className="text-xs text-muted-foreground">
-                  Showing <strong>1-{filteredAppointments.length}</strong> of{" "}
-                  <strong>{todayAppointments.length}</strong> appointments
-                </div>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                        ))}
+                      </TableHeader>
+                      <TableBody>
+                        {table.getRowModel().rows?.length ? (
+                          table.getRowModel().rows.map((row) => (
+                            <TableRow
+                              key={row.id}
+                              data-state={row.getIsSelected() && "selected"}
+                              className="cursor-pointer hover:bg-muted/50"
+                            >
+                              {row.getVisibleCells().map((cell) => (
+                                <TableCell 
+                                  key={cell.id}
+                                  onClick={(e) => {
+                                    // Don't navigate if clicking on a select checkbox or status/payment select
+                                    if (
+                                      cell.column.id === "select" ||
+                                      cell.column.id === "status" ||
+                                      cell.column.id === "payment_status" ||
+                                      (e.target as HTMLElement).closest('select') ||
+                                      (e.target as HTMLElement).closest('button')
+                                    ) {
+                                      e.stopPropagation();
+                                      return;
+                                    }
+                                    router.push(`/Dashboard/Appointments/Appointment-View?id=${row.original.id}`);
+                                  }}
+                                >
+                                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={columns.length} className="h-24 text-center">
+                              No results.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  )}
+                </CardContent>
+                <CardFooter>
+                  <div className="text-xs text-muted-foreground">
+                    Showing <strong>1-{filteredAppointments.length}</strong> of{" "}
+                    <strong>{todayAppointments.length}</strong> appointments
+                  </div>
+                </CardFooter>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
 
       <AppointmentForm

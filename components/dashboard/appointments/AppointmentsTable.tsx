@@ -648,59 +648,37 @@ export default function AppointmentsTable() {
     // No need to handle isMounted here since fetchAppointments is stable
   }, [fetchAppointments]);
 
-  // Handle search and filtering
+  // Update the filteredAppointments logic
   const filteredAppointments = React.useMemo(() => {
+    console.log('Filtering appointments in table:', { tab, searchTerm, advancedSearch });
+    console.log('Current appointments:', appointments);
+    
     let result = [...appointments];
 
     // Apply search term
     if (searchTerm) {
-      result = result.filter((appointment) => {
-        const patientName = appointment.patient?.person ? 
-          `${appointment.patient.person.first_name}${appointment.patient.person.middle_name ? ` ${appointment.patient.person.middle_name}` : ""} ${appointment.patient.person.last_name}` : 
-          "";
-        const clinicianName = appointment.clinician?.person ? 
-          `${appointment.clinician.person.first_name}${appointment.clinician.person.middle_name ? ` ${appointment.clinician.person.middle_name}` : ""} ${appointment.clinician.person.last_name}` : 
-          "";
-        return (
-          patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          clinicianName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          appointment.service.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-      });
+      result = result.filter(
+        (appointment) =>
+          appointment.patient_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          appointment.clinician_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          appointment.service?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
     }
 
     // Apply advanced search
-    if (advancedSearch.patient_name) {
-      result = result.filter((appointment) => {
-        const patientName = appointment.patient?.person ? 
-          `${appointment.patient.person.first_name}${appointment.patient.person.middle_name ? ` ${appointment.patient.person.middle_name}` : ""} ${appointment.patient.person.last_name}` : 
-          "";
-        return patientName.toLowerCase().includes((advancedSearch.patient_name ?? "").toLowerCase());
-      });
-    }
-    if (advancedSearch.clinician_name) {
-      result = result.filter((appointment) => {
-        const clinicianName = appointment.clinician?.person ? 
-          `${appointment.clinician.person.first_name}${appointment.clinician.person.middle_name ? ` ${appointment.clinician.person.middle_name}` : ""} ${appointment.clinician.person.last_name}` : 
-          "";
-        return clinicianName.toLowerCase().includes((advancedSearch.clinician_name ?? "").toLowerCase());
-      });
-    }
-    if (advancedSearch.service) {
+    if (advancedSearch.service && advancedSearch.service !== "all_services") {
       result = result.filter((appointment) =>
-        appointment.service.toLowerCase().includes((advancedSearch.service ?? "").toLowerCase())
+        appointment.service.toLowerCase() === advancedSearch.service?.toLowerCase()
       );
     }
-    if (advancedSearch.status) {
+    if (advancedSearch.status && advancedSearch.status !== "all_statuses") {
       result = result.filter((appointment) =>
-        appointment.status.toLowerCase().includes((advancedSearch.status ?? "").toLowerCase())
+        appointment.status.toLowerCase() === advancedSearch.status?.toLowerCase()
       );
     }
-    if (advancedSearch.payment_status) {
+    if (advancedSearch.payment_status && advancedSearch.payment_status !== "all_payment_statuses") {
       result = result.filter((appointment) =>
-        appointment.payment_status
-          .toLowerCase()
-          .includes((advancedSearch.payment_status ?? "").toLowerCase())
+        appointment.payment_status.toLowerCase() === advancedSearch.payment_status?.toLowerCase()
       );
     }
 
@@ -713,8 +691,19 @@ export default function AppointmentsTable() {
       result = result.filter((appointment) => appointment.status.toLowerCase() === "canceled");
     }
 
+    console.log('Filtered result:', result);
     return result;
   }, [appointments, searchTerm, advancedSearch, tab]);
+
+  // Add effect to refetch data periodically
+  React.useEffect(() => {
+    fetchAppointments();
+    
+    // Refetch every 5 minutes
+    const interval = setInterval(fetchAppointments, 5 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, [fetchAppointments]);
 
   // Sort appointments
   const sortedAppointments = React.useMemo(() => {
@@ -1210,39 +1199,68 @@ export default function AppointmentsTable() {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Filter by</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <div className="p-2">
-                  <Input
-                    placeholder="Service..."
-                    value={advancedSearch.service}
-                    onChange={(e) =>
+                <div className="p-2 space-y-2">
+                  <Select
+                    value={advancedSearch.service || ""}
+                    onValueChange={(value) =>
                       setAdvancedSearch({
                         ...advancedSearch,
-                        service: e.target.value,
+                        service: value,
                       })
                     }
-                    className="mb-2"
-                  />
-                  <Input
-                    placeholder="Status..."
-                    value={advancedSearch.status}
-                    onChange={(e) =>
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select service" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all_services">All Services</SelectItem>
+                      <SelectItem value="Prenatal Care">Prenatal Care</SelectItem>
+                      <SelectItem value="Postpartum Care">Postpartum Care</SelectItem>
+                      <SelectItem value="Consultation">Consultation</SelectItem>
+                      <SelectItem value="Ultrasound">Ultrasound</SelectItem>
+                      <SelectItem value="Lab Test">Lab Test</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={advancedSearch.status || ""}
+                    onValueChange={(value) =>
                       setAdvancedSearch({
                         ...advancedSearch,
-                        status: e.target.value,
+                        status: value,
                       })
                     }
-                    className="mb-2"
-                  />
-                  <Input
-                    placeholder="Payment Status..."
-                    value={advancedSearch.payment_status}
-                    onChange={(e) =>
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all_statuses">All Statuses</SelectItem>
+                      <SelectItem value="Scheduled">Scheduled</SelectItem>
+                      <SelectItem value="Completed">Completed</SelectItem>
+                      <SelectItem value="Canceled">Canceled</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={advancedSearch.payment_status || ""}
+                    onValueChange={(value) =>
                       setAdvancedSearch({
                         ...advancedSearch,
-                        payment_status: e.target.value,
+                        payment_status: value,
                       })
                     }
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select payment status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all_payment_statuses">All Payment Statuses</SelectItem>
+                      <SelectItem value="Pending">Pending</SelectItem>
+                      <SelectItem value="Paid">Paid</SelectItem>
+                      <SelectItem value="Unpaid">Unpaid</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>

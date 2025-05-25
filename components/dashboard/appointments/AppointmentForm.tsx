@@ -5,9 +5,8 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { FormControl, FormField, FormItem, FormLabel, FormMessage, Form } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,7 +17,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 const appointmentFormSchema = z.object({
   patient_id: z.coerce.string().min(1, "Patient is required"),
   clinician_id: z.coerce.string().min(1, "Clinician is required"),
-  date: z.coerce.date(),
+  date: z.string().min(1, "A valid date is required"), // Changed to string
   service: z.string().min(1, "Service is required"),
 });
 
@@ -48,11 +47,11 @@ interface AppointmentFormProps {
   defaultClinicianId?: string;
 }
 
-// Add a utility class for consistent input/select height and width
-const inputClass = "h-10 w-full min-w-[140px]"; // adjust min-w as needed
+const inputClass = "h-10 w-full min-w-[140px]";
 
 export default function AppointmentForm({ open, onOpenChange, onSuccess, defaultPatientId, defaultClinicianId }: AppointmentFormProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(false);
   const [patients, setPatients] = React.useState<Person[]>([]);
   const [clinicians, setClinicians] = React.useState<Person[]>([]);
   const { userData } = useCurrentUser();
@@ -64,7 +63,7 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess, default
     defaultValues: {
       patient_id: defaultPatientId || "",
       clinician_id: defaultClinicianId || "",
-      date: new Date(),
+      date: new Date().toISOString().split("T")[0],
       service: "",
     },
   });
@@ -130,7 +129,7 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess, default
             `)
             .eq('person.first_name', firstName)
             .eq('person.last_name', lastName)
-            .single();
+            .single() as { data: { id: string; person: { first_name: string; middle_name: string | null; last_name: string; } } | null; error: any };
 
           if (clinicianError) {
             console.error("Clinician fetch error:", clinicianError);
@@ -187,6 +186,12 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess, default
     };
 
     if (open) {
+      form.reset({
+        patient_id: "",
+        clinician_id: "",
+        date: new Date().toISOString().split("T")[0], // Reset to today's date as string
+        service: "",
+      });
       fetchData();
     }
   }, [open, userData, form]);
@@ -195,8 +200,14 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess, default
     try {
       setIsSubmitting(true);
 
+      // Convert string date to Date object for Supabase
       const appointmentDate = new Date(data.date);
-      appointmentDate.setHours(0, 0, 0, 0);
+      if (isNaN(appointmentDate.getTime())) {
+        throw new Error("Invalid date provided");
+      }
+
+      // Set the time to noon (12:00:00) in the local timezone to avoid timezone issues
+      appointmentDate.setHours(12, 0, 0, 0);
 
       const { data: existingAppointment, error: checkError } = await supabase
         .from("appointment")
@@ -207,7 +218,6 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess, default
         .single();
 
       if (checkError && checkError.code !== "PGRST116") {
-        console.error("Check error:", checkError);
         throw new Error("Error checking for existing appointment");
       }
 
@@ -232,12 +242,16 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess, default
       toast.success("Appointment created successfully", {
         description: `Appointment for ${patient?.first_name} ${patient?.last_name} on ${appointmentDate.toLocaleDateString()}`,
       });
-      
-      form.reset();
+
+      form.reset({
+        patient_id: "",
+        clinician_id: "",
+        date: new Date().toISOString().split("T")[0],
+        service: "",
+      });
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
-      console.error("Create error:", error);
       toast.error("Failed to create appointment", {
         description: error instanceof Error ? error.message : "Unknown error occurred",
       });
@@ -255,10 +269,9 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess, default
             Create a new appointment by filling in the basic details below.
           </DialogDescription>
         </DialogHeader>
-        
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
-            {/* First Row: Patient and Clinician */}
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -313,7 +326,6 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess, default
               />
             </div>
 
-            {/* Second Row: Date and Service */}
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -323,7 +335,16 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess, default
                     <FormLabel>Date</FormLabel>
                     <FormControl>
                       <div className={inputClass}>
-                        <DatePicker value={field.value} onChange={field.onChange} />
+                        <DatePicker
+                          value={field.value ? new Date(field.value) : undefined}
+                          onChange={(date) => {
+                            if (date) {
+                              // Set the time to noon (12:00:00) in the local timezone
+                              date.setHours(12, 0, 0, 0);
+                              field.onChange(date.toISOString().split('T')[0]);
+                            }
+                          }}
+                        />
                       </div>
                     </FormControl>
                     <FormMessage />
@@ -357,7 +378,7 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess, default
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting || isLoading}>
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
