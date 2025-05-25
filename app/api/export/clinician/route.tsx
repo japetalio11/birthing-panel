@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing clinician data or export options" }, { status: 400 });
     }
 
-    const { clinician, exportOptions, supplements, prescriptions, appointments } = data;
+    const { clinician, exportOptions, supplements = [], prescriptions = [], appointments = [] } = data;
     const fullName = `${clinician.first_name} ${clinician.middle_name ? clinician.middle_name + " " : ""}${clinician.last_name}`;
     const ecFullName = clinician.ec_first_name
       ? `${clinician.ec_first_name} ${clinician.ec_middle_name ? clinician.ec_middle_name + " " : ""}${clinician.ec_last_name}`
@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
       y += 20;
     }
 
-    if (exportOptions.supplements && supplements.length > 0) {
+    if (exportOptions.supplements && Array.isArray(supplements) && supplements.length > 0) {
       console.log("Adding supplements to PDF...");
       doc.setFontSize(16);
       checkPageBreak(20);
@@ -179,9 +179,11 @@ export async function POST(req: NextRequest) {
       y += 20;
       doc.setFontSize(12);
       supplements.forEach((supp: any, index: number) => {
+        if (!supp) return;
         checkPageBreak(15);
+        const patientName = supp.patient || "N/A";
         doc.text(
-          `Supplement ${index + 1}: ${supp.name || "N/A"} (Strength: ${supp.strength || "N/A"}, Amount: ${supp.amount || "N/A"}, Frequency: ${supp.frequency || "N/A"}, Patient: ${supp.patient || "N/A"}, Status: ${supp.status || "N/A"})`,
+          `Supplement ${index + 1}: ${supp.name || "N/A"} (Strength: ${supp.strength || "N/A"}, Amount: ${supp.amount || "N/A"}, Frequency: ${supp.frequency || "N/A"}, Patient: ${patientName}, Status: ${supp.status || "N/A"})`,
           leftMargin,
           y,
           { maxWidth: tableWidth }
@@ -191,7 +193,7 @@ export async function POST(req: NextRequest) {
       y += 20;
     }
 
-    if (exportOptions.prescriptions && prescriptions.length > 0 && clinician.role === "Doctor") {
+    if (exportOptions.prescriptions && Array.isArray(prescriptions) && prescriptions.length > 0 && clinician.role === "Doctor") {
       console.log("Adding prescriptions to PDF...");
       doc.setFontSize(16);
       checkPageBreak(20);
@@ -201,9 +203,11 @@ export async function POST(req: NextRequest) {
       y += 20;
       doc.setFontSize(12);
       prescriptions.forEach((pres: any, index: number) => {
+        if (!pres) return;
         checkPageBreak(15);
+        const patientName = pres.patient || "N/A";
         doc.text(
-          `Prescription ${index + 1}: ${pres.name || "N/A"} (Strength: ${pres.strength || "N/A"}, Amount: ${pres.amount || "N/A"}, Frequency: ${pres.frequency || "N/A"}, Route: ${pres.route || "N/A"}, Patient: ${pres.patient || "N/A"}, Status: ${pres.status || "N/A"}, Issued: ${pres.date ? new Date(pres.date).toLocaleDateString() : "N/A"})`,
+          `Prescription ${index + 1}: ${pres.name || "N/A"} (Strength: ${pres.strength || "N/A"}, Amount: ${pres.amount || "N/A"}, Frequency: ${pres.frequency || "N/A"}, Route: ${pres.route || "N/A"}, Patient: ${patientName}, Status: ${pres.status || "N/A"}, Issued: ${pres.date ? new Date(pres.date).toLocaleDateString() : "N/A"})`,
           leftMargin,
           y,
           { maxWidth: tableWidth }
@@ -213,7 +217,7 @@ export async function POST(req: NextRequest) {
       y += 20;
     }
 
-    if (exportOptions.appointments && appointments.length > 0) {
+    if (exportOptions.appointments && Array.isArray(appointments) && appointments.length > 0) {
       console.log("Adding appointments to PDF...");
       doc.setFontSize(16);
       checkPageBreak(20);
@@ -223,9 +227,11 @@ export async function POST(req: NextRequest) {
       y += 20;
       doc.setFontSize(12);
       appointments.forEach((app: any, index: number) => {
+        if (!app) return;
         checkPageBreak(15);
+        const patientName = app.patient || "N/A";
         doc.text(
-          `Appointment ${index + 1}: ${app.service || "N/A"} (Date: ${app.date || "N/A"}, Patient: ${app.patient || "N/A"}, Status: ${app.status || "N/A"}, Payment Status: ${app.payment_status || "N/A"})`,
+          `Appointment ${index + 1}: ${app.service || "N/A"} (Date: ${app.date || "N/A"}, Patient: ${patientName}, Status: ${app.status || "N/A"}, Payment Status: ${app.payment_status || "N/A"})`,
           leftMargin,
           y,
           { maxWidth: tableWidth }
