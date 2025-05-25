@@ -218,7 +218,7 @@ const columns: ColumnDef<Appointment>[] = [
         >
           <div
             className={`w-2 h-2 rounded-full ${
-              status.toLowerCase() === "completed"
+              status.toLowerCase() === "paid"
                 ? "bg-green-400"
                 : status.toLowerCase() === "pending"
                 ? "bg-yellow-400"
