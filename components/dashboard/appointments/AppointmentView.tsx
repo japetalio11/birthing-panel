@@ -697,50 +697,55 @@ export default function AppointmentView() {
                   <CardDescription>Record and view patient vitals for this appointment</CardDescription>
                 </div>
                 <Button onClick={() => setShowVitalsForm(true)}>
+                  <RefreshCcw className="h-4 w-4" />
                   {hasExistingVitals ? "Update Vitals" : "Add Vitals"}
                 </Button>
               </CardHeader>
-              <CardContent>
+              <CardContent className="text-sm">
                 <div className="space-y-6">
                   {vitals.map((vital) => (
                     <div key={vital.id}>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-4">
-                          <div>
-                            <Label className="font-semibold mr-2">Weight</Label>
-                            <span className="text-sm">{appointment?.weight ? `${appointment.weight} kg` : "Not recorded"}</span>
-                          </div>
-                          <div>
-                            <Label className="font-semibold mr-2">Gestational Age</Label>
-                            <span className="text-sm">{appointment?.gestational_age ? `${appointment.gestational_age} weeks` : "Not recorded"}</span>
-                          </div>
-                          <div>
-                            <Label className="font-semibold mr-2">Blood Pressure</Label>
-                            <span className="text-sm">{vital.blood_pressure || "Not recorded"}</span>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label className="text-right">Weight</Label>
+                          <div className="col-span-3">
+                            {appointment?.weight ? `${appointment.weight} kg` : "Not recorded"}
                           </div>
                         </div>
-                        <div className="space-y-4">
-                          <div>
-                            <Label className="font-semibold mr-2">Temperature</Label>
-                            <span className="text-sm">{vital.temperature ? `${vital.temperature} °C` : "Not recorded"}</span>
-                          </div>
-                          <div>
-                            <Label className="font-semibold mr-2">Pulse Rate</Label>
-                            <span className="text-sm">{vital.pulse_rate ? `${vital.pulse_rate} bpm` : "Not recorded"}</span>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label className="text-right">Gestational Age</Label>
+                          <div className="col-span-3">
+                            {appointment?.gestational_age ? `${appointment.gestational_age} weeks` : "Not recorded"}
                           </div>
                         </div>
-                        <div className="space-y-4">
-                          <div>
-                            <Label className="font-semibold mr-2">Respiration Rate</Label>
-                            <span className="text-sm">
-                              {vital.respiration_rate ? `${vital.respiration_rate} breaths/min` : "Not recorded"}
-                            </span>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label className="text-right">Temperature</Label>
+                          <div className="col-span-3">
+                            {vital.temperature ? `${vital.temperature} °C` : "Not recorded"}
                           </div>
-                          <div>
-                            <Label className="font-semibold mr-2">Oxygen Saturation</Label>
-                            <span className="text-sm">
-                              {vital.oxygen_saturation ? `${vital.oxygen_saturation}%` : "Not recorded"}
-                            </span>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label className="text-right">Pulse Rate</Label>
+                          <div className="col-span-3">
+                            {vital.pulse_rate ? `${vital.pulse_rate} bpm` : "Not recorded"}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label className="text-right">Blood Pressure</Label>
+                          <div className="col-span-3">
+                            {vital.blood_pressure || "Not recorded"}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label className="text-right">Respiration Rate</Label>
+                          <div className="col-span-3">
+                            {vital.respiration_rate ? `${vital.respiration_rate} breaths/min` : "Not recorded"}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label className="text-right">Oxygen Saturation</Label>
+                          <div className="col-span-3">
+                            {vital.oxygen_saturation ? `${vital.oxygen_saturation}%` : "Not recorded"}
                           </div>
                         </div>
                       </div>
