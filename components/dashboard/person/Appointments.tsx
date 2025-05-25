@@ -191,14 +191,14 @@ export default function Appointments({ context, id }: Props) {
                 </div>
                 <div className="relative flex items-center">
                     <Dialog>
-                        <DialogTrigger asChild>
+                        {/* <DialogTrigger asChild>
                             <Button size="sm" className="h-8 flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
                                 <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
                                     New Appointment
                                 </span>
                             </Button>
-                        </DialogTrigger>
+                        </DialogTrigger> */}
                         <DialogContent>
                             <DialogHeader>
                                 <DialogTitle>New Appointment</DialogTitle>

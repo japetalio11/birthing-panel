@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog";
 import {
   Card,
@@ -151,7 +152,7 @@ export default function PatientView() {
             description: `Failed to fetch patient data: ${error.message}`,
           });
           setLoading(false);
-          return router.push("/Patients");
+          return router.push("/Dashboard/Patients");
         }
 
         if (!data) {
@@ -160,7 +161,7 @@ export default function PatientView() {
             description: "No person found with ID.",
           });
           setLoading(false);
-          return router.push("/Patients");
+          return router.push("/Dashboard/Patients");
         }
 
         const combinedData: Patient = {
@@ -251,7 +252,7 @@ export default function PatientView() {
 
       toast.success("Patient deleted successfully.");
       setOpenDeleteDialog(false);
-      router.push("/Patients");
+      router.push("/Dashboard/Patients");
     } catch (err: any) {
       toast.error(`Error deleting patient: ${err.message}`);
     }
@@ -545,7 +546,7 @@ export default function PatientView() {
                       <Mail className="h-4 w-4" />
                       Set Appointment
                     </Button>
-                    <Button variant="outline" onClick={() => router.push(`/Patients/Update-Patient-Form?id=${patient.id}`)}>
+                    <Button variant="outline" onClick={() => router.push(`/Dashboard/Patients/Update-Patient-Form?id=${patient.id}`)}>
                       <RefreshCcw className="h-4 w-4" />
                       Update Patient
                     </Button>
@@ -719,9 +720,9 @@ export default function PatientView() {
                     </div>
                   </div>
                   <DialogFooter>
-                    <DialogPrimitive.Close>
+                    <DialogClose asChild>
                       <Button variant="outline">Cancel</Button>
-                    </DialogPrimitive.Close>
+                    </DialogClose>
                     <Button onClick={handleExport} disabled={isExporting}>
                       {isExporting ? "Exporting..." : "Export"}
                     </Button>

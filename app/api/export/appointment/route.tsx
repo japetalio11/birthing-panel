@@ -250,13 +250,14 @@ export async function POST(req: NextRequest) {
         appointment.prescriptions.forEach((prescription: any) => {
           checkPageBreak(40); // Ensure enough space for each prescription
           const prescriptionInfo = [
-            ["Medicine", prescription.medicine || "Not specified"],
-            ["Dosage", prescription.dosage || "Not specified"],
+            ["Name", prescription.name || "Not specified"],
+            ["Strength", prescription.strength || "Not specified"],
+            ["Amount", prescription.amount || "Not specified"],
             ["Frequency", prescription.frequency || "Not specified"],
-            ["Duration", prescription.duration || "Not specified"],
-            ["Instructions", prescription.instructions || "Not specified"],
+            ["Route", prescription.route || "Not specified"],
             ["Status", prescription.status || "Not specified"],
-            ["Date Prescribed", prescription.date ? new Date(prescription.date).toLocaleDateString() : "Not specified"]
+            ["Date", prescription.date ? new Date(prescription.date).toLocaleDateString() : "Not specified"],
+            ["Appointment", prescription.appointment_id ? `ID: ${prescription.appointment_id}` : "Not linked to appointment"]
           ];
 
           prescriptionInfo.forEach((row) => {
@@ -293,7 +294,8 @@ export async function POST(req: NextRequest) {
             ["Frequency", supplement.frequency || "Not specified"],
             ["Route", supplement.route || "Not specified"],
             ["Status", supplement.status || "Not specified"],
-            ["Date Recommended", supplement.date ? new Date(supplement.date).toLocaleDateString() : "Not specified"]
+            ["Date", supplement.date ? new Date(supplement.date).toLocaleDateString() : "Not specified"],
+            ["Appointment", supplement.appointment_id ? `ID: ${supplement.appointment_id}` : "Not linked to appointment"]
           ];
 
           supplementInfo.forEach((row) => {

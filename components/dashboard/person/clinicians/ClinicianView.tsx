@@ -24,6 +24,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    DialogClose,
 } from "@/components/ui/dialog";
 import {
 Card,
@@ -645,9 +646,9 @@ export default function ClinicianView() {
                             </div>
                         </div>
                         <DialogFooter>
-                            <DialogPrimitive.Close>
+                            <DialogClose asChild>
                                 <Button variant="outline">Cancel</Button>
-                            </DialogPrimitive.Close>
+                            </DialogClose>
                             <Button onClick={handleExport} disabled={isExporting}>
                                 {isExporting ? "Exporting..." : "Export"}
                             </Button>

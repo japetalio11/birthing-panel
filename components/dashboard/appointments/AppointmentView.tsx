@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog";
 import {
   Card,
@@ -124,7 +126,33 @@ export default function AppointmentView() {
         // First fetch the basic appointment data
         const { data: appointmentData, error: appointmentError } = await supabase
           .from("appointment")
-          .select("*")
+          .select(`
+            *,
+            patient:patient_id (
+              *,
+              person (
+                id,
+                first_name,
+                middle_name,
+                last_name,
+                birth_date,
+                age,
+                contact_number,
+                address
+              )
+            ),
+            clinician:clinician_id (
+              id,
+              role,
+              specialization,
+              person (
+                id,
+                first_name,
+                middle_name,
+                last_name
+              )
+            )
+          `)
           .eq("id", id)
           .single();
 
@@ -144,70 +172,24 @@ export default function AppointmentView() {
           return;
         }
 
-        // Fetch patient data
-        const { data: patientData, error: patientError } = await supabase
-          .from("patients")
-          .select(`
-            *,
-            person (
-              id,
-              first_name,
-              middle_name,
-              last_name,
-              birth_date,
-              age,
-              contact_number,
-              address
-            )
-          `)
-          .eq('id', appointmentData.patient_id)
-          .single();
-
-        if (patientError) {
-          console.error("Error fetching patient:", patientError);
-          toast.error(`Failed to fetch patient data: ${patientError.message}`);
-        }
-
-        // Fetch clinician data
-        const { data: clinicianData, error: cliniciansError } = await supabase
-          .from("clinicians")
-          .select(`
-            id,
-            role,
-            specialization,
-            person (
-              id,
-              first_name,
-              middle_name,
-              last_name
-            )
-          `)
-          .eq('id', appointmentData.clinician_id)
-          .single();
-
-        if (cliniciansError) {
-          console.error("Error fetching clinician:", cliniciansError);
-          toast.error(`Failed to fetch clinician data: ${cliniciansError.message}`);
-        }
-
         // Transform the data
         const transformedData: Appointment = {
           ...appointmentData,
-          patient: patientData ? {
-            id: patientData.id,
-            person: patientData.person
+          patient: appointmentData.patient ? {
+            id: appointmentData.patient.id,
+            person: appointmentData.patient.person
           } : undefined,
-          clinician: clinicianData ? {
-            role: clinicianData.role,
-            specialization: clinicianData.specialization,
-            person: clinicianData.person
+          clinician: appointmentData.clinician ? {
+            role: appointmentData.clinician.role,
+            specialization: appointmentData.clinician.specialization,
+            person: appointmentData.clinician.person
           } : undefined
         };
 
         console.log("Fetched Data:", {
           appointment: appointmentData,
-          patient: patientData,
-          clinician: clinicianData,
+          patient: appointmentData.patient,
+          clinician: appointmentData.clinician,
           transformed: transformedData
         });
 
@@ -259,7 +241,7 @@ export default function AppointmentView() {
     }
 
     fetchAppointment();
-  }, [router, id]);
+  }, [id, router]);
 
   // Handle cancel switch toggle
   const handleCancelToggle = async () => {
@@ -388,7 +370,7 @@ export default function AppointmentView() {
         const { data: prescriptions, error: prescriptionsError } = await supabase
           .from("prescriptions")
           .select("*")
-          .eq("appointment_id", appointment.id);
+          .eq("patient_id", appointment.patient_id);
 
         if (prescriptionsError) {
           console.error("Error fetching prescriptions:", prescriptionsError);
@@ -404,7 +386,7 @@ export default function AppointmentView() {
         const { data: supplements, error: supplementsError } = await supabase
           .from("supplements")
           .select("*")
-          .eq("appointment_id", appointment.id);
+          .eq("patient_id", appointment.patient_id);
 
         if (supplementsError) {
           console.error("Error fetching supplements:", supplementsError);
@@ -425,6 +407,8 @@ export default function AppointmentView() {
         exportOptions,
         exportFormat
       };
+
+      console.log("Export data prepared:", exportData);
 
       console.log("Sending request to /api/export/appointment...");
       const response = await fetch("/api/export/appointment", {
@@ -548,44 +532,45 @@ export default function AppointmentView() {
                     <RefreshCcw className="h-4 w-4 mr-2" />
                     Update Appointment
                   </Button>
-                  <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline">
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete Appointment
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-  <DialogHeader>
-    <DialogTitle>Delete Appointment</DialogTitle>
-    <DialogDescription>
-      Are you sure you want to delete this appointment? This action cannot be undone.
-    </DialogDescription>
-    <div className="grid gap-2 py-4">
-      <Label htmlFor="reason">Type "confirm" to confirm deletion</Label>
-      <Input
-        id="reason"
-        className="focus:border-red-500 focus:ring-red-500"
-        placeholder="Enter 'confirm'"
-        value={deleteInput}
-        onChange={(e) => setDeleteInput(e.target.value)}
-      />
-    </div>
-  </DialogHeader>
+                  {userData?.isAdmin && (
+                    <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline">
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete Appointment
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Delete Appointment</DialogTitle>
+                          <DialogDescription>
+                            Are you sure you want to delete this appointment? This action cannot be undone.
+                          </DialogDescription>
+                          <div className="grid gap-2 py-4">
+                            <Label htmlFor="reason">Type "confirm" to confirm deletion</Label>
+                            <Input
+                              id="reason"
+                              className="focus:border-red-500 focus:ring-red-500"
+                              placeholder="Enter 'confirm'"
+                              value={deleteInput}
+                              onChange={(e) => setDeleteInput(e.target.value)}
+                            />
+                          </div>
+                        </DialogHeader>
 
-  {isDeleteEnabled && (
-    <DialogFooter>
-      <Button
-        variant="destructive"
-        onClick={() => appointment && handleDelete(appointment.id)}
-      >
-        Confirm Delete
-      </Button>
-    </DialogFooter>
-  )}
-</DialogContent>
-
-                  </Dialog>
+                        {isDeleteEnabled && (
+                          <DialogFooter>
+                            <Button
+                              variant="destructive"
+                              onClick={() => appointment && handleDelete(appointment.id)}
+                            >
+                              Confirm Delete
+                            </Button>
+                          </DialogFooter>
+                        )}
+                      </DialogContent>
+                    </Dialog>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -618,6 +603,24 @@ export default function AppointmentView() {
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="selectAll"
+                        checked={Object.values(exportOptions).every(Boolean)}
+                        onCheckedChange={(checked) => {
+                          setExportOptions({
+                            appointmentInfo: !!checked,
+                            patientInfo: !!checked,
+                            clinicianInfo: !!checked,
+                            vitals: !!checked,
+                            prescriptions: !!checked,
+                            supplements: !!checked,
+                          });
+                        }}
+                      />
+                      <Label htmlFor="selectAll" className="font-semibold">Select All</Label>
+                    </div>
+                    <Separator className="my-2" />
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id="appointmentInfo"
@@ -694,9 +697,9 @@ export default function AppointmentView() {
                     </div>
                   </div>
                   <DialogFooter>
-                    <DialogPrimitive.Close>
+                    <DialogClose asChild>
                       <Button variant="outline">Cancel</Button>
-                    </DialogPrimitive.Close>
+                    </DialogClose>
                     <Button onClick={handleExport} disabled={isExporting}>
                       {isExporting ? "Exporting..." : "Export"}
                     </Button>

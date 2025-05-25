@@ -62,6 +62,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    DialogClose,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
@@ -410,6 +411,12 @@ export default function PatientsTable() {
             );
         }
 
+        if (advancedSearch.last_appointment) {
+            result = result.filter((patient) => {
+                if (!patient.last_appointment) return false;
+                return patient.last_appointment.toLowerCase().includes(advancedSearch.last_appointment.toLowerCase());
+            });
+        }
         if (advancedSearch.birth_date) {
             result = result.filter((patient) =>
                 patient.birth_date?.toLowerCase().includes(advancedSearch.birth_date.toLowerCase())
@@ -1033,7 +1040,7 @@ export default function PatientsTable() {
 
                         <Dialog open={openExportDialog} onOpenChange={setOpenExportDialog}>
                             <DialogTrigger asChild>
-                                <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => setOpenExportDialog(true)}>
+                                <Button size="sm" variant="outline" className="h-8 gap-1">
                                     <Download />
                                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Export</span>
                                 </Button>
@@ -1306,9 +1313,9 @@ export default function PatientsTable() {
                                     </div>
                                 </div>
                                 <DialogFooter>
-                                    <Button variant="outline" onClick={() => setOpenExportDialog(false)}>
-                                        Cancel
-                                    </Button>
+                                    <DialogClose asChild>
+                                        <Button variant="outline">Cancel</Button>
+                                    </DialogClose>
                                     <Button onClick={handleExport}>Export</Button>
                                 </DialogFooter>
                             </DialogContent>
@@ -1330,7 +1337,7 @@ export default function PatientsTable() {
                                 <Button
                                     size="sm"
                                     className="h-8 ml-2 flex items-center gap-1"
-                                    onClick={() => router.push("/Patients/Patient-Form")}
+                                    onClick={() => router.push("/Dashboard/Patients/Patient-Form")}
                                 >
                                     <UserRoundPlus />
                                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">

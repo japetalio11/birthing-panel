@@ -52,6 +52,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -63,9 +64,13 @@ import {
   getSortedRowModel,
   useReactTable,
   flexRender,
+  ColumnFiltersState,
+  VisibilityState,
+  getPaginationRowModel,
+  getFilteredRowModel,
 } from "@tanstack/react-table";
 import AppointmentForm from "./AppointmentForm";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Select,
   SelectContent,
@@ -75,6 +80,33 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+
+interface Person {
+  id: number;
+  first_name: string;
+  middle_name: string | null;
+  last_name: string;
+  birth_date?: string;
+  age?: string;
+  contact_number?: string;
+  address?: string;
+}
+
+interface Patient {
+  id: number;
+  person: Person;
+}
+
+interface Clinician {
+  role: string;
+  specialization: string;
+  person: {
+    first_name: string;
+    middle_name: string | null;
+    last_name: string;
+  };
+}
 
 interface Appointment {
   id: string;
@@ -82,36 +114,41 @@ interface Appointment {
   clinician_id: string;
   date: string;
   service: string;
-  weight: string | null;
-  vitals: string | null;
-  gestational_age: string | null;
+  weight?: string | null;
+  vitals?: string | null;
+  gestational_age?: string | null;
   status: string;
   payment_status: string;
-  patient_name?: string;
-  clinician_name?: string;
-  patient?: {
-    person: {
-      first_name: string;
-      middle_name: string | null;
-      last_name: string;
-      birth_date: string;
-      age: string | null;
-      contact_number: string | null;
-      address: string | null;
-    };
-  };
-  clinician?: {
-    role: string;
-    specialization: string;
-    person: {
-      first_name: string;
-      middle_name: string | null;
-      last_name: string;
-    };
-  };
+  patient?: Patient;
+  clinician?: Clinician;
 }
 
-const columns: ColumnDef<Appointment>[] = [
+interface AdvancedSearch {
+  patient_name?: string;
+  clinician_name?: string;
+  service?: string;
+  status?: string;
+  payment_status?: string;
+}
+
+interface Column extends ColumnDef<Appointment> {
+  accessorFn?: (row: Appointment) => string;
+}
+
+// Helper functions to get names
+const getPatientName = (appointment: Appointment) => {
+  const person = appointment.patient?.person;
+  if (!person) return "Unknown Patient";
+  return `${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`;
+};
+
+const getClinicianName = (appointment: Appointment) => {
+  const person = appointment.clinician?.person;
+  if (!person) return "Unknown Clinician";
+  return `${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`;
+};
+
+const columns: Column[] = [
   {
     id: "select",
     header: ({ table }) => (
@@ -134,7 +171,7 @@ const columns: ColumnDef<Appointment>[] = [
     enableSorting: false,
   },
   {
-    accessorKey: "patient_name",
+    id: "patient_name",
     header: ({ column }) => (
       <Button
         variant="ghost"
@@ -144,10 +181,20 @@ const columns: ColumnDef<Appointment>[] = [
         <ArrowUpDown className="ml-2 h-4 w-4" />
       </Button>
     ),
-    cell: ({ row }) => <div className="font-medium">{row.getValue("patient_name")}</div>,
+    accessorFn: (row: Appointment) => {
+      const person = row.patient?.person;
+      if (!person) return "Unknown Patient";
+      return `${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`;
+    },
+    cell: ({ row }) => {
+      const appointment = row.original;
+      const person = appointment.patient?.person;
+      if (!person) return "Unknown Patient";
+      return <div className="font-medium">{`${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`}</div>;
+    },
   },
   {
-    accessorKey: "clinician_name",
+    id: "clinician_name",
     header: ({ column }) => (
       <Button
         variant="ghost"
@@ -157,7 +204,17 @@ const columns: ColumnDef<Appointment>[] = [
         <ArrowUpDown className="ml-2 h-4 w-4" />
       </Button>
     ),
-    cell: ({ row }) => <div className="font-medium">{row.getValue("clinician_name")}</div>,
+    accessorFn: (row: Appointment) => {
+      const person = row.clinician?.person;
+      if (!person) return "Unknown Clinician";
+      return `${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`;
+    },
+    cell: ({ row }) => {
+      const appointment = row.original;
+      const person = appointment.clinician?.person;
+      if (!person) return "Unknown Clinician";
+      return <div className="font-medium">{`${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`}</div>;
+    },
   },
   {
     accessorKey: "date",
@@ -222,6 +279,8 @@ const columns: ColumnDef<Appointment>[] = [
                 ? "bg-green-400"
                 : status.toLowerCase() === "pending"
                 ? "bg-yellow-400"
+                : status.toLowerCase() === "partial"
+                ? "bg-orange-400"
                 : "bg-red-400"
             }`}
           />
@@ -235,15 +294,14 @@ const columns: ColumnDef<Appointment>[] = [
 export default function AppointmentsTable() {
   const router = useRouter();
   const [appointments, setAppointments] = React.useState<Appointment[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [searchTerm, setSearchTerm] = React.useState("");
-  const [advancedSearch, setAdvancedSearch] = React.useState({
-    service: "",
-    status: "",
-    payment_status: "",
-  });
+  const [advancedSearch, setAdvancedSearch] = React.useState<AdvancedSearch>({});
   const [tab, setTab] = React.useState("all");
-  const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [rowSelection, setRowSelection] = React.useState({});
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [rowSelection, setRowSelection] = useState({});
   const [showAppointmentForm, setShowAppointmentForm] = React.useState(false);
   const [openExportDialog, setOpenExportDialog] = useState(false);
   const [exportFilters, setExportFilters] = useState({
@@ -262,78 +320,88 @@ export default function AppointmentsTable() {
       supplements: false
     }
   });
+  const { userData } = useCurrentUser();
 
   // Fetch appointments from Supabase
-  React.useEffect(() => {
+  useEffect(() => {
+    let isMounted = true;
+
     async function fetchAppointments() {
+      if (!userData) return; // Don't fetch if user data isn't available yet
+      
+      setLoading(true); // Set loading state before fetching
       try {
-        const { data: appointmentsData, error: appointmentsError } = await supabase
+        let query = supabase
           .from("appointment")
           .select(`
             *,
             patient:patient_id (
               person (
+                id,
                 first_name,
                 middle_name,
-                last_name
+                last_name,
+                birth_date,
+                age,
+                contact_number,
+                address
               )
             ),
             clinician:clinician_id (
+              role,
+              specialization,
               person (
                 first_name,
                 middle_name,
                 last_name
               )
             )
-          `)
-          .order("date", { ascending: false });
+          `);
 
-        if (appointmentsError) {
-          console.error("Appointments fetch error:", appointmentsError);
-          toast.error(`Failed to fetch appointments: ${appointmentsError.message}`);
-          return;
+        // If user is not admin, only show their appointments
+        if (!userData.isAdmin && userData.clinicianId) {
+          query = query.eq('clinician_id', userData.clinicianId);
         }
 
-        if (!appointmentsData || appointmentsData.length === 0) {
-          console.log("No appointments data found");
-          toast.info("No appointments found.");
-          setAppointments([]);
-          return;
+        const { data, error } = await query;
+
+        if (error) {
+          throw error;
         }
 
-        const formattedAppointments: Appointment[] = appointmentsData.map((appointment: any) => {
-          const patient = appointment.patient?.person || {};
-          const clinician = appointment.clinician?.person || {};
+        if (isMounted) {
+          // Transform the data
+          const transformedData = data.map((appointment) => ({
+            ...appointment,
+            patient: appointment.patient ? {
+              id: appointment.patient.id,
+              person: appointment.patient.person
+            } : undefined,
+            clinician: appointment.clinician ? {
+              role: appointment.clinician.role,
+              specialization: appointment.clinician.specialization,
+              person: appointment.clinician.person
+            } : undefined
+          }));
 
-          return {
-            id: appointment.id,
-            patient_id: appointment.patient_id,
-            clinician_id: appointment.clinician_id,
-            date: appointment.date,
-            service: appointment.service,
-            weight: appointment.weight,
-            vitals: appointment.vitals,
-            gestational_age: appointment.gestational_age,
-            status: appointment.status,
-            payment_status: appointment.payment_status,
-            patient_name: `${patient.first_name || ""} ${patient.middle_name || ""} ${
-              patient.last_name || ""
-            }`.trim(),
-            clinician_name: `${clinician.first_name || ""} ${clinician.middle_name || ""} ${
-              clinician.last_name || ""
-            }`.trim(),
-          };
-        });
-
-        setAppointments(formattedAppointments);
-        toast.success("Appointments fetched successfully.");
-      } catch (err: any) {
-        toast.error(`Error fetching appointments: ${err.message}`);
+          setAppointments(transformedData);
+        }
+      } catch (error: any) {
+        console.error('Error fetching appointments:', error);
+        toast.error('Failed to fetch appointments');
+      } finally {
+        if (isMounted) {
+          setLoading(false); // Set loading state to false after fetch completes
+        }
       }
     }
 
     fetchAppointments();
-  }, []);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [userData]); // Only depend on userData
 
   // Handle search and filtering
   const filteredAppointments = React.useMemo(() => {
@@ -341,14 +409,38 @@ export default function AppointmentsTable() {
 
     // Apply search term
     if (searchTerm) {
-      result = result.filter(
-        (appointment) =>
-          appointment.patient_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          appointment.clinician_name?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      result = result.filter((appointment) => {
+        const patientName = appointment.patient?.person ? 
+          `${appointment.patient.person.first_name}${appointment.patient.person.middle_name ? ` ${appointment.patient.person.middle_name}` : ""} ${appointment.patient.person.last_name}` : 
+          "";
+        const clinicianName = appointment.clinician?.person ? 
+          `${appointment.clinician.person.first_name}${appointment.clinician.person.middle_name ? ` ${appointment.clinician.person.middle_name}` : ""} ${appointment.clinician.person.last_name}` : 
+          "";
+        return (
+          patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          clinicianName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          appointment.service.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+      });
     }
 
     // Apply advanced search
+    if (advancedSearch.patient_name) {
+      result = result.filter((appointment) => {
+        const patientName = appointment.patient?.person ? 
+          `${appointment.patient.person.first_name}${appointment.patient.person.middle_name ? ` ${appointment.patient.person.middle_name}` : ""} ${appointment.patient.person.last_name}` : 
+          "";
+        return patientName.toLowerCase().includes(advancedSearch.patient_name.toLowerCase());
+      });
+    }
+    if (advancedSearch.clinician_name) {
+      result = result.filter((appointment) => {
+        const clinicianName = appointment.clinician?.person ? 
+          `${appointment.clinician.person.first_name}${appointment.clinician.person.middle_name ? ` ${appointment.clinician.person.middle_name}` : ""} ${appointment.clinician.person.last_name}` : 
+          "";
+        return clinicianName.toLowerCase().includes(advancedSearch.clinician_name.toLowerCase());
+      });
+    }
     if (advancedSearch.service) {
       result = result.filter((appointment) =>
         appointment.service.toLowerCase().includes(advancedSearch.service.toLowerCase())
@@ -377,18 +469,45 @@ export default function AppointmentsTable() {
     }
 
     return result;
-  }, [searchTerm, advancedSearch, tab, appointments]);
+  }, [appointments, searchTerm, advancedSearch, tab]);
+
+  // Sort appointments
+  const sortedAppointments = React.useMemo(() => {
+    if (!sorting.length) return filteredAppointments;
+
+    return [...filteredAppointments].sort((a, b) => {
+      for (const sort of sorting) {
+        const column = columns.find(col => col.id === sort.id) as Column;
+        if (!column?.accessorFn) continue;
+
+        const aValue = column.accessorFn(a);
+        const bValue = column.accessorFn(b);
+
+        if (aValue === bValue) continue;
+
+        const sortOrder = sort.desc ? -1 : 1;
+        return aValue < bValue ? -sortOrder : sortOrder;
+      }
+      return 0;
+    });
+  }, [filteredAppointments, sorting, columns]);
 
   // Initialize table
   const table = useReactTable({
-    data: filteredAppointments,
+    data: sortedAppointments,
     columns,
     onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
     state: {
       sorting,
+      columnFilters,
+      columnVisibility,
       rowSelection,
     },
   });
@@ -1079,9 +1198,9 @@ export default function AppointmentsTable() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setOpenExportDialog(false)}>
-                    Cancel
-                  </Button>
+                  <DialogClose asChild>
+                    <Button variant="outline">Cancel</Button>
+                  </DialogClose>
                   <Button onClick={handleExport}>Export</Button>
                 </DialogFooter>
               </DialogContent>
@@ -1112,7 +1231,11 @@ export default function AppointmentsTable() {
             </CardHeader>
 
             <CardContent>
-              {filteredAppointments.length === 0 ? (
+              {loading ? (
+                <div className="flex items-center justify-center h-32">
+                  <div className="text-sm text-muted-foreground">Loading appointments...</div>
+                </div>
+              ) : filteredAppointments.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No appointments found.</p>
               ) : (
                 <Table>
@@ -1159,10 +1282,12 @@ export default function AppointmentsTable() {
               )}
             </CardContent>
             <CardFooter>
-              <div className="text-xs text-muted-foreground">
-                Showing <strong>1-{filteredAppointments.length}</strong> of{" "}
-                <strong>{appointments.length}</strong> appointments
-              </div>
+              {!loading && (
+                <div className="text-xs text-muted-foreground">
+                  Showing <strong>1-{filteredAppointments.length}</strong> of{" "}
+                  <strong>{appointments.length}</strong> appointments
+                </div>
+              )}
             </CardFooter>
           </Card>
         </TabsContent>

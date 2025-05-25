@@ -62,6 +62,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    DialogClose,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -387,6 +388,12 @@ export default function CliniciansTable() {
         }
 
         // Apply advanced search
+        if (advancedSearch.last_appointment) {
+            result = result.filter((clinician) => {
+                if (!clinician.last_appointment) return false;
+                return clinician.last_appointment.toLowerCase().includes(advancedSearch.last_appointment.toLowerCase());
+            });
+        }
         if (advancedSearch.age) {
             result = result.filter((clinician) =>
                 clinician.age?.toLowerCase().includes(advancedSearch.age.toLowerCase())
@@ -974,7 +981,7 @@ export default function CliniciansTable() {
 
                         <Dialog open={openExportDialog} onOpenChange={setOpenExportDialog}>
                             <DialogTrigger asChild>
-                                <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => setOpenExportDialog(true)}>
+                                <Button size="sm" variant="outline" className="h-8 gap-1">
                                     <Download />
                                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Export</span>
                                 </Button>
@@ -1253,9 +1260,9 @@ export default function CliniciansTable() {
                                     </div>
                                 </div>
                                 <DialogFooter>
-                                    <Button variant="outline" onClick={() => setOpenExportDialog(false)}>
-                                        Cancel
-                                    </Button>
+                                    <DialogClose asChild>
+                                        <Button variant="outline">Cancel</Button>
+                                    </DialogClose>
                                     <Button onClick={handleExport} disabled={isExporting}>
                                         {isExporting ? "Exporting..." : "Export"}
                                     </Button>

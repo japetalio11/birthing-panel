@@ -790,6 +790,15 @@ export default function Prescriptions({
       <CardContent>
         <div className="flex flex-col gap-4 mb-4">
           <div className="flex flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <Input
+                type="search"
+                placeholder="Search by prescription name or patient..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full"
+              />
+            </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by status" />

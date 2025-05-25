@@ -40,8 +40,6 @@ export const clinicianFormSchema: z.ZodType<any> = z.object({
     LicenseNumber: z.string().min(1, "License number is required"),
     religion: z.string().optional(),
     specialization: z.enum(["Obstetrician", "Obstetrician-Gynecologist", "MFM Specialist", "Neonatologist"], { required_error: "Specialization is required" }),
-    appointmentId: z.string().optional(),
-    prescriptionId: z.string().optional(),
     password: z.string().min(6, "Password must be at least 6 characters"),
     ecFirstName: z.string().optional(),
     ecMiddleName: z.string().optional(),
@@ -97,8 +95,6 @@ export default function ClinicianForm() {
             ecRelationship: "",
             profileImage: null,
             profileImageUrl: "",
-            appointmentId: "",
-            prescriptionId: "",
         },
     });
 
