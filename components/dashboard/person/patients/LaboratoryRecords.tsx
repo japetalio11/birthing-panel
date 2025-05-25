@@ -639,7 +639,14 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                           <FormItem>
                             <FormLabel>Ordered Date</FormLabel>
                             <FormControl>
-                              <DatePicker value={field.value} onChange={field.onChange} />
+                              <DatePicker 
+                                value={field.value ? new Date(field.value) : undefined} 
+                                onChange={(date) => {
+                                  if (date) {
+                                    field.onChange(date.toISOString().split('T')[0]);
+                                  }
+                                }}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -652,7 +659,14 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                           <FormItem>
                             <FormLabel>Received Date</FormLabel>
                             <FormControl>
-                              <DatePicker value={field.value} onChange={field.onChange} />
+                              <DatePicker 
+                                value={field.value ? new Date(field.value) : undefined} 
+                                onChange={(date) => {
+                                  if (date) {
+                                    field.onChange(date.toISOString().split('T')[0]);
+                                  }
+                                }}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -665,7 +679,14 @@ export default function LaboratoryRecords({ context, id, fields = [], append, re
                           <FormItem>
                             <FormLabel>Reported Date</FormLabel>
                             <FormControl>
-                              <DatePicker value={field.value} onChange={field.onChange} />
+                              <DatePicker 
+                                value={field.value ? new Date(field.value) : undefined} 
+                                onChange={(date) => {
+                                  if (date) {
+                                    field.onChange(date.toISOString().split('T')[0]);
+                                  }
+                                }}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>

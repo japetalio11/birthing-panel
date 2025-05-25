@@ -859,6 +859,7 @@ export default function PatientView() {
         <AppointmentForm
           open={showAppointmentForm}
           onOpenChange={setShowAppointmentForm}
+          defaultPatientId={patient.id.toString()}
           onSuccess={() => {
             setShowAppointmentForm(false);
             setAppointmentRefreshCounter(prev => prev + 1);

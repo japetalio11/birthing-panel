@@ -178,6 +178,7 @@ const columns: Column[] = [
       <Button
         variant="ghost"
         onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="whitespace-nowrap"
       >
         Patient Name
         <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -187,6 +188,7 @@ const columns: Column[] = [
     cell: ({ row }) => (
       <div className="font-medium">{row.getValue("patient_name")}</div>
     ),
+    sortingFn: "text"
   },
   {
     id: "clinician_name",
@@ -194,6 +196,7 @@ const columns: Column[] = [
       <Button
         variant="ghost"
         onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="whitespace-nowrap"
       >
         Clinician Name
         <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -203,6 +206,7 @@ const columns: Column[] = [
     cell: ({ row }) => (
       <div className="font-medium">{row.getValue("clinician_name")}</div>
     ),
+    sortingFn: "text"
   },
   {
     accessorKey: "date",
@@ -210,6 +214,7 @@ const columns: Column[] = [
       <Button
         variant="ghost"
         onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="whitespace-nowrap"
       >
         Date
         <ArrowUpDown className="ml-2 h-4 w-4" />
@@ -219,8 +224,10 @@ const columns: Column[] = [
       <div>{new Date(row.getValue("date")).toLocaleDateString()}</div>
     ),
     sortingFn: (rowA, rowB, columnId) => {
-      return new Date(rowA.getValue(columnId)).getTime() - new Date(rowB.getValue(columnId)).getTime();
-    },
+      const a = new Date(rowA.getValue(columnId)).getTime();
+      const b = new Date(rowB.getValue(columnId)).getTime();
+      return a < b ? -1 : a > b ? 1 : 0;
+    }
   },
   {
     accessorKey: "service",
@@ -290,6 +297,10 @@ export default function AppointmentsTable() {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = useState({});
+  const [pagination, setPagination] = useState({
+    pageIndex: 0,
+    pageSize: 10,
+  });
   const [showAppointmentForm, setShowAppointmentForm] = React.useState(false);
   const [openExportDialog, setOpenExportDialog] = useState(false);
   const [exportFilters, setExportFilters] = useState({
@@ -710,23 +721,41 @@ export default function AppointmentsTable() {
     if (!sorting.length) return filteredAppointments;
 
     return [...filteredAppointments].sort((a, b) => {
-      for (const sort of sorting) {
-        const column = columns.find(col => col.id === sort.id) as Column;
-        if (!column?.accessorFn) continue;
-
-        const aValue = column.accessorFn(a);
-        const bValue = column.accessorFn(b);
-
-        if (aValue === bValue) continue;
-
-        const sortOrder = sort.desc ? -1 : 1;
-        return aValue < bValue ? -sortOrder : sortOrder;
+      const { id, desc } = sorting[0]; // Only use the first sorting criteria for better performance
+      
+      let aValue: any;
+      let bValue: any;
+      
+      // Handle special cases for different columns
+      switch (id) {
+        case "date":
+          aValue = new Date(a.date).getTime();
+          bValue = new Date(b.date).getTime();
+          break;
+        case "patient_name":
+          aValue = a.patient_name?.toLowerCase() || "";
+          bValue = b.patient_name?.toLowerCase() || "";
+          break;
+        case "clinician_name":
+          aValue = a.clinician_name?.toLowerCase() || "";
+          bValue = b.clinician_name?.toLowerCase() || "";
+          break;
+        default:
+          aValue = (a as any)[id];
+          bValue = (b as any)[id];
       }
-      return 0;
-    });
-  }, [filteredAppointments, sorting, columns]);
 
-  // Initialize table
+      // Handle undefined/null values
+      if (aValue === undefined || aValue === null) aValue = "";
+      if (bValue === undefined || bValue === null) bValue = "";
+
+      // Compare values
+      const sortOrder = desc ? -1 : 1;
+      return aValue < bValue ? -sortOrder : aValue > bValue ? sortOrder : 0;
+    });
+  }, [filteredAppointments, sorting]);
+
+  // Initialize table with optimized configuration
   const table = useReactTable({
     data: sortedAppointments,
     columns,
@@ -738,12 +767,18 @@ export default function AppointmentsTable() {
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
+    onPaginationChange: setPagination,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
       rowSelection,
+      pagination,
     },
+    // Add these options for better performance
+    enableMultiSort: false,
+    manualSorting: false,
+    sortDescFirst: false,
   });
 
   // Update the getExportAppointments function
@@ -1593,11 +1628,55 @@ export default function AppointmentsTable() {
                 </Table>
               )}
             </CardContent>
-            <CardFooter>
+            <CardFooter className="flex items-center justify-between">
               {!loading && (
-                <div className="text-xs text-muted-foreground">
-                  Showing <strong>1-{filteredAppointments.length}</strong> of{" "}
-                  <strong>{appointments.length}</strong> appointments
+                <div className="flex items-center justify-between w-full">
+                  <div className="text-xs text-muted-foreground">
+                    Showing <strong>{table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}-{Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, filteredAppointments.length)}</strong> of{" "}
+                    <strong>{appointments.length}</strong> appointments
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => table.previousPage()}
+                      disabled={!table.getCanPreviousPage()}
+                    >
+                      Previous
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      <div className="text-xs text-muted-foreground">Page</div>
+                      <strong className="text-sm">
+                        {table.getState().pagination.pageIndex + 1} of{" "}
+                        {table.getPageCount()}
+                      </strong>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => table.nextPage()}
+                      disabled={!table.getCanNextPage()}
+                    >
+                      Next
+                    </Button>
+                    <Select
+                      value={`${table.getState().pagination.pageSize}`}
+                      onValueChange={(value) => {
+                        table.setPageSize(Number(value));
+                      }}
+                    >
+                      <SelectTrigger className="h-8 w-[70px]">
+                        <SelectValue placeholder={table.getState().pagination.pageSize} />
+                      </SelectTrigger>
+                      <SelectContent side="top">
+                        {[10, 20, 30, 40, 50].map((pageSize) => (
+                          <SelectItem key={pageSize} value={`${pageSize}`}>
+                            {pageSize}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               )}
             </CardFooter>

@@ -218,7 +218,31 @@ export default function ClinicianView() {
 
     const handleDelete = async (id: number) => {
         try {
-            // Delete from clinicians table first
+            // First delete all related appointments
+            const { error: appointmentError } = await supabase
+                .from("appointment")
+                .delete()
+                .eq("clinician_id", id);
+
+            if (appointmentError) throw appointmentError;
+
+            // Delete supplements recommendations
+            const { error: supplementError } = await supabase
+                .from("supplements")
+                .delete()
+                .eq("clinician_id", id);
+
+            if (supplementError) throw supplementError;
+
+            // Delete prescriptions if any
+            const { error: prescriptionError } = await supabase
+                .from("prescriptions")
+                .delete()
+                .eq("clinician_id", id);
+
+            if (prescriptionError) throw prescriptionError;
+
+            // Delete from clinicians table
             const { error: clinicianError } = await supabase
                 .from("clinicians")
                 .delete()
@@ -226,7 +250,7 @@ export default function ClinicianView() {
 
             if (clinicianError) throw clinicianError;
 
-            // Then delete from person table
+            // Finally delete from person table
             const { error: personError } = await supabase
                 .from("person")
                 .delete()
@@ -392,158 +416,155 @@ export default function ClinicianView() {
 
     return (
         <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
-        <div className="grid gap-4 ">
+        <div className="grid gap-4">
             {/* Row for Basic Information and Quick Actions */}
             <div className="flex flex-col md:flex-row gap-4">
             {/* Basic Information Card */}
             <Card className="flex-1 md:flex-[2]">
                 <CardHeader>
-                <div className="relative w-40 h-40 rounded-full overflow-hidden border">
-                    {profileImageSignedUrl ? (
-                        <img
-                            src={profileImageSignedUrl}
-                            alt={`${clinician.first_name}'s profile`}
-                            className="w-full h-full object-cover"
-                            onError={(e) => console.error('Failed to load profile image:', profileImageSignedUrl)}
-                        />
-                    ) : (
-                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                            <div className="w-full h-3/4 flex flex-col items-center justify-center">
-                                <div className="w-12 h-12 bg-gray-500 rounded-full mb-1"></div>
-                                <div className="w-20 h-10 bg-gray-500 rounded-t-full"></div>
-                            </div>
+                    <div className="flex items-center gap-4">
+                        <div className="relative w-30 h-30 rounded-full overflow-hidden border-1">
+                            {profileImageSignedUrl ? (
+                                <img
+                                    src={profileImageSignedUrl}
+                                    alt={`${clinician.first_name}'s profile`}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => console.error('Failed to load profile image:', profileImageSignedUrl)}
+                                />
+                            ) : (
+                                <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                                    <div className="w-full h-3/4 flex flex-col items-center justify-center">
+                                        <div className="w-12 h-12 bg-gray-500 rounded-full mb-1"></div>
+                                        <div className="w-20 h-10 bg-gray-500 rounded-t-full"></div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
-                <CardTitle className="text-2xl pt-2">{fullName}</CardTitle>
+                        <div className="flex flex-col gap-2">
+                            <Label className="text-sm">Clinician Name</Label>
+                            <CardTitle className="text-4xl font-bold">{fullName}</CardTitle>
+                        </div>
+                    </div>
                 </CardHeader>
                 <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                    <Label className="font-semibold mb-2">Clinician Status</Label>
-                    <p className="text-sm">{clinician.status || "Not specified"}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                        <div>
+                            <Label className="font-semibold mb-2">Clinician Status</Label>
+                            <p className="text-m">{clinician.status || "Not specified"}</p>
+                        </div>
+                        <div>
+                            <Label className="font-semibold mb-2">Role</Label>
+                            <p className="text-m">{clinician.role || "Not specified"}</p>
+                        </div>
+                        <div>
+                            <Label className="font-semibold mb-2">License Number</Label>
+                            <p className="text-m">{clinician.license_number || "Not specified"}</p>
+                        </div>
+                        <div>
+                            <Label className="font-semibold mb-2">Specialization</Label>
+                            <p className="text-m">{clinician.specialization || "Not specified"}</p>
+                        </div>
                     </div>
-                    <div>
-                    <Label className="font-semibold mb-2">Role</Label>
-                    <p className="text-sm">{clinician.role || "Not specified"}</p>
-                    </div>
-                    <div>
-                    <Label className="font-semibold mb-2">License Number</Label>
-                    <p className="text-sm">{clinician.license_number || "Not specified"}</p>
-                    </div>
-                    <div>
-                    <Label className="font-semibold mb-2">Specialization</Label>
-                    <p className="text-sm">{clinician.specialization || "Not specified"}</p>
-                    </div>
-                </div>
                 </CardContent>
             </Card>
 
-            {/* Quick Actions Card or No Privileges Box */}
-            <div className="flex-1 md:flex-1">
-                {userData?.isAdmin ? (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Quick Actions</CardTitle>
-                            <CardDescription>A quick overview of actions you can take.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex flex-col gap-6">
-                                <div className="flex flex-col items-center gap-2">
-                                    <div className="flex gap-2">
-                                        <div>
-                                            <Label htmlFor="deactivate">Deactivate</Label>
-                                            <p className="text-xs text-muted-foreground mt-2 mr-4">
-                                                Deactivating will temporarily put clinician in inactive status.
-                                            </p>
-                                        </div>
-                                        <Switch 
-                                            id="deactivate" 
-                                            className="scale-125" 
-                                            checked={isDeactivated}
-                                            onCheckedChange={handleDeactivateToggle}
-                                        />
-                                    </div>
+            {/* Quick Actions Card */}
+            <Card className="flex-1 md:flex-1">
+                <CardHeader>
+                    <CardTitle>Quick Actions</CardTitle>
+                    <CardDescription>A quick overview of actions you can take.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex flex-col gap-6">
+                        <div className="flex flex-col items-center gap-2">
+                            <div className="flex gap-2">
+                                <div>
+                                    <Label htmlFor="deactivate">Deactivate</Label>
+                                    <p className="text-xs text-muted-foreground mt-2 mr-4">
+                                        Deactivating will temporarily put clinician in inactive status. You can reactivate them later.
+                                    </p>
                                 </div>
-
-                                <div className="flex flex-col items-center gap-2">
-                                    <div className="flex gap-2">
-                                        <div>
-                                            <Label htmlFor="archive">Archive</Label>
-                                            <p className="text-xs text-muted-foreground mt-2 mr-4">
-                                                Archiving will remove the clinician from the active list.
-                                            </p>
-                                        </div>
-                                        <Switch id="archive" className="scale-125" />
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col gap-2">
-                                    <Button 
-                                        variant="outline" 
-                                        onClick={() => setShowAppointmentForm(true)}
-                                    >
-                                        <Mail className="h-4 w-4" />
-                                        Set Appointment
-                                    </Button>
-                                    
-                                    <Button variant="outline" onClick={() => router.push(`/Dashboard/Clinicians/Update-Clinician-Form?id=${clinician?.id}`)}>
-                                        <RefreshCcw className=" h-4 w-4" />
-                                        Update Clinician
-                                    </Button>
-
-                                    <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                                        <DialogTrigger asChild>
-                                            <Button 
-                                                variant="outline"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                                Delete Clinician
-                                            </Button>
-                                        </DialogTrigger>
-                                        <DialogContent>
-                                            <DialogHeader>
-                                                <DialogTitle>Delete Clinician</DialogTitle>
-                                                <DialogDescription>
-                                                    Are you sure you want to delete this clinician? This action cannot be undone.
-                                                </DialogDescription>
-                                                <div className="grid gap-2 py-4">
-                                                    <Label htmlFor="reason">Type "{fullName}" to confirm deletion</Label>
-                                                    <Input 
-                                                        id="reason" 
-                                                        className="focus:border-red-500 focus:ring-red-500" 
-                                                        placeholder={`Enter clinician name`} 
-                                                        value={deleteInput}
-                                                        onChange={(e) => setDeleteInput(e.target.value)}
-                                                    />
-                                                </div>
-                                            </DialogHeader>
-                                            <DialogFooter>
-                                                <DialogPrimitive.Close>
-                                                    <Button variant="outline">
-                                                        Cancel
-                                                    </Button>
-                                                </DialogPrimitive.Close>
-                                                <Button 
-                                                    variant="destructive" 
-                                                    onClick={() => handleDelete(clinician.id)}
-                                                    disabled={!isDeleteEnabled}
-                                                >
-                                                    Yes, delete this clinician.
-                                                </Button>
-                                            </DialogFooter>
-                                        </DialogContent>
-                                    </Dialog>
-                                </div>
+                                <Switch 
+                                    id="deactivate" 
+                                    className="scale-125" 
+                                    checked={isDeactivated}
+                                    onCheckedChange={handleDeactivateToggle}
+                                />
                             </div>
-                        </CardContent>
-                    </Card>
-                ) : (
-                    <div className="h-full min-h-[300px] border-4 border-dashed rounded-lg flex items-center justify-center">
-                        <p className="text-muted-foreground text-sm">No admin privileges set</p>
+                        </div>
+
+                        <div className="flex flex-col items-center gap-2">
+                            <div className="flex gap-2">
+                                <div>
+                                    <Label htmlFor="archive">Archive</Label>
+                                    <p className="text-xs text-muted-foreground mt-2 mr-4">
+                                        Archiving will remove the clinician from the active list. You can restore them later.
+                                    </p>
+                                </div>
+                                <Switch id="archive" className="scale-125" />
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <Button 
+                                variant="outline" 
+                                onClick={() => setShowAppointmentForm(true)}
+                            >
+                                <Mail className="h-4 w-4" />
+                                Set Appointment
+                            </Button>
+                            
+                            <Button variant="outline" onClick={() => router.push(`/Dashboard/Clinicians/Update-Clinician-Form?id=${clinician?.id}`)}>
+                                <RefreshCcw className="h-4 w-4" />
+                                Update Clinician
+                            </Button>
+
+                            {userData?.isAdmin && (
+                                <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+                                    <DialogTrigger asChild>
+                                        <Button variant="outline">
+                                            <Trash2 className="h-4 w-4" />
+                                            Delete Clinician
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                        <DialogHeader>
+                                            <DialogTitle>Delete Clinician</DialogTitle>
+                                            <DialogDescription>
+                                                Are you sure you want to delete this clinician? This action cannot be undone.
+                                            </DialogDescription>
+                                            <div className="grid gap-2 py-4">
+                                                <Label htmlFor="reason">Type "{fullName}" to confirm deletion</Label>
+                                                <Input 
+                                                    id="reason" 
+                                                    className="focus:border-red-500 focus:ring-red-500" 
+                                                    placeholder={`Enter clinician name`} 
+                                                    value={deleteInput}
+                                                    onChange={(e) => setDeleteInput(e.target.value)}
+                                                />
+                                            </div>
+                                        </DialogHeader>
+                                        <DialogFooter>
+                                            <DialogPrimitive.Close>
+                                                <Button variant="outline">
+                                                    Cancel
+                                                </Button>
+                                            </DialogPrimitive.Close>
+                                            <Button 
+                                                variant="destructive" 
+                                                onClick={() => handleDelete(clinician.id)}
+                                                disabled={!isDeleteEnabled}
+                                            >
+                                                Yes, delete this clinician.
+                                            </Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
+                            )}
+                        </div>
                     </div>
-                )}
-            </div>
+                </CardContent>
+            </Card>
             </div>
 
             <Tabs defaultValue="overview">

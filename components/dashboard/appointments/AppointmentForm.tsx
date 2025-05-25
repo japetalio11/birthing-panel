@@ -77,82 +77,18 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess, default
   }, [userData]);
 
   React.useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch patients
-        const { data: patientsData, error: patientsError } = await supabase
-          .from("patients")
-          .select(`
-            id,
-            person (
-              first_name,
-              middle_name,
-              last_name
-            )
-          `);
-
-        if (patientsError) {
-          console.error("Patients fetch error:", patientsError);
-          toast.error("Error fetching patients");
-          return;
-        }
-
-        if (patientsData) {
-          setPatients(
-            patientsData.map((p: any) => ({
-              id: p.id.toString(),
-              first_name: p.person.first_name || "",
-              middle_name: p.person.middle_name || null,
-              last_name: p.person.last_name || "",
-            }))
-          );
-        }
-
-        // If not admin, only show current clinician
-        if (!userData?.isAdmin && userData?.name) {
-          console.log("Fetching single clinician data for name:", userData.name);
-          
-          // Split the name into parts
-          const nameParts = userData.name.split(' ');
-          const firstName = nameParts[0];
-          const lastName = nameParts[nameParts.length - 1];
-          
-          const { data: cliniciansData, error: clinicianError } = await supabase
-            .from("clinicians")
-            .select(`
-              id,
-              person!inner (
-                first_name,
-                middle_name,
-                last_name
-              )
-            `)
-            .eq('person.first_name', firstName)
-            .eq('person.last_name', lastName)
-            .single() as { data: { id: string; person: { first_name: string; middle_name: string | null; last_name: string; } } | null; error: any };
-
-          if (clinicianError) {
-            console.error("Clinician fetch error:", clinicianError);
-            toast.error("Error fetching clinician");
-            return;
-          }
-
-          if (cliniciansData) {
-            const clinician: Person = {
-              id: cliniciansData.id.toString(),
-              first_name: cliniciansData.person.first_name || "",
-              middle_name: cliniciansData.person.middle_name || null,
-              last_name: cliniciansData.person.last_name || "",
-            };
-            console.log("Single Clinician Data:", clinician);
-            setClinicians([clinician]);
-            form.setValue("clinician_id", cliniciansData.id.toString());
-          }
-        } else {
-          console.log("Fetching all clinicians (Admin view)");
-          // Admin can see all clinicians
-          const { data: cliniciansData, error: cliniciansError } = await supabase
-            .from("clinicians")
+    if (open) {
+      form.reset({
+        patient_id: defaultPatientId || "",
+        clinician_id: defaultClinicianId || "",
+        date: new Date().toISOString().split("T")[0],
+        service: "",
+      });
+      const fetchData = async () => {
+        try {
+          // Fetch patients
+          const { data: patientsData, error: patientsError } = await supabase
+            .from("patients")
             .select(`
               id,
               person (
@@ -162,36 +98,104 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess, default
               )
             `);
 
-          if (cliniciansError) {
-            console.error("Clinicians fetch error:", cliniciansError);
-            toast.error("Error fetching clinicians");
+          if (patientsError) {
+            console.error("Patients fetch error:", patientsError);
+            toast.error("Error fetching patients");
             return;
           }
 
-          if (cliniciansData) {
-            const formattedClinicians = cliniciansData.map((c: any) => ({
-              id: c.id.toString(),
-              first_name: c.person.first_name || "",
-              middle_name: c.person.middle_name || null,
-              last_name: c.person.last_name || "",
-            }));
-            console.log("All Clinicians Data:", formattedClinicians);
-            setClinicians(formattedClinicians);
+          if (patientsData) {
+            setPatients(
+              patientsData.map((p: any) => ({
+                id: p.id.toString(),
+                first_name: p.person.first_name || "",
+                middle_name: p.person.middle_name || null,
+                last_name: p.person.last_name || "",
+              }))
+            );
+            
+            // If defaultPatientId is provided, set it as the form value
+            if (defaultPatientId) {
+              form.setValue("patient_id", defaultPatientId);
+            }
           }
-        }
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        toast.error("Failed to fetch data");
-      }
-    };
 
-    if (open) {
-      form.reset({
-        patient_id: "",
-        clinician_id: "",
-        date: new Date().toISOString().split("T")[0], // Reset to today's date as string
-        service: "",
-      });
+          // If not admin, only show current clinician
+          if (!userData?.isAdmin && userData?.name) {
+            console.log("Fetching single clinician data for name:", userData.name);
+            
+            // Split the name into parts
+            const nameParts = userData.name.split(' ');
+            const firstName = nameParts[0];
+            const lastName = nameParts[nameParts.length - 1];
+            
+            const { data: cliniciansData, error: clinicianError } = await supabase
+              .from("clinicians")
+              .select(`
+                id,
+                person!inner (
+                  first_name,
+                  middle_name,
+                  last_name
+                )
+              `)
+              .eq('person.first_name', firstName)
+              .eq('person.last_name', lastName)
+              .single() as { data: { id: string; person: { first_name: string; middle_name: string | null; last_name: string; } } | null; error: any };
+
+            if (clinicianError) {
+              console.error("Clinician fetch error:", clinicianError);
+              toast.error("Error fetching clinician");
+              return;
+            }
+
+            if (cliniciansData) {
+              const clinician: Person = {
+                id: cliniciansData.id.toString(),
+                first_name: cliniciansData.person.first_name || "",
+                middle_name: cliniciansData.person.middle_name || null,
+                last_name: cliniciansData.person.last_name || "",
+              };
+              console.log("Single Clinician Data:", clinician);
+              setClinicians([clinician]);
+              form.setValue("clinician_id", cliniciansData.id.toString());
+            }
+          } else {
+            console.log("Fetching all clinicians (Admin view)");
+            // Admin can see all clinicians
+            const { data: cliniciansData, error: cliniciansError } = await supabase
+              .from("clinicians")
+              .select(`
+                id,
+                person (
+                  first_name,
+                  middle_name,
+                  last_name
+                )
+              `);
+
+            if (cliniciansError) {
+              console.error("Clinicians fetch error:", cliniciansError);
+              toast.error("Error fetching clinicians");
+              return;
+            }
+
+            if (cliniciansData) {
+              const formattedClinicians = cliniciansData.map((c: any) => ({
+                id: c.id.toString(),
+                first_name: c.person.first_name || "",
+                middle_name: c.person.middle_name || null,
+                last_name: c.person.last_name || "",
+              }));
+              console.log("All Clinicians Data:", formattedClinicians);
+              setClinicians(formattedClinicians);
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching data:", err);
+          toast.error("Failed to fetch data");
+        }
+      };
       fetchData();
     }
   }, [open, userData, form]);
@@ -279,7 +283,7 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess, default
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Patient</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
+                    <Select value={field.value} onValueChange={field.onChange} disabled={!!defaultPatientId}>
                       <SelectTrigger className={inputClass}>
                         <SelectValue placeholder="Select patient" />
                       </SelectTrigger>
