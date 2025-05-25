@@ -17,8 +17,6 @@ export async function createClinicianRecord(data: ClinicianFormValues, personId:
             role: data.role,
             license_number: data.LicenseNumber,
             specialization: data.specialization,
-            appointment_id: data.appointmentId || null,
-            prescription_id: data.prescriptionId || null,
             password: data.password
         })
         .select()

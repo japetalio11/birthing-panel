@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog";
 import {
   Card,
@@ -34,6 +35,8 @@ import {
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import AppointmentForm from "../../appointments/AppointmentForm";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 // Define combined patient data type
 interface Patient {
@@ -67,6 +70,13 @@ interface Patient {
   last_visit?: string | null;
 }
 
+interface AppointmentFormProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
+  defaultPatientId?: string;
+}
+
 export default function PatientView() {
   const router = useRouter();
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -89,6 +99,8 @@ export default function PatientView() {
   const [isExporting, setIsExporting] = useState(false);
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
+  const [showAppointmentForm, setShowAppointmentForm] = useState(false);
+  const [appointmentRefreshCounter, setAppointmentRefreshCounter] = useState(0);
 
   useEffect(() => {
     // Get user data from session storage
@@ -241,7 +253,7 @@ export default function PatientView() {
 
       toast.success("Patient deleted successfully.");
       setOpenDeleteDialog(false);
-      router.push("/Patients");
+      router.push("/Dashboard/Patients");
     } catch (err: any) {
       toast.error(`Error deleting patient: ${err.message}`);
     }
@@ -289,7 +301,9 @@ export default function PatientView() {
           .select(
             `
             *,
-            clinicians!clinician_id (
+            clinicians:clinician_id (
+              role,
+              specialization,
               person (
                 first_name,
                 middle_name,
@@ -302,13 +316,13 @@ export default function PatientView() {
         if (error) throw new Error(`Failed to fetch supplements: ${error.message}`);
         supplements = data.map((supp: any) => ({
           ...supp,
-          clinician: [
+          clinician: supp.clinicians?.person ? [
             supp.clinicians.person.first_name,
             supp.clinicians.person.middle_name,
             supp.clinicians.person.last_name,
           ]
             .filter((part) => part)
-            .join(" ") || "Unknown Clinician",
+            .join(" ") : "Unknown Clinician"
         }));
         console.log("Supplements fetched:", supplements);
       }
@@ -331,7 +345,9 @@ export default function PatientView() {
           .select(
             `
             *,
-            clinicians!clinician_id (
+            clinicians:clinician_id (
+              role,
+              specialization,
               person (
                 first_name,
                 middle_name,
@@ -344,13 +360,13 @@ export default function PatientView() {
         if (error) throw new Error(`Failed to fetch prescriptions: ${error.message}`);
         prescriptions = data.map((pres: any) => ({
           ...pres,
-          clinician: [
+          clinician: pres.clinicians?.person ? [
             pres.clinicians.person.first_name,
             pres.clinicians.person.middle_name,
             pres.clinicians.person.last_name,
           ]
             .filter((part) => part)
-            .join(" ") || "Unknown Clinician",
+            .join(" ") : "Unknown Clinician"
         }));
         console.log("Prescriptions fetched:", prescriptions);
       }
@@ -361,7 +377,9 @@ export default function PatientView() {
           .from("appointment")
           .select(`
             *,
-            clinicians!clinician_id (
+            clinicians:clinician_id (
+              role,
+              specialization,
               person (
                 first_name,
                 middle_name,
@@ -373,13 +391,13 @@ export default function PatientView() {
         if (error) throw new Error(`Failed to fetch appointments: ${error.message}`);
         appointments = data.map((app: any) => ({
           ...app,
-          clinician: [
+          clinician: app.clinicians?.person ? [
             app.clinicians.person.first_name,
             app.clinicians.person.middle_name,
             app.clinicians.person.last_name,
           ]
             .filter((part) => part)
-            .join(" ") || "Unknown Clinician",
+            .join(" ") : "Unknown Clinician",
           date: new Date(app.date).toLocaleDateString()
         }));
         console.log("Appointments fetched:", appointments);
@@ -388,6 +406,7 @@ export default function PatientView() {
       const exportData = {
         patient,
         exportOptions,
+        exportFormat,
         allergies,
         supplements,
         labRecords,
@@ -409,13 +428,13 @@ export default function PatientView() {
         throw new Error(errorData.error || `API request failed with status ${response.status}`);
       }
 
-      console.log("Processing PDF download...");
+      console.log("Processing download...");
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const fullName = `${patient.first_name} ${patient.middle_name ? patient.middle_name + " " : ""}${patient.last_name}`;
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Patient_Report_${fullName}.pdf`;
+      a.download = `Patient_Report_${fullName}.${exportFormat}`;
       a.click();
       window.URL.revokeObjectURL(url);
 
@@ -532,7 +551,10 @@ export default function PatientView() {
 
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-col gap-2">
-                    <Button variant="outline">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowAppointmentForm(true)}
+                    >
                       <Mail className="h-4 w-4" />
                       Set Appointment
                     </Button>
@@ -563,20 +585,24 @@ export default function PatientView() {
                                 value={deleteInput}
                                 onChange={(e) => setDeleteInput(e.target.value)}
                               />
+                              <p className="text-sm text-muted-foreground">
+                                {isDeleteEnabled ? 
+                                  "✓ Name matches, you can delete now" : 
+                                  "Enter the full name exactly as shown above to enable deletion"}
+                              </p>
                             </div>
                           </DialogHeader>
                           <DialogFooter>
-                            <DialogPrimitive.Close>
-                              <Button variant="outline">
-                                Cancel
-                              </Button>
+                            <DialogPrimitive.Close asChild>
+                              <Button variant="outline">Cancel</Button>
                             </DialogPrimitive.Close>
                             <Button
                               variant="destructive"
                               onClick={() => handleDelete(patient.id)}
                               disabled={!isDeleteEnabled}
+                              className={!isDeleteEnabled ? "opacity-50 cursor-not-allowed" : ""}
                             >
-                              Yes, delete this patient.
+                              Yes, delete this patient
                             </Button>
                           </DialogFooter>
                         </DialogContent>
@@ -704,14 +730,15 @@ export default function PatientView() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="pdf">PDF</SelectItem>
+                          <SelectItem value="csv">CSV</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
                   <DialogFooter>
-                    <DialogPrimitive.Close>
+                    <DialogClose asChild>
                       <Button variant="outline">Cancel</Button>
-                    </DialogPrimitive.Close>
+                    </DialogClose>
                     <Button onClick={handleExport} disabled={isExporting}>
                       {isExporting ? "Exporting..." : "Export"}
                     </Button>
@@ -808,7 +835,11 @@ export default function PatientView() {
           </TabsContent>
 
           <TabsContent value="appointments">
-            <Appointments context="patient" id={id} />
+            <Appointments 
+              context="patient" 
+              id={id} 
+              refreshTrigger={appointmentRefreshCounter}
+            />
           </TabsContent>
 
           <TabsContent value="supplements">
@@ -826,6 +857,98 @@ export default function PatientView() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Add AppointmentForm */}
+      {patient && (
+        <AppointmentForm
+          open={showAppointmentForm}
+          onOpenChange={setShowAppointmentForm}
+          onSuccess={() => {
+            setShowAppointmentForm(false);
+            setAppointmentRefreshCounter(prev => prev + 1);
+            // Refresh patient data
+            const fetchPatient = async () => {
+              try {
+                const { data, error } = await supabase
+                  .from("patients")
+                  .select(`
+                    *,
+                    person (
+                      id,
+                      first_name,
+                      middle_name,
+                      last_name,
+                      birth_date,
+                      age,
+                      contact_number,
+                      citizenship,
+                      address,
+                      fileurl,
+                      religion,
+                      status,
+                      ec_first_name,
+                      ec_middle_name,
+                      ec_last_name,
+                      ec_contact_number,
+                      ec_relationship
+                    )
+                  `)
+                  .eq("id", id)
+                  .single();
+
+                if (error) throw error;
+
+                const combinedData: Patient = {
+                  id: data.person.id,
+                  first_name: data.person.first_name,
+                  middle_name: data.person.middle_name,
+                  last_name: data.person.last_name,
+                  birth_date: data.person.birth_date,
+                  age: data.person.age,
+                  contact_number: data.person.contact_number,
+                  citizenship: data.person.citizenship,
+                  address: data.person.address,
+                  fileurl: data.person.fileurl,
+                  religion: data.person.religion,
+                  status: data.person.status,
+                  marital_status: data.marital_status,
+                  ec_first_name: data.person.ec_first_name,
+                  ec_middle_name: data.person.ec_middle_name,
+                  ec_last_name: data.person.ec_last_name,
+                  ec_contact_number: data.person.ec_contact_number,
+                  ec_relationship: data.person.ec_relationship,
+                  expected_date_of_confinement: data.expected_date_of_confinement || null,
+                  last_menstrual_cycle: data.last_menstrual_cycle || null,
+                  gravidity: data.gravidity || null,
+                  parity: data.parity || null,
+                  occupation: data.occupation || null,
+                  ssn: data.ssn || null,
+                  member: data.member || null,
+                  allergy_id: data.allergy_id || null,
+                };
+
+                setPatient(combinedData);
+                setIsDeactivated(combinedData.status === "Inactive");
+
+                if (combinedData.fileurl) {
+                  const signedUrl = await getProfileImageUrl(combinedData.fileurl);
+                  setProfileImageSignedUrl(signedUrl);
+                }
+              } catch (err) {
+                console.error("Unexpected error fetching patient:", err);
+                toast("Error", {
+                  description: "An unexpected error occurred while fetching patient data.",
+                });
+                setLoading(false);
+                return router.push("/Patients");
+              }
+              setLoading(false);
+            };
+            fetchPatient();
+          }}
+          defaultPatientId={patient.id.toString()}
+        />
+      )}
     </main>
   );
 }

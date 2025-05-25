@@ -62,7 +62,8 @@ export default function LoginForm({
           avatar: result.user.avatar,
           userType: result.user.userType,
           isAdmin: result.user.isAdmin,
-          isDoctor: result.user.isDoctor
+          isDoctor: result.user.isDoctor,
+          clinicianId: result.user.clinicianId
         }));
         router.push("/Dashboard");
       } else {

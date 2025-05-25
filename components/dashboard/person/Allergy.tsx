@@ -66,8 +66,6 @@ export default function Allergy({ context, id, fields = [], append, remove }: Pr
   const [allergiesData, setAllergiesData] = useState<any[]>([])
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
-  const [dateFilter, setDateFilter] = useState<string>("")
 
   // Initialize form for adding allergies
   const form = useForm<FormValues>({
@@ -216,14 +214,11 @@ export default function Allergy({ context, id, fields = [], append, remove }: Pr
     })
   }
 
-  // Filter allergies based on search term and filters
+  // Filter allergies based on search term
   const displayAllergies = fields.length > 0 ? fields : allergiesData
   const filteredAllergies = displayAllergies.filter((allergy) => {
     const matchesSearch = !searchTerm || allergy.name.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "all" || (allergy.status && allergy.status.toLowerCase() === statusFilter.toLowerCase())
-    const matchesDate = !dateFilter || 
-      (allergy.date && new Date(allergy.date).toLocaleDateString() === new Date(dateFilter).toLocaleDateString())
-    return matchesSearch && matchesStatus && matchesDate
+    return matchesSearch
   })
 
   return (
@@ -322,22 +317,6 @@ export default function Allergy({ context, id, fields = [], append, remove }: Pr
                 className="w-full"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Inactive">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="w-[180px]"
-            />
           </div>
         </div>
 
@@ -345,7 +324,7 @@ export default function Allergy({ context, id, fields = [], append, remove }: Pr
           <p className="text-sm text-red-600">{fetchError}</p>
         ) : filteredAllergies.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            {searchTerm || statusFilter !== "all" || dateFilter
+            {searchTerm
               ? "No allergies found matching the search criteria."
               : "No allergies recorded for this patient."}
           </p>
@@ -358,7 +337,6 @@ export default function Allergy({ context, id, fields = [], append, remove }: Pr
                 </TableHead>
                 <TableHead>Allergy</TableHead>
                 <TableHead>Severity</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -370,28 +348,6 @@ export default function Allergy({ context, id, fields = [], append, remove }: Pr
                   </TableCell>
                   <TableCell className="font-medium">{allergy.name}</TableCell>
                   <TableCell>{allergy.severity}</TableCell>
-                  <TableCell>
-                    <Select
-                      value={allergy.status || "Active"}
-                      onValueChange={(value) => {
-                        // Handle status change logic here if needed
-                      }}
-                    >
-                      <SelectTrigger className="w-[140px]">
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Active" className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-green-400" />
-                          Active
-                        </SelectItem>
-                        <SelectItem value="Inactive" className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-red-400" />
-                          Inactive
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
                   <TableCell>
                     <Button
                       variant="outline"

@@ -52,6 +52,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -63,9 +64,13 @@ import {
   getSortedRowModel,
   useReactTable,
   flexRender,
+  ColumnFiltersState,
+  VisibilityState,
+  getPaginationRowModel,
+  getFilteredRowModel,
 } from "@tanstack/react-table";
 import AppointmentForm from "./AppointmentForm";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Select,
   SelectContent,
@@ -75,7 +80,33 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
-import { debounce } from "lodash";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+
+interface Person {
+  id: number;
+  first_name: string;
+  middle_name: string | null;
+  last_name: string;
+  birth_date?: string;
+  age?: string;
+  contact_number?: string;
+  address?: string;
+}
+
+interface Patient {
+  id: number;
+  person: Person;
+}
+
+interface Clinician {
+  role: string;
+  specialization: string;
+  person: {
+    first_name: string;
+    middle_name: string | null;
+    last_name: string;
+  };
+}
 
 interface Appointment {
   id: string;
@@ -83,47 +114,193 @@ interface Appointment {
   clinician_id: string;
   date: string;
   service: string;
-  weight: string | null;
-  vitals: string | null;
-  gestational_age: string | null;
-  status: "Scheduled" | "Completed" | "Canceled";
-  payment_status: "Pending" | "Paid" | "Unpaid";
+  weight?: string | null;
+  vitals?: string | null;
+  gestational_age?: string | null;
+  status: string;
+  payment_status: string;
+  patient?: Patient;
+  clinician?: Clinician;
   patient_name?: string;
   clinician_name?: string;
-  patient?: {
-    person: {
-      first_name: string;
-      middle_name: string | null;
-      last_name: string;
-      birth_date: string;
-      age: string | null;
-      contact_number: string | null;
-      address: string | null;
-    };
-  };
-  clinician?: {
-    role: string;
-    specialization: string;
-    person: {
-      first_name: string;
-      middle_name: string | null;
-      last_name: string;
-    };
-  };
 }
+
+interface AdvancedSearch {
+  patient_name?: string;
+  clinician_name?: string;
+  service?: string;
+  status?: string;
+  payment_status?: string;
+}
+
+type Column = ColumnDef<Appointment> & {
+  accessorFn?: (row: Appointment) => string;
+};
+
+// Helper functions to get names
+const getPatientName = (appointment: Appointment) => {
+  const person = appointment.patient?.person;
+  if (!person) return "Unknown Patient";
+  return `${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`;
+};
+
+const getClinicianName = (appointment: Appointment) => {
+  const person = appointment.clinician?.person;
+  if (!person) return "Unknown Clinician";
+  return `${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`;
+};
+
+const columns: Column[] = [
+  {
+    id: "select",
+    header: ({ table }) => (
+      <Checkbox
+        checked={
+          table.getIsAllPageRowsSelected() ||
+          (table.getIsSomePageRowsSelected() && "indeterminate")
+        }
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+        aria-label="Select all"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+        aria-label="Select row"
+      />
+    ),
+    enableSorting: false,
+  },
+  {
+    id: "patient_name",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="whitespace-nowrap"
+      >
+        Patient Name
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    accessorKey: "patient_name",
+    cell: ({ row }) => (
+      <div className="font-medium">{row.getValue("patient_name")}</div>
+    ),
+    sortingFn: "text"
+  },
+  {
+    id: "clinician_name",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="whitespace-nowrap"
+      >
+        Clinician Name
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    accessorKey: "clinician_name",
+    cell: ({ row }) => (
+      <div className="font-medium">{row.getValue("clinician_name")}</div>
+    ),
+    sortingFn: "text"
+  },
+  {
+    accessorKey: "date",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="whitespace-nowrap"
+      >
+        Date
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      <div>{new Date(row.getValue("date")).toLocaleDateString()}</div>
+    ),
+    sortingFn: (rowA, rowB, columnId) => {
+      const a = new Date(rowA.getValue(columnId)).getTime();
+      const b = new Date(rowB.getValue(columnId)).getTime();
+      return a < b ? -1 : a > b ? 1 : 0;
+    }
+  },
+  {
+    accessorKey: "service",
+    header: "Service",
+    cell: ({ row }) => <div>{row.getValue("service")}</div>,
+  },
+  {
+    accessorKey: "status",
+    header: "Status",
+    cell: ({ row }) => {
+      const status = row.getValue("status") as string;
+      return (
+        <Badge
+          variant="outline"
+          className="flex gap-1 px-1.5 text-muted-foreground [&_svg]:size-3"
+        >
+          <div
+            className={`w-2 h-2 rounded-full ${
+              status.toLowerCase() === "completed"
+                ? "bg-green-400"
+                : status.toLowerCase() === "scheduled"
+                ? "bg-blue-400"
+                : "bg-red-400"
+            }`}
+          />
+          <span className="hidden sm:inline">{status}</span>
+        </Badge>
+      );
+    },
+  },
+  {
+    accessorKey: "payment_status",
+    header: "Payment Status",
+    cell: ({ row }) => {
+      const status = row.getValue("payment_status") as string;
+      return (
+        <Badge
+          variant="outline"
+          className="flex gap-1 px-1.5 text-muted-foreground [&_svg]:size-3"
+        >
+          <div
+            className={`w-2 h-2 rounded-full ${
+              status.toLowerCase() === "paid"
+                ? "bg-green-400"
+                : status.toLowerCase() === "pending"
+                ? "bg-yellow-400"
+                : status.toLowerCase() === "partial"
+                ? "bg-orange-400"
+                : "bg-red-400"
+            }`}
+          />
+          <span className="hidden sm:inline">{status}</span>
+        </Badge>
+      );
+    },
+  },
+];
 
 export default function AppointmentsTable() {
   const router = useRouter();
   const [appointments, setAppointments] = React.useState<Appointment[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [searchTerm, setSearchTerm] = React.useState("");
-  const [advancedSearch, setAdvancedSearch] = React.useState({
-    service: "",
-    status: "",
-    payment_status: "",
-  });
+  const [advancedSearch, setAdvancedSearch] = React.useState<AdvancedSearch>({});
   const [tab, setTab] = React.useState("all");
-  const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [rowSelection, setRowSelection] = React.useState({});
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [rowSelection, setRowSelection] = useState({});
+  const [pagination, setPagination] = useState({
+    pageIndex: 0,
+    pageSize: 10,
+  });
   const [showAppointmentForm, setShowAppointmentForm] = React.useState(false);
   const [openExportDialog, setOpenExportDialog] = useState(false);
   const [exportFilters, setExportFilters] = useState({
@@ -138,8 +315,11 @@ export default function AppointmentsTable() {
       patientInfo: false,
       clinicianInfo: false,
       vitals: false,
-    },
+      prescriptions: false,
+      supplements: false
+    }
   });
+  const { userData } = useCurrentUser();
 
   const columns: ColumnDef<Appointment>[] = [
     {
@@ -391,111 +571,99 @@ export default function AppointmentsTable() {
   ];
 
   // Fetch appointments from Supabase
-  const fetchAppointments = async () => {
+  const fetchAppointments = React.useCallback(async () => {
+    if (!userData) return;
+
+    setLoading(true);
+    let isMounted = true;
     try {
-      const { data: appointmentsData, error: appointmentsError } = await supabase
+      let query = supabase
         .from("appointment")
         .select(`
           *,
-          patient:patient_id (
+          patients:patient_id (
+            person (
+              id,
+              first_name,
+              middle_name,
+              last_name,
+              birth_date,
+              age,
+              contact_number,
+              address
+            )
+          ),
+          clinicians:clinician_id (
+            role,
+            specialization,
             person (
               first_name,
               middle_name,
               last_name
             )
-          ),
-          clinician:clinician_id (
-            person (
-              first_name,
-              middle_name,
-              last_name
-            )
-          ),
-          vitals (
-            temperature,
-            pulse_rate,
-            blood_pressure,
-            respiration_rate,
-            oxygen_saturation
           )
-        `)
-        .order("date", { ascending: false });
+        `);
 
-      if (appointmentsError) {
-        console.error("Appointments fetch error:", appointmentsError);
-        toast.error(`Failed to fetch appointments: ${appointmentsError.message}`);
-        return;
+      if (!userData.isAdmin && userData.clinicianId) {
+        query = query.eq('clinician_id', userData.clinicianId);
       }
 
-      if (!appointmentsData || appointmentsData.length === 0) {
-        console.log("No appointments data found");
-        toast.info("No appointments found.");
-        setAppointments([]);
-        return;
+      const { data, error } = await query;
+
+      if (error) {
+        throw error;
       }
 
-      const formattedAppointments: Appointment[] = appointmentsData.map((appointment: any) => {
-        const patient = appointment.patient?.person || {};
-        const clinician = appointment.clinician?.person || {};
+      if (isMounted) {
+        // Transform the data and pre-compute names
+        const transformedData = data.map((appointment) => {
+          const patientName = appointment.patients?.person ? 
+            `${appointment.patients.person.first_name}${appointment.patients.person.middle_name ? ` ${appointment.patients.person.middle_name}` : ""} ${appointment.patients.person.last_name}`.trim() : 
+            "Unknown Patient";
+          
+          const clinicianName = appointment.clinicians?.person ? 
+            `${appointment.clinicians.person.first_name}${appointment.clinicians.person.middle_name ? ` ${appointment.clinicians.person.middle_name}` : ""} ${appointment.clinicians.person.last_name}`.trim() : 
+            "Unknown Clinician";
 
-        return {
-          id: appointment.id,
-          patient_id: appointment.patient_id,
-          clinician_id: appointment.clinician_id,
-          date: appointment.date,
-          service: appointment.service,
-          weight: appointment.weight,
-          vitals: appointment.vitals,
-          gestational_age: appointment.gestational_age,
-          status: appointment.status,
-          payment_status: appointment.payment_status,
-          patient_name: `${patient.first_name || ""} ${patient.middle_name || ""} ${
-            patient.last_name || ""
-          }`.trim(),
-          clinician_name: `${clinician.first_name || ""} ${clinician.middle_name || ""} ${
-            clinician.last_name || ""
-          }`.trim(),
-        };
-      });
+          return {
+            ...appointment,
+            patient_name: patientName,
+            clinician_name: clinicianName,
+            patient: appointment.patients ? {
+              id: appointment.patients.person.id,
+              person: appointment.patients.person
+            } : undefined,
+            clinician: appointment.clinicians ? {
+              role: appointment.clinicians.role,
+              specialization: appointment.clinicians.specialization,
+              person: appointment.clinicians.person
+            } : undefined
+          };
+        });
 
-      setAppointments(formattedAppointments);
-      toast.success("Appointments fetched successfully.");
-    } catch (err: any) {
-      toast.error(`Error fetching appointments: ${err.message}`);
+        setAppointments(transformedData);
+      }
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+      toast.error('Failed to fetch appointments');
+    } finally {
+      if (isMounted) {
+        setLoading(false);
+      }
     }
-  };
-
+  }, [userData]);
+  
   React.useEffect(() => {
     fetchAppointments();
+  
+    // No need to handle isMounted here since fetchAppointments is stable
+  }, [fetchAppointments]);
 
-    // Real-time subscription for appointment updates
-    const subscription = supabase
-      .channel("appointment_changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "appointment",
-        },
-        (payload) => {
-          setAppointments((prev) =>
-            prev.map((appt) =>
-              appt.id === payload.new.id ? { ...appt, ...payload.new } : appt
-            )
-          );
-          toast.info("Appointment updated in real-time.");
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(subscription);
-    };
-  }, []);
-
-  // Handle search and filtering
+  // Update the filteredAppointments logic
   const filteredAppointments = React.useMemo(() => {
+    console.log('Filtering appointments in table:', { tab, searchTerm, advancedSearch });
+    console.log('Current appointments:', appointments);
+    
     let result = [...appointments];
 
     // Apply search term
@@ -503,26 +671,25 @@ export default function AppointmentsTable() {
       result = result.filter(
         (appointment) =>
           appointment.patient_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          appointment.clinician_name?.toLowerCase().includes(searchTerm.toLowerCase())
+          appointment.clinician_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          appointment.service?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
     // Apply advanced search
-    if (advancedSearch.service) {
+    if (advancedSearch.service && advancedSearch.service !== "all_services") {
       result = result.filter((appointment) =>
-        appointment.service.toLowerCase().includes(advancedSearch.service.toLowerCase())
+        appointment.service.toLowerCase() === advancedSearch.service?.toLowerCase()
       );
     }
-    if (advancedSearch.status) {
+    if (advancedSearch.status && advancedSearch.status !== "all_statuses") {
       result = result.filter((appointment) =>
-        appointment.status.toLowerCase().includes(advancedSearch.status.toLowerCase())
+        appointment.status.toLowerCase() === advancedSearch.status?.toLowerCase()
       );
     }
-    if (advancedSearch.payment_status) {
+    if (advancedSearch.payment_status && advancedSearch.payment_status !== "all_payment_statuses") {
       result = result.filter((appointment) =>
-        appointment.payment_status
-          .toLowerCase()
-          .includes(advancedSearch.payment_status.toLowerCase())
+        appointment.payment_status.toLowerCase() === advancedSearch.payment_status?.toLowerCase()
       );
     }
 
@@ -535,26 +702,89 @@ export default function AppointmentsTable() {
       result = result.filter((appointment) => appointment.status.toLowerCase() === "canceled");
     }
 
+    console.log('Filtered result:', result);
     return result;
-  }, [searchTerm, advancedSearch, tab, appointments]);
+  }, [appointments, searchTerm, advancedSearch, tab]);
 
-  // Initialize table
+  // Add effect to refetch data periodically
+  React.useEffect(() => {
+    fetchAppointments();
+    
+    // Refetch every 5 minutes
+    const interval = setInterval(fetchAppointments, 5 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, [fetchAppointments]);
+
+  // Sort appointments
+  const sortedAppointments = React.useMemo(() => {
+    if (!sorting.length) return filteredAppointments;
+
+    return [...filteredAppointments].sort((a, b) => {
+      const { id, desc } = sorting[0]; // Only use the first sorting criteria for better performance
+      
+      let aValue: any;
+      let bValue: any;
+      
+      // Handle special cases for different columns
+      switch (id) {
+        case "date":
+          aValue = new Date(a.date).getTime();
+          bValue = new Date(b.date).getTime();
+          break;
+        case "patient_name":
+          aValue = a.patient_name?.toLowerCase() || "";
+          bValue = b.patient_name?.toLowerCase() || "";
+          break;
+        case "clinician_name":
+          aValue = a.clinician_name?.toLowerCase() || "";
+          bValue = b.clinician_name?.toLowerCase() || "";
+          break;
+        default:
+          aValue = (a as any)[id];
+          bValue = (b as any)[id];
+      }
+
+      // Handle undefined/null values
+      if (aValue === undefined || aValue === null) aValue = "";
+      if (bValue === undefined || bValue === null) bValue = "";
+
+      // Compare values
+      const sortOrder = desc ? -1 : 1;
+      return aValue < bValue ? -sortOrder : aValue > bValue ? sortOrder : 0;
+    });
+  }, [filteredAppointments, sorting]);
+
+  // Initialize table with optimized configuration
   const table = useReactTable({
-    data: filteredAppointments,
+    data: sortedAppointments,
     columns,
     onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
+    onPaginationChange: setPagination,
     state: {
       sorting,
+      columnFilters,
+      columnVisibility,
       rowSelection,
+      pagination,
     },
+    // Add these options for better performance
+    enableMultiSort: false,
+    manualSorting: false,
+    sortDescFirst: false,
   });
 
   // Update the getExportAppointments function
   const getExportAppointments = async () => {
     try {
+      console.log("Starting export with filters:", exportFilters);
       // First get the filtered appointments
       let result = [...filteredAppointments];
 
@@ -588,82 +818,155 @@ export default function AppointmentsTable() {
         });
       }
 
-      // Apply limit
+      // Apply limit BEFORE fetching details
       if (exportFilters.limit) {
         const limit = parseInt(exportFilters.limit);
         if (!isNaN(limit) && limit > 0) {
+          console.log(`Limiting results to ${limit} appointments`);
           result = result.slice(0, limit);
         }
       }
 
+      console.log(`Processing ${result.length} appointments for export`);
+
       // Now fetch complete data for each filtered appointment
       const appointmentsWithDetails = await Promise.all(
         result.map(async (appointment) => {
+          console.log(`Fetching details for appointment ${appointment.id}`);
           // Fetch appointment with related data
           const { data: appointmentData, error: appointmentError } = await supabase
             .from("appointment")
             .select(`
-                *,
-                patient:patient_id (
-                    person (
-                        id,
-                        first_name,
-                        middle_name,
-                        last_name,
-                        birth_date,
-                        age,
-                        contact_number,
-                        address
-                    )
-                ),
-                clinician:clinician_id (
-                    role,
-                    specialization,
-                    person (
-                        id,
-                        first_name,
-                        middle_name,
-                        last_name
-                    )
+              *,
+              patients:patient_id (
+                person (
+                  id,
+                  first_name,
+                  middle_name,
+                  last_name,
+                  birth_date,
+                  age,
+                  contact_number,
+                  address
                 )
+              ),
+              clinicians:clinician_id (
+                role,
+                specialization,
+                person (
+                  id,
+                  first_name,
+                  middle_name,
+                  last_name
+                )
+              )
             `)
             .eq("id", appointment.id)
             .single();
 
-          if (appointmentError) {
-            console.error("Error fetching appointment details:", appointmentError);
-            return appointment;
-          }
+          if (appointmentError) throw appointmentError;
 
           // Fetch vitals data
           const { data: vitalsData, error: vitalsError } = await supabase
             .from("vitals")
             .select(`
-                id,
-                temperature,
-                pulse_rate,
-                blood_pressure,
-                respiration_rate,
-                oxygen_saturation
+              id,
+              temperature,
+              pulse_rate,
+              blood_pressure,
+              respiration_rate,
+              oxygen_saturation
             `)
             .eq("id", appointment.id)
             .single();
 
           if (vitalsError && vitalsError.code !== "PGRST116") {
-            // Ignore not found error
             console.error("Error fetching vitals:", vitalsError);
           }
 
+          // Fetch prescriptions if selected
+          let prescriptionsData = null;
+          if (exportFilters.exportContent.prescriptions) {
+            console.log(`Fetching prescriptions for patient ${appointmentData.patient_id}`);
+            const { data: prescriptions, error: prescriptionsError } = await supabase
+              .from("prescriptions")
+              .select(`
+                id,
+                name,
+                strength,
+                amount,
+                frequency,
+                route,
+                status,
+                date,
+                patient_id,
+                clinician_id
+              `)
+              .eq("patient_id", appointmentData.patient_id);
+
+            if (prescriptionsError) {
+              console.error("Error fetching prescriptions:", prescriptionsError);
+            } else {
+              console.log(`Found ${prescriptions?.length || 0} prescriptions for patient ${appointmentData.patient_id}`);
+              prescriptionsData = prescriptions;
+            }
+          }
+
+          // Fetch supplements if selected
+          let supplementsData = null;
+          if (exportFilters.exportContent.supplements) {
+            console.log(`Fetching supplements for patient ${appointmentData.patient_id}`);
+            const { data: supplements, error: supplementsError } = await supabase
+              .from("supplements")
+              .select(`
+                id,
+                name,
+                strength,
+                amount,
+                frequency,
+                route,
+                status,
+                date,
+                patient_id
+              `)
+              .eq("patient_id", appointmentData.patient_id);
+
+            if (supplementsError) {
+              console.error("Error fetching supplements:", supplementsError);
+            } else {
+              console.log(`Found ${supplements?.length || 0} supplements for patient ${appointmentData.patient_id}`);
+              supplementsData = supplements;
+            }
+          }
+
           // Combine all data
-          return {
+          const combinedData = {
             ...appointmentData,
             vitals: vitalsData || null,
-            patient: appointmentData?.patient || null,
-            clinician: appointmentData?.clinician || null,
+            prescriptions: prescriptionsData,
+            supplements: supplementsData,
+            patient: appointmentData?.patients ? {
+              id: appointmentData.patients.person.id,
+              person: appointmentData.patients.person
+            } : null,
+            clinician: appointmentData?.clinicians ? {
+              role: appointmentData.clinicians.role,
+              specialization: appointmentData.clinicians.specialization,
+              person: appointmentData.clinicians.person
+            } : null
           };
+
+          console.log("Combined data for appointment:", appointment.id, {
+            hasVitals: !!vitalsData,
+            prescriptionCount: prescriptionsData?.length || 0,
+            supplementCount: supplementsData?.length || 0
+          });
+
+          return combinedData;
         })
       );
 
+      console.log(`Completed processing ${appointmentsWithDetails.length} appointments`);
       return appointmentsWithDetails;
     } catch (error) {
       console.error("Error in getExportAppointments:", error);
@@ -672,176 +975,227 @@ export default function AppointmentsTable() {
     }
   };
 
-  // Update the handleExport function to use the async getExportAppointments
+  // Update the handleExport function
   const handleExport = async () => {
     try {
+      console.log("Starting export process with filters:", exportFilters);
       const appointmentsToExport = await getExportAppointments();
+      console.log(`Preparing to export ${appointmentsToExport.length} appointments`);
 
-      if (exportFilters.exportFormat === "csv") {
-        // Generate CSV headers based on selected content
-        const headers = [];
-        if (exportFilters.exportContent.appointmentInfo) {
-          headers.push("Date", "Service", "Status", "Payment Status");
-        }
-        if (exportFilters.exportContent.patientInfo) {
-          headers.push(
-            "Patient Name",
-            "Patient Birth Date",
-            "Patient Age",
-            "Patient Contact",
-            "Patient Address"
-          );
-        }
-        if (exportFilters.exportContent.clinicianInfo) {
-          headers.push("Clinician Name", "Role", "Specialization");
-        }
-        if (exportFilters.exportContent.vitals) {
-          headers.push(
-            "Weight",
-            "Gestational Age",
-            "Temperature",
-            "Pulse Rate",
-            "Blood Pressure",
-            "Respiration Rate",
-            "Oxygen Saturation"
-          );
-        }
-
-        // Generate rows
-        const rows = appointmentsToExport.map((appointment) => {
-          const row: string[] = [];
+      try {
+        if (exportFilters.exportFormat === "csv") {
+          // Declare and initialize headers array before using it
+          const headers: string[] = [];
 
           if (exportFilters.exportContent.appointmentInfo) {
-            row.push(
-              new Date(appointment.date).toLocaleString(),
-              appointment.service || "",
-              appointment.status || "",
-              appointment.payment_status || ""
-            );
+            headers.push("Date", "Service", "Status", "Payment Status");
           }
 
           if (exportFilters.exportContent.patientInfo) {
-            const patientPerson = appointment.patient?.person || {
-              first_name: "",
-              middle_name: null,
-              last_name: "",
-              birth_date: "",
-              age: null,
-              contact_number: null,
-              address: null,
-            };
-            row.push(
-              `${patientPerson.first_name || ""} ${patientPerson.middle_name || ""} ${
-                patientPerson.last_name || ""
-              }`.trim(),
-              patientPerson.birth_date
-                ? new Date(patientPerson.birth_date).toLocaleDateString()
-                : "",
-              patientPerson.age || "",
-              patientPerson.contact_number || "",
-              patientPerson.address || ""
+            headers.push(
+              "Patient Name",
+              "Patient Birth Date",
+              "Patient Age",
+              "Patient Contact",
+              "Patient Address"
             );
           }
 
           if (exportFilters.exportContent.clinicianInfo) {
-            const clinicianData = appointment.clinician || {
-              role: "",
-              specialization: "",
-              person: {
-                first_name: "",
-                middle_name: null,
-                last_name: "",
-              },
-            };
-            row.push(
-              `${clinicianData.person.first_name || ""} ${
-                clinicianData.person.middle_name || ""
-              } ${clinicianData.person.last_name || ""}`.trim(),
-              clinicianData.role || "",
-              clinicianData.specialization || ""
-            );
+            headers.push("Clinician Name", "Role", "Specialization");
           }
 
           if (exportFilters.exportContent.vitals) {
-            const vitalsData = appointment.vitals || {
-              temperature: null,
-              pulse_rate: null,
-              blood_pressure: null,
-              respiration_rate: null,
-              oxygen_saturation: null,
-            };
-            row.push(
-              appointment.weight || "",
-              appointment.gestational_age || "",
-              vitalsData.temperature || "",
-              vitalsData.pulse_rate || "",
-              vitalsData.blood_pressure || "",
-              vitalsData.respiration_rate || "",
-              vitalsData.oxygen_saturation || ""
+            headers.push(
+              "Weight",
+              "Gestational Age",
+              "Temperature",
+              "Pulse Rate",
+              "Blood Pressure",
+              "Respiration Rate",
+              "Oxygen Saturation"
             );
           }
 
-          return row;
-        });
+          if (exportFilters.exportContent.prescriptions) {
+            headers.push(
+              "Prescription Name",
+              "Strength",
+              "Amount",
+              "Frequency",
+              "Route",
+              "Prescription Status",
+              "Date Prescribed"
+            );
+          }
 
-        // Create CSV content
-        const csvContent = [
-          headers.join(","),
-          ...rows.map((row) =>
-            row.map((cell) => `"${(cell || "").toString().replace(/"/g, '""')}"`).join(",")
-          ),
-        ].join("\n");
+          if (exportFilters.exportContent.supplements) {
+            headers.push(
+              "Supplement Name",
+              "Strength",
+              "Amount",
+              "Frequency",
+              "Route",
+              "Supplement Status",
+              "Date Recommended"
+            );
+          }
 
-        // Download CSV file
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-        const link = document.createElement("a");
-        const today = new Date().toISOString().split("T")[0];
-        link.href = URL.createObjectURL(blob);
-        link.download = `appointments_export_${today}.csv`;
-        link.click();
-        toast.success("CSV exported successfully.");
-        setOpenExportDialog(false);
-      } else {
-        // For PDF export
-        for (const appointment of appointmentsToExport) {
-          const exportData = {
-            appointment,
-            exportOptions: exportFilters.exportContent,
-          };
+          // Generate rows
+          const rows = appointmentsToExport.map(appointment => {
+            const row: string[] = [];
+            
+            if (exportFilters.exportContent.appointmentInfo) {
+              row.push(
+                new Date(appointment.date).toLocaleString(),
+                appointment.service || "",
+                appointment.status || "",
+                appointment.payment_status || ""
+              );
+            }
+            
+            if (exportFilters.exportContent.patientInfo) {
+              const patientPerson = appointment.patient?.person || {
+                first_name: "",
+                middle_name: null,
+                last_name: "",
+                birth_date: "",
+                age: null,
+                contact_number: null,
+                address: null
+              };
+              row.push(
+                `${patientPerson.first_name || ""} ${patientPerson.middle_name || ""} ${patientPerson.last_name || ""}`.trim(),
+                patientPerson.birth_date ? new Date(patientPerson.birth_date).toLocaleDateString() : "",
+                patientPerson.age || "",
+                patientPerson.contact_number || "",
+                patientPerson.address || ""
+              );
+            }
+            
+            if (exportFilters.exportContent.clinicianInfo) {
+              const clinicianData = appointment.clinician || {
+                role: "",
+                specialization: "",
+                person: {
+                  first_name: "",
+                  middle_name: null,
+                  last_name: ""
+                }
+              };
+              row.push(
+                `${clinicianData.person.first_name || ""} ${clinicianData.person.middle_name || ""} ${clinicianData.person.last_name || ""}`.trim(),
+                clinicianData.role || "",
+                clinicianData.specialization || ""
+              );
+            }
+            
+            if (exportFilters.exportContent.vitals) {
+              const vitalsData = appointment.vitals || {
+                temperature: null,
+                pulse_rate: null,
+                blood_pressure: null,
+                respiration_rate: null,
+                oxygen_saturation: null
+              };
+              row.push(
+                appointment.weight || "",
+                appointment.gestational_age || "",
+                vitalsData.temperature || "",
+                vitalsData.pulse_rate || "",
+                vitalsData.blood_pressure || "",
+                vitalsData.respiration_rate || "",
+                vitalsData.oxygen_saturation || ""
+              );
+            }
 
-          const response = await fetch("/api/export/appointment", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(exportData),
+            if (exportFilters.exportContent.prescriptions) {
+              const prescription = appointment.prescriptions?.[0] || {};
+              row.push(
+                prescription.name || "",
+                prescription.strength || "",
+                prescription.amount || "",
+                prescription.frequency || "",
+                prescription.route || "",
+                prescription.status || "",
+                prescription.date ? new Date(prescription.date).toLocaleDateString() : ""
+              );
+            }
+
+            if (exportFilters.exportContent.supplements) {
+              const supplement = appointment.supplements?.[0] || {};
+              row.push(
+                supplement.name || "",
+                supplement.strength || "",
+                supplement.amount || "",
+                supplement.frequency || "",
+                supplement.route || "",
+                supplement.status || "",
+                supplement.date ? new Date(supplement.date).toLocaleDateString() : ""
+              );
+            }
+            
+            return row;
           });
 
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(
-              errorData.error ||
-                `Failed to export PDF for appointment on ${new Date(
-                  appointment.date
-                ).toLocaleDateString()}`
-            );
+          // Create CSV content
+          const csvContent = [
+            headers.join(","),
+            ...rows.map(row => row.map(cell => `"${(cell || "").toString().replace(/"/g, '""')}"`).join(","))
+          ].join("\n");
+
+          // Download CSV file
+          const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+          const link = document.createElement("a");
+          const today = new Date().toISOString().split('T')[0];
+          link.href = URL.createObjectURL(blob);
+          link.download = `appointments_export_${today}.csv`;
+          link.click();
+          toast.success("CSV exported successfully.");
+          setOpenExportDialog(false);
+        } else if (exportFilters.exportFormat === "pdf") {
+          for (const appointment of appointmentsToExport) {
+            console.log(`Exporting PDF for appointment ${appointment.id}`, {
+              hasVitals: !!appointment.vitals,
+              prescriptionCount: appointment.prescriptions?.length || 0,
+              supplementCount: appointment.supplements?.length || 0
+            });
+
+            const exportData = {
+              appointment,
+              exportOptions: exportFilters.exportContent
+            };
+
+            const response = await fetch("/api/export/appointment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(exportData),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || `Failed to export PDF for appointment on ${new Date(appointment.date).toLocaleDateString()}`);
+            }
+
+            const pdfBlob = await response.blob();
+            const url = window.URL.createObjectURL(pdfBlob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `Appointment_Report_${new Date(appointment.date).toLocaleDateString()}.pdf`;
+            a.click();
+            window.URL.revokeObjectURL(url);
           }
 
-          const pdfBlob = await response.blob();
-          const url = window.URL.createObjectURL(pdfBlob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `Appointment_Report_${new Date(
-            appointment.date
-          ).toLocaleDateString()}.pdf`;
-          a.click();
-          window.URL.revokeObjectURL(url);
+          toast.success("PDF(s) exported successfully.");
+          setOpenExportDialog(false);
         }
-
-        toast.success("PDF(s) exported successfully.");
-        setOpenExportDialog(false);
+      } catch (error) {
+        console.error("Export failed:", error);
+        toast.error(`Failed to generate export: ${(error as Error).message}`);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("Export failed:", error);
-      toast.error(`Failed to generate export: ${error.message}`);
+      toast.error(`Failed to generate export: ${(error as Error).message}`);
     }
   };
 
@@ -880,39 +1234,68 @@ export default function AppointmentsTable() {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>Filter by</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <div className="p-2">
-                  <Input
-                    placeholder="Service..."
-                    value={advancedSearch.service}
-                    onChange={(e) =>
+                <div className="p-2 space-y-2">
+                  <Select
+                    value={advancedSearch.service || ""}
+                    onValueChange={(value) =>
                       setAdvancedSearch({
                         ...advancedSearch,
-                        service: e.target.value,
+                        service: value,
                       })
                     }
-                    className="mb-2"
-                  />
-                  <Input
-                    placeholder="Status..."
-                    value={advancedSearch.status}
-                    onChange={(e) =>
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select service" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all_services">All Services</SelectItem>
+                      <SelectItem value="Prenatal Care">Prenatal Care</SelectItem>
+                      <SelectItem value="Postpartum Care">Postpartum Care</SelectItem>
+                      <SelectItem value="Consultation">Consultation</SelectItem>
+                      <SelectItem value="Ultrasound">Ultrasound</SelectItem>
+                      <SelectItem value="Lab Test">Lab Test</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={advancedSearch.status || ""}
+                    onValueChange={(value) =>
                       setAdvancedSearch({
                         ...advancedSearch,
-                        status: e.target.value,
+                        status: value,
                       })
                     }
-                    className="mb-2"
-                  />
-                  <Input
-                    placeholder="Payment Status..."
-                    value={advancedSearch.payment_status}
-                    onChange={(e) =>
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all_statuses">All Statuses</SelectItem>
+                      <SelectItem value="Scheduled">Scheduled</SelectItem>
+                      <SelectItem value="Completed">Completed</SelectItem>
+                      <SelectItem value="Canceled">Canceled</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={advancedSearch.payment_status || ""}
+                    onValueChange={(value) =>
                       setAdvancedSearch({
                         ...advancedSearch,
-                        payment_status: e.target.value,
+                        payment_status: value,
                       })
                     }
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select payment status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all_payment_statuses">All Payment Statuses</SelectItem>
+                      <SelectItem value="Pending">Pending</SelectItem>
+                      <SelectItem value="Paid">Paid</SelectItem>
+                      <SelectItem value="Unpaid">Unpaid</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -966,8 +1349,11 @@ export default function AppointmentsTable() {
                                 exportContent: {
                                   appointmentInfo: !!checked,
                                   patientInfo: !!checked,
-                                  clinicianInfo: !!checked领
-                                }
+                                  clinicianInfo: !!checked,
+                                  vitals: !!checked,
+                                  prescriptions: !!checked,
+                                  supplements: !!checked,
+                                },
                               })
                             }
                           />
@@ -1036,6 +1422,38 @@ export default function AppointmentsTable() {
                             }
                           />
                           <Label htmlFor="vitals">Vitals</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="prescriptions"
+                            checked={exportFilters.exportContent.prescriptions}
+                            onCheckedChange={(checked) =>
+                              setExportFilters({
+                                ...exportFilters,
+                                exportContent: {
+                                  ...exportFilters.exportContent,
+                                  prescriptions: !!checked,
+                                },
+                              })
+                            }
+                          />
+                          <Label htmlFor="prescriptions">Prescriptions</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="supplements"
+                            checked={exportFilters.exportContent.supplements}
+                            onCheckedChange={(checked) =>
+                              setExportFilters({
+                                ...exportFilters,
+                                exportContent: {
+                                  ...exportFilters.exportContent,
+                                  supplements: !!checked,
+                                },
+                              })
+                            }
+                          />
+                          <Label htmlFor="supplements">Supplements</Label>
                         </div>
                       </div>
                     </div>
@@ -1127,9 +1545,9 @@ export default function AppointmentsTable() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setOpenExportDialog(false)}>
-                    Cancel
-                  </Button>
+                  <DialogClose asChild>
+                    <Button variant="outline">Cancel</Button>
+                  </DialogClose>
                   <Button onClick={handleExport}>Export</Button>
                 </DialogFooter>
               </DialogContent>
@@ -1160,7 +1578,11 @@ export default function AppointmentsTable() {
             </CardHeader>
 
             <CardContent>
-              {filteredAppointments.length === 0 ? (
+              {loading ? (
+                <div className="flex items-center justify-center h-32">
+                  <div className="text-sm text-muted-foreground">Loading appointments...</div>
+                </div>
+              ) : filteredAppointments.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No appointments found.</p>
               ) : (
                 <Table>
@@ -1206,11 +1628,57 @@ export default function AppointmentsTable() {
                 </Table>
               )}
             </CardContent>
-            <CardFooter>
-              <div className="text-xs text-muted-foreground">
-                Showing <strong>1-{filteredAppointments.length}</strong> of{" "}
-                <strong>{appointments.length}</strong> appointments
-              </div>
+            <CardFooter className="flex items-center justify-between">
+              {!loading && (
+                <div className="flex items-center justify-between w-full">
+                  <div className="text-xs text-muted-foreground">
+                    Showing <strong>{table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}-{Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, filteredAppointments.length)}</strong> of{" "}
+                    <strong>{appointments.length}</strong> appointments
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => table.previousPage()}
+                      disabled={!table.getCanPreviousPage()}
+                    >
+                      Previous
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      <div className="text-xs text-muted-foreground">Page</div>
+                      <strong className="text-sm">
+                        {table.getState().pagination.pageIndex + 1} of{" "}
+                        {table.getPageCount()}
+                      </strong>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => table.nextPage()}
+                      disabled={!table.getCanNextPage()}
+                    >
+                      Next
+                    </Button>
+                    <Select
+                      value={`${table.getState().pagination.pageSize}`}
+                      onValueChange={(value) => {
+                        table.setPageSize(Number(value));
+                      }}
+                    >
+                      <SelectTrigger className="h-8 w-[70px]">
+                        <SelectValue placeholder={table.getState().pagination.pageSize} />
+                      </SelectTrigger>
+                      <SelectContent side="top">
+                        {[10, 20, 30, 40, 50].map((pageSize) => (
+                          <SelectItem key={pageSize} value={`${pageSize}`}>
+                            {pageSize}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
             </CardFooter>
           </Card>
         </TabsContent>
@@ -1225,4 +1693,21 @@ export default function AppointmentsTable() {
       />
     </main>
   );
+}
+
+// Simple debounce implementation for async functions
+function debounce<T extends (...args: any[]) => Promise<any>>(fn: T, wait: number) {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let lastPromise: Promise<any> | null = null;
+
+  return (...args: Parameters<T>) => {
+    if (timeout) clearTimeout(timeout);
+    return new Promise<ReturnType<T>>((resolve, reject) => {
+      timeout = setTimeout(() => {
+        lastPromise = fn(...args)
+          .then(resolve)
+          .catch(reject);
+      }, wait);
+    });
+  };
 }

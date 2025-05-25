@@ -39,9 +39,7 @@ export const clinicianFormSchema: z.ZodType<any> = z.object({
     role: z.enum(["Doctor", "Midwife"], { required_error: "Role is required" }),
     LicenseNumber: z.string().min(1, "License number is required"),
     religion: z.string().optional(),
-    specialization: z.enum(["Obstetrician", "Obstetrician-Gynecologist", "MFM Specialist", "Neonatologist"], { required_error: "Specialization is required" }),
-    appointmentId: z.string().optional(),
-    prescriptionId: z.string().optional(),
+    specialization: z.enum(["Obstetrician", "Obstetrician-Gynecologist", "MFM Specialist", "Neonatologist", "Midwife"], { required_error: "Specialization is required" }),
     password: z.string().min(6, "Password must be at least 6 characters"),
     ecFirstName: z.string().optional(),
     ecMiddleName: z.string().optional(),
@@ -86,9 +84,9 @@ export default function ClinicianForm() {
             citizenship: "",
             address: "",
             religion: "",
-            specialization: "Obstetrician",
             role: "Doctor",
             LicenseNumber: "",
+            specialization: "Obstetrician",
             password: "",
             ecFirstName: "",
             ecMiddleName: "",
@@ -97,8 +95,6 @@ export default function ClinicianForm() {
             ecRelationship: "",
             profileImage: null,
             profileImageUrl: "",
-            appointmentId: "",
-            prescriptionId: "",
         },
     });
 
@@ -108,6 +104,16 @@ export default function ClinicianForm() {
             if (name === 'birthDate' && value.birthDate) {
                 const age = calculateAge(value.birthDate);
                 form.setValue('age', age);
+            }
+        });
+        return () => subscription.unsubscribe();
+    }, [form]);
+
+    // Add effect to handle role changes
+    React.useEffect(() => {
+        const subscription = form.watch((value, { name }) => {
+            if (name === 'role' && value.role === 'Midwife') {
+                form.setValue('specialization', 'Midwife');
             }
         });
         return () => subscription.unsubscribe();
@@ -467,7 +473,16 @@ export default function ClinicianForm() {
                                         <FormLabel>Role</FormLabel>
                                         <Select
                                             value={field.value || "Doctor"}
-                                            onValueChange={field.onChange}
+                                            onValueChange={(value) => {
+                                                field.onChange(value);
+                                                // Set appropriate specialization based on role
+                                                if (value === "Midwife") {
+                                                    form.setValue("specialization", "Midwife");
+                                                } else if (form.getValues("specialization") === "Midwife") {
+                                                    // If changing from Midwife to Doctor, set default specialization
+                                                    form.setValue("specialization", "Obstetrician");
+                                                }
+                                            }}
                                         >
                                             <SelectTrigger id="role">
                                                 <SelectValue placeholder="Select role" />
@@ -484,26 +499,43 @@ export default function ClinicianForm() {
                             <FormField
                                 control={form.control}
                                 name="specialization"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Specialization</FormLabel>
-                                        <Select
-                                            value={field.value || "Obstetrician"}
-                                            onValueChange={field.onChange}
-                                        >
-                                            <SelectTrigger id="specialization">
-                                                <SelectValue placeholder="Select specialization" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Obstetrician">Obstetrician</SelectItem>
-                                                <SelectItem value="Obstetrician-Gynecologist">Obstetrician-Gynecologist</SelectItem>
-                                                <SelectItem value="MFM Specialist">MFM Specialist</SelectItem>
-                                                <SelectItem value="Neonatologist">Neonatologist</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
+                                render={({ field }) => {
+                                    const role = form.watch("role");
+                                    // Ensure specialization is set when role is Midwife
+                                    React.useEffect(() => {
+                                        if (role === "Midwife") {
+                                            form.setValue("specialization", "Midwife");
+                                        }
+                                    }, [role]);
+
+                                    return (
+                                        <FormItem>
+                                            <FormLabel>Specialization</FormLabel>
+                                            <Select
+                                                value={field.value}
+                                                onValueChange={field.onChange}
+                                                disabled={role === "Midwife"}
+                                            >
+                                                <SelectTrigger id="specialization">
+                                                    <SelectValue placeholder="Select specialization" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {role === "Midwife" ? (
+                                                        <SelectItem value="Midwife">Midwife</SelectItem>
+                                                    ) : (
+                                                        <>
+                                                            <SelectItem value="Obstetrician">Obstetrician</SelectItem>
+                                                            <SelectItem value="Obstetrician-Gynecologist">Obstetrician-Gynecologist</SelectItem>
+                                                            <SelectItem value="MFM Specialist">MFM Specialist</SelectItem>
+                                                            <SelectItem value="Neonatologist">Neonatologist</SelectItem>
+                                                        </>
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                        </FormItem>
+                                    );
+                                }}
                             />
                         </div>
 

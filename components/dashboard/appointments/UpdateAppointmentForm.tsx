@@ -13,6 +13,23 @@ import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/lib/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+
+interface Person {
+  id: string;
+  first_name: string;
+  middle_name: string | null;
+  last_name: string;
+}
+
+interface ClinicianResponse {
+  id: string;
+  person: {
+    first_name: string;
+    middle_name: string | null;
+    last_name: string;
+  };
+}
 
 const appointmentFormSchema = z.object({
   patient_id: z.coerce.string().min(1, "Patient is required"),
@@ -24,13 +41,6 @@ const appointmentFormSchema = z.object({
 });
 
 type AppointmentFormValues = z.infer<typeof appointmentFormSchema>;
-
-interface Person {
-  id: string;
-  first_name: string;
-  middle_name?: string;
-  last_name: string;
-}
 
 interface UpdateAppointmentFormProps {
   open: boolean;
@@ -44,6 +54,14 @@ interface UpdateAppointmentFormProps {
     service: string;
     status: string;
     payment_status: string;
+    patient?: {
+      id: string;
+      display: string;
+    };
+    clinician?: {
+      id: string;
+      display: string;
+    };
   };
 }
 
@@ -53,6 +71,7 @@ export default function UpdateAppointmentForm({ open, onOpenChange, onSuccess, a
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [patients, setPatients] = React.useState<Person[]>([]);
   const [clinicians, setClinicians] = React.useState<Person[]>([]);
+  const { userData } = useCurrentUser();
 
   const services = ["Prenatal Care", "Postpartum Care", "Consultation", "Ultrasound", "Lab Test"];
   const statuses = ["Scheduled", "Completed", "Canceled"];
@@ -61,8 +80,8 @@ export default function UpdateAppointmentForm({ open, onOpenChange, onSuccess, a
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentFormSchema),
     defaultValues: {
-      patient_id: appointmentData.patient_id,
-      clinician_id: appointmentData.clinician_id,
+      patient_id: appointmentData.patient_id.toString(),
+      clinician_id: appointmentData.clinician_id.toString(),
       date: new Date(appointmentData.date),
       service: appointmentData.service,
       status: appointmentData.status,
@@ -70,69 +89,166 @@ export default function UpdateAppointmentForm({ open, onOpenChange, onSuccess, a
     },
   });
 
+  // Log form initialization
+  React.useEffect(() => {
+    console.log("=== Form Initialization ===");
+    console.log("Initial Form Values:", form.getValues());
+    console.log("Appointment Data received:", appointmentData);
+  }, []);
+
+  // Add console logs to check user data
+  React.useEffect(() => {
+    console.log("=== User Authentication State ===");
+    console.log("Current User Data:", userData);
+    console.log("Is Admin?", userData?.isAdmin);
+    console.log("Clinician ID:", userData?.clinicianId);
+  }, [userData]);
+
   React.useEffect(() => {
     const fetchData = async () => {
-      const { data: patientsData, error: patientsError } = await supabase
-        .from("patients")
-        .select(`
-          id,
-          person (
-            first_name,
-            middle_name,
-            last_name
-          )
-        `);
+      console.log("=== Update Appointment Form - Starting Data Fetch ===");
+      console.log("Current Form Values:", form.getValues());
+      console.log("Appointment Data:", appointmentData);
+      console.log("User Data:", userData);
 
-      if (patientsError) {
-        console.error("Patients fetch error:", patientsError);
-        toast.error("Error fetching patients");
-      }
+      try {
+        // Fetch patients data
+        console.log("Fetching patients data...");
+        const { data: patientsData, error: patientsError } = await supabase
+          .from("patients")
+          .select(`
+            id,
+            person (
+              first_name,
+              middle_name,
+              last_name
+            )
+          `);
 
-      if (patientsData) {
-        setPatients(
-          patientsData.map((p: any) => ({
+        if (patientsError) {
+          console.error("Patients fetch error:", patientsError);
+          toast.error("Error fetching patients");
+          return;
+        }
+
+        if (patientsData) {
+          console.log("Raw Patients Data:", patientsData);
+          const formattedPatients = patientsData.map((p: any) => ({
             id: p.id.toString(),
             first_name: p.person.first_name || "",
-            middle_name: p.person.middle_name || "",
+            middle_name: p.person.middle_name || null,
             last_name: p.person.last_name || "",
-          }))
-        );
-      }
+          }));
+          console.log("Formatted Patients:", formattedPatients);
+          console.log("Expected Patient ID:", appointmentData.patient_id);
+          setPatients(formattedPatients);
 
-      const { data: cliniciansData, error: cliniciansError } = await supabase
-        .from("clinicians")
-        .select(`
-          id,
-          role,
-          specialization,
-          person (
-            first_name,
-            middle_name,
-            last_name
-          )
-        `);
+          // Compare as strings
+          const patientExists = formattedPatients.some(p => p.id === appointmentData.patient_id.toString());
+          console.log("Patient exists in list:", patientExists);
+        }
 
-      if (cliniciansError) {
-        console.error("Clinicians fetch error:", cliniciansError);
-        toast.error("Error fetching clinicians");
-      }
+        // Fetch clinicians data
+        console.log("Starting clinician data fetch...");
+        if (!userData?.isAdmin && userData?.name) {
+          console.log("Fetching single clinician data for name:", userData.name);
+          
+          // Split the name into parts
+          const nameParts = userData.name.split(' ');
+          const firstName = nameParts[0];
+          const lastName = nameParts[nameParts.length - 1];
+          
+          const { data: cliniciansData, error: clinicianError } = await supabase
+            .from("clinicians")
+            .select(`
+              id,
+              person!inner (
+                first_name,
+                middle_name,
+                last_name
+              )
+            `)
+            .eq('person.first_name', firstName)
+            .eq('person.last_name', lastName)
+            .single();
 
-      if (cliniciansData) {
-        setClinicians(
-          cliniciansData.map((c: any) => ({
-            id: c.id.toString(),
-            first_name: c.person.first_name || "",
-            middle_name: c.person.middle_name || "",
-            last_name: c.person.last_name || "",
-          }))
-        );
+          if (clinicianError) {
+            console.error("Clinician fetch error:", clinicianError);
+            toast.error("Error fetching clinician");
+            return;
+          }
+
+          if (cliniciansData) {
+            const clinician: Person = {
+              id: cliniciansData.id.toString(),
+              first_name: cliniciansData.person.first_name || "",
+              middle_name: cliniciansData.person.middle_name || null,
+              last_name: cliniciansData.person.last_name || "",
+            };
+            console.log("Single Clinician Data:", clinician);
+            setClinicians([clinician]);
+          }
+        } else {
+          console.log("Fetching all clinicians (Admin view)");
+          const { data: cliniciansData, error: cliniciansError } = await supabase
+            .from("clinicians")
+            .select(`
+              id,
+              person (
+                first_name,
+                middle_name,
+                last_name
+              )
+            `);
+
+          if (cliniciansError) {
+            console.error("Clinicians fetch error:", cliniciansError);
+            toast.error("Error fetching clinicians");
+            return;
+          }
+
+          if (cliniciansData) {
+            console.log("Raw Clinicians Data:", cliniciansData);
+            const formattedClinicians = cliniciansData.map((c: any) => ({
+              id: c.id.toString(),
+              first_name: c.person.first_name || "",
+              middle_name: c.person.middle_name || null,
+              last_name: c.person.last_name || "",
+            }));
+            console.log("Formatted Clinicians:", formattedClinicians);
+            console.log("Expected Clinician ID:", appointmentData.clinician_id);
+            setClinicians(formattedClinicians);
+
+            // Compare as strings
+            const clinicianExists = formattedClinicians.some(c => c.id === appointmentData.clinician_id.toString());
+            console.log("Clinician exists in list:", clinicianExists);
+          }
+        }
+
+        // Log final form state after data fetch
+        console.log("=== Final Form State After Data Fetch ===");
+        console.log("Form Values:", form.getValues());
+        console.log("Patients List:", patients);
+        console.log("Clinicians List:", clinicians);
+
+      } catch (err) {
+        console.error("Error fetching data:", err);
+        toast.error("Failed to fetch data");
       }
     };
 
     if (open) {
       fetchData();
     }
-  }, [open]);
+  }, [open, userData]);
+
+  // Add effect to monitor form value changes
+  React.useEffect(() => {
+    const subscription = form.watch((value) => {
+      console.log("Form values changed:", value);
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
 
   const onSubmit = async (data: AppointmentFormValues) => {
     try {
@@ -205,7 +321,6 @@ export default function UpdateAppointmentForm({ open, onOpenChange, onSuccess, a
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
-            {/* First Row: Patient and Clinician */}
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -236,10 +351,16 @@ export default function UpdateAppointmentForm({ open, onOpenChange, onSuccess, a
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Clinician</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger className={inputClass}>
-                        <SelectValue placeholder="Select clinician" />
-                      </SelectTrigger>
+                    <Select 
+                      value={field.value} 
+                      onValueChange={field.onChange}
+                      disabled={!userData?.isAdmin}
+                    >
+                      <FormControl>
+                        <SelectTrigger className={inputClass}>
+                          <SelectValue placeholder="Select clinician" />
+                        </SelectTrigger>
+                      </FormControl>
                       <SelectContent>
                         {clinicians.map((c) => (
                           <SelectItem key={c.id} value={c.id}>
@@ -254,7 +375,6 @@ export default function UpdateAppointmentForm({ open, onOpenChange, onSuccess, a
               />
             </div>
 
-            {/* Second Row: Date and Service */}
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -294,7 +414,6 @@ export default function UpdateAppointmentForm({ open, onOpenChange, onSuccess, a
               />
             </div>
 
-            {/* Third Row: Status and Payment Status */}
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}

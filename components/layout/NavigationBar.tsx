@@ -1,6 +1,7 @@
 "use client";
 
 import Sidebar from "@/components/layout/Sidebar";
+import AppointmentForm from "@/components/dashboard/appointments/AppointmentForm";
 
 import { 
     Search, 
@@ -19,6 +20,7 @@ import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
 import {
@@ -31,6 +33,7 @@ import {
 } from "@/components/ui/command"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useCurrentUser } from "@/hooks/useCurrentUser"
 
 interface NavigationBarProps {
     className?: string;
@@ -38,13 +41,34 @@ interface NavigationBarProps {
 
 export default function NavigationBar({ className }: NavigationBarProps) {
     const [open, setOpen] = useState(false)
+    const [showAppointmentForm, setShowAppointmentForm] = useState(false)
     const router = useRouter()
+    const { userData } = useCurrentUser()
 
-    const navigationItems = [
-        { href: "/Dashboard/Appointments/Appointment-Form", label: "Set an Appointment" },
-        { href: "/Dashboard/Clinicians/Clinician-Form", label: "Add a Clinician" },
-        { href: "/Dashboard/Patients/Patient-Form", label: "Add a Patient" }
-    ]
+    const getNavigationItems = () => {
+        const items = [
+            { href: "/Dashboard/Appointments/Appointment-Form", label: "Set an Appointment", action: () => setShowAppointmentForm(true) },
+            { href: "/Dashboard/Patients/Patient-Form", label: "Add a Patient" }
+        ];
+
+        // Only add clinician form for admin users
+        if (userData?.isAdmin) {
+            items.push({ href: "/Dashboard/Clinicians/Clinician-Form", label: "Add a Clinician" });
+        }
+
+        return items;
+    }
+
+    const navigationItems = getNavigationItems();
+
+    const handleCommandSelect = (item: { href: string; label: string; action?: () => void }) => {
+        if (item.action) {
+            item.action();
+        } else {
+            router.push(item.href);
+        }
+        setOpen(false);
+    };
 
     return (
         <header className={cn(
@@ -79,6 +103,7 @@ export default function NavigationBar({ className }: NavigationBarProps) {
                         </div>
                     </DialogTrigger>
                     <DialogContent className="p-0">
+                        <DialogTitle className="sr-only">Search Commands</DialogTitle>
                         <Command>
                             <CommandInput placeholder="Type a command or search..." />
                             <CommandList>
@@ -87,10 +112,7 @@ export default function NavigationBar({ className }: NavigationBarProps) {
                                     {navigationItems.map((item) => (
                                         <CommandItem
                                             key={item.href}
-                                            onSelect={() => {
-                                                router.push(item.href)
-                                                setOpen(false)
-                                            }}
+                                            onSelect={() => handleCommandSelect(item)}
                                         >
                                             {item.label}
                                         </CommandItem>
@@ -106,6 +128,14 @@ export default function NavigationBar({ className }: NavigationBarProps) {
                     <span className="sr-only">Notifications</span>
                 </Button>
             </div>
+
+            <AppointmentForm
+                open={showAppointmentForm}
+                onOpenChange={setShowAppointmentForm}
+                onSuccess={() => {
+                    setShowAppointmentForm(false);
+                }}
+            />
         </header>
     );
 }

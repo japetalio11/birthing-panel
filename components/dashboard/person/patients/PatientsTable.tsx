@@ -62,6 +62,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    DialogClose,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
@@ -71,7 +72,8 @@ import {
     getCoreRowModel,
     getSortedRowModel,
     useReactTable,
-    flexRender
+    flexRender,
+    getPaginationRowModel,
 } from "@tanstack/react-table";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
@@ -267,8 +269,8 @@ export default function PatientsTable() {
         address: "",
     });
     const [tab, setTab] = React.useState("all");
-    const [sorting, setSorting] = React.useState<SortingState>([]);
-    const [rowSelection, setRowSelection] = React.useState({});
+    const [sorting, setSorting] = useState<SortingState>([]);
+    const [rowSelection, setRowSelection] = useState({});
     const [exportFilters, setExportFilters] = React.useState({
         startDate: undefined as Date | undefined,
         endDate: undefined as Date | undefined,
@@ -278,6 +280,7 @@ export default function PatientsTable() {
         sort: "none" as "none" | "asc" | "desc",
         limit: "",
         exportFormat: "csv" as "csv" | "pdf",
+        onlyWithAppointments: false,
         exportContent: {
             basicInfo: true,
             appointments: false,
@@ -287,6 +290,10 @@ export default function PatientsTable() {
         }
     });
     const [openExportDialog, setOpenExportDialog] = useState(false);
+    const [pagination, setPagination] = useState({
+        pageIndex: 0,
+        pageSize: 10,
+    });
 
     // Expose update function to window for column access
     React.useEffect(() => {
@@ -409,6 +416,12 @@ export default function PatientsTable() {
             );
         }
 
+        if (advancedSearch.last_appointment) {
+            result = result.filter((patient) => {
+                if (!patient.last_appointment) return false;
+                return patient.last_appointment.toLowerCase().includes(advancedSearch.last_appointment.toLowerCase());
+            });
+        }
         if (advancedSearch.birth_date) {
             result = result.filter((patient) =>
                 patient.birth_date?.toLowerCase().includes(advancedSearch.birth_date.toLowerCase())
@@ -441,18 +454,60 @@ export default function PatientsTable() {
 
     const getExportPatients = () => {
         let result = [...filteredPatients];
+        console.log('Initial patients count:', result.length);
+
+        // Filter patients with appointments if the option is selected
+        if (exportFilters.onlyWithAppointments) {
+            result = result.filter(patient => patient.last_appointment !== null);
+            console.log('Patients with appointments:', result.length);
+        }
 
         if (exportFilters.startDate || exportFilters.endDate) {
             result = result.filter((patient) => {
                 if (!patient.last_appointment) return false;
-                const apptDate = new Date(patient.last_appointment);
-                const start = exportFilters.startDate
-                    ? new Date(exportFilters.startDate).setHours(0, 0, 0, 0)
-                    : -Infinity;
-                const end = exportFilters.endDate
-                    ? new Date(exportFilters.endDate).setHours(23, 59, 59, 999)
-                    : Infinity;
-                return apptDate.getTime() >= start && apptDate.getTime() <= end;
+                
+                try {
+                    // Parse the appointment date and time
+                    const [datePart, timePart] = patient.last_appointment.split(' at ');
+                    const [month, day, year] = datePart.split(' ');
+                    
+                    // Convert month name to month number
+                    const months = {
+                        'January': 0, 'February': 1, 'March': 2, 'April': 3,
+                        'May': 4, 'June': 5, 'July': 6, 'August': 7,
+                        'September': 8, 'October': 9, 'November': 10, 'December': 11
+                    };
+                    
+                    // Create date object from appointment
+                    const apptDate = new Date(
+                        parseInt(year),
+                        months[month as keyof typeof months],
+                        parseInt(day)
+                    );
+                    
+                    // Create date objects from filters
+                    const startDate = exportFilters.startDate ? new Date(exportFilters.startDate) : null;
+                    const endDate = exportFilters.endDate ? new Date(exportFilters.endDate) : null;
+                    
+                    // Set times for consistent comparison
+                    apptDate.setHours(0, 0, 0, 0);
+                    if (startDate) startDate.setHours(0, 0, 0, 0);
+                    if (endDate) endDate.setHours(23, 59, 59, 999);
+                    
+                    // Compare dates
+                    if (startDate && endDate) {
+                        return apptDate >= startDate && apptDate <= endDate;
+                    } else if (startDate) {
+                        return apptDate >= startDate;
+                    } else if (endDate) {
+                        return apptDate <= endDate;
+                    }
+                    
+                    return true;
+                } catch (error) {
+                    console.error('Error parsing date:', error);
+                    return false;
+                }
             });
         }
 
@@ -486,11 +541,18 @@ export default function PatientsTable() {
             }
         }
 
+        console.log('Final export patients:', result);
         return result;
     };
 
     const handleExport = async () => {
         const patientsToExport = getExportPatients();
+        console.log('Patients to export:', patientsToExport.length);
+        
+        if (patientsToExport.length === 0) {
+            toast.error("No patients match the selected criteria for export");
+            return;
+        }
         
         if (exportFilters.exportFormat === "csv") {
             try {
@@ -765,6 +827,7 @@ export default function PatientsTable() {
             try {
                 // For each patient, fetch their additional data based on export content options
                 for (const patient of patientsToExport) {
+                    console.log('Processing patient for PDF:', patient.name);
                     const exportData: any = {
                         patient: {
                             first_name: patient.name.split(" ")[0],
@@ -858,12 +921,14 @@ export default function PatientsTable() {
                     const url = window.URL.createObjectURL(pdfBlob);
                     const a = document.createElement("a");
                     a.href = url;
-                    a.download = `Patient_Report_${patient.name}.pdf`;
+                    a.download = `Patient_Report_${patient.name}_${new Date().toISOString().split('T')[0]}.pdf`;
+                    document.body.appendChild(a); // Add to document
                     a.click();
+                    document.body.removeChild(a); // Remove from document
                     window.URL.revokeObjectURL(url);
                 }
 
-                toast.success("PDF(s) exported successfully.");
+                toast.success(`Successfully exported ${patientsToExport.length} patient(s) to PDF`);
                 setOpenExportDialog(false);
             } catch (error: any) {
                 console.error("Export failed:", error);
@@ -879,9 +944,12 @@ export default function PatientsTable() {
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         onRowSelectionChange: setRowSelection,
+        getPaginationRowModel: getPaginationRowModel(),
+        onPaginationChange: setPagination,
         state: {
             sorting,
             rowSelection,
+            pagination,
         },
     });
 
@@ -980,7 +1048,7 @@ export default function PatientsTable() {
 
                         <Dialog open={openExportDialog} onOpenChange={setOpenExportDialog}>
                             <DialogTrigger asChild>
-                                <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => setOpenExportDialog(true)}>
+                                <Button size="sm" variant="outline" className="h-8 gap-1">
                                     <Download />
                                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Export</span>
                                 </Button>
@@ -1236,11 +1304,26 @@ export default function PatientsTable() {
                                             />
                                         </div>
                                     </div>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center space-x-2">
+                                            <Checkbox
+                                                id="onlyWithAppointments"
+                                                checked={exportFilters.onlyWithAppointments}
+                                                onCheckedChange={(checked) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        onlyWithAppointments: !!checked,
+                                                    })
+                                                }
+                                            />
+                                            <Label htmlFor="onlyWithAppointments">Only Patients with Appointments</Label>
+                                        </div>
+                                    </div>
                                 </div>
                                 <DialogFooter>
-                                    <Button variant="outline" onClick={() => setOpenExportDialog(false)}>
-                                        Cancel
-                                    </Button>
+                                    <DialogClose asChild>
+                                        <Button variant="outline">Cancel</Button>
+                                    </DialogClose>
                                     <Button onClick={handleExport}>Export</Button>
                                 </DialogFooter>
                             </DialogContent>
@@ -1328,10 +1411,28 @@ export default function PatientsTable() {
                                 </Table>
                             )}
                         </CardContent>
-                        <CardFooter>
+                        <CardFooter className="flex items-center justify-between">
                             <div className="text-xs text-muted-foreground">
-                                Showing <strong>1-{filteredPatients.length}</strong> of{" "}
+                                Showing <strong>{table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}-{Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, filteredPatients.length)}</strong> of{" "}
                                 <strong>{patients.length}</strong> patients
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => table.previousPage()}
+                                    disabled={!table.getCanPreviousPage()}
+                                >
+                                    Previous
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => table.nextPage()}
+                                    disabled={!table.getCanNextPage()}
+                                >
+                                    Next
+                                </Button>
                             </div>
                         </CardFooter>
                     </Card>

@@ -51,7 +51,7 @@ export const updateClinicianFormSchema = z.object({
     role: z.enum(["Doctor", "Midwife"], { required_error: "Role is required" }),
     LicenseNumber: z.string().min(1, "License number is required"),
     religion: z.string().optional(),
-    specialization: z.enum(["Obstetrician", "Obstetrician-Gynecologist", "MFM Specialist", "Neonatologist"], { required_error: "Specialization is required" }),
+    specialization: z.enum(["Obstetrician", "Obstetrician-Gynecologist", "MFM Specialist", "Neonatologist", "Midwife"], { required_error: "Specialization is required" }),
     appointmentId: z.string().optional(),
     prescriptionId: z.string().optional(),
     ecFirstName: z.string().optional(),
@@ -101,6 +101,16 @@ export default function UpdateClinicianForm() {
             profileImageUrl: "",
         },
     });
+
+    // Add effect to handle role changes
+    React.useEffect(() => {
+        const subscription = form.watch((value, { name }) => {
+            if (name === 'role' && value.role === 'Midwife') {
+                form.setValue('specialization', 'Midwife');
+            }
+        });
+        return () => subscription.unsubscribe();
+    }, [form]);
 
     // Add this function to get signed URL for profile image
     const getProfileImageUrl = async (filePath: string) => {
@@ -508,7 +518,16 @@ export default function UpdateClinicianForm() {
                                         <FormLabel>Role</FormLabel>
                                         <Select
                                             value={field.value}
-                                            onValueChange={field.onChange}
+                                            onValueChange={(value) => {
+                                                field.onChange(value);
+                                                // Set appropriate specialization based on role
+                                                if (value === "Midwife") {
+                                                    form.setValue("specialization", "Midwife");
+                                                } else if (form.getValues("specialization") === "Midwife") {
+                                                    // If changing from Midwife to Doctor, set default specialization
+                                                    form.setValue("specialization", "Obstetrician");
+                                                }
+                                            }}
                                         >
                                             <SelectTrigger id="role" className="col-span-3">
                                                 <SelectValue placeholder="Select role" />
@@ -539,25 +558,42 @@ export default function UpdateClinicianForm() {
                             <FormField
                                 control={form.control}
                                 name="specialization"
-                                render={({ field }: { field: any }) => (
-                                    <FormItem>
-                                        <FormLabel>Specialization</FormLabel>
-                                        <Select
-                                            value={field.value}
-                                            onValueChange={field.onChange}
-                                        >
-                                            <SelectTrigger id="specialization" className="col-span-3">
-                                                <SelectValue placeholder="Select specialization" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="Obstetrician">Obstetrician</SelectItem>
-                                                <SelectItem value="Obstetrician-Gynecologist">Obstetrician-Gynecologist</SelectItem>
-                                                <SelectItem value="MFM Specialist">MFM Specialist</SelectItem>
-                                                <SelectItem value="Neontologist">Neontologist</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </FormItem>
-                                )}
+                                render={({ field }: { field: any }) => {
+                                    const role = form.watch("role");
+                                    // Ensure specialization is set when role is Midwife
+                                    React.useEffect(() => {
+                                        if (role === "Midwife") {
+                                            form.setValue("specialization", "Midwife");
+                                        }
+                                    }, [role]);
+
+                                    return (
+                                        <FormItem>
+                                            <FormLabel>Specialization</FormLabel>
+                                            <Select
+                                                value={field.value}
+                                                onValueChange={field.onChange}
+                                                disabled={role === "Midwife"}
+                                            >
+                                                <SelectTrigger id="specialization" className="col-span-3">
+                                                    <SelectValue placeholder="Select specialization" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {role === "Midwife" ? (
+                                                        <SelectItem value="Midwife">Midwife</SelectItem>
+                                                    ) : (
+                                                        <>
+                                                            <SelectItem value="Obstetrician">Obstetrician</SelectItem>
+                                                            <SelectItem value="Obstetrician-Gynecologist">Obstetrician-Gynecologist</SelectItem>
+                                                            <SelectItem value="MFM Specialist">MFM Specialist</SelectItem>
+                                                            <SelectItem value="Neonatologist">Neonatologist</SelectItem>
+                                                        </>
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+                                        </FormItem>
+                                    );
+                                }}
                             />
                         </div>
 

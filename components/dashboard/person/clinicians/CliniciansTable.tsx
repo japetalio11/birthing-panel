@@ -61,6 +61,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    DialogClose,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
@@ -70,7 +71,8 @@ import {
     getCoreRowModel,
     getSortedRowModel,
     useReactTable,
-    flexRender
+    flexRender,
+    getPaginationRowModel,
 } from "@tanstack/react-table";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
@@ -266,11 +268,15 @@ export default function CliniciansTable() {
     });
     const [tab, setTab] = React.useState("all");
     const [roleFilter, setRoleFilter] = React.useState("all");
-    const [sorting, setSorting] = React.useState<SortingState>([]);
-    const [rowSelection, setRowSelection] = React.useState({});
+    const [sorting, setSorting] = useState<SortingState>([]);
+    const [rowSelection, setRowSelection] = useState({});
     const [userData, setUserData] = React.useState<any>(null);
     const [openExportDialog, setOpenExportDialog] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+    const [pagination, setPagination] = useState({
+        pageIndex: 0,
+        pageSize: 10,
+    });
     const [exportFilters, setExportFilters] = useState({
         startDate: undefined as Date | undefined,
         endDate: undefined as Date | undefined,
@@ -280,6 +286,7 @@ export default function CliniciansTable() {
         role: "all" as "all" | "doctor" | "midwife",
         sort: "none" as "none" | "asc" | "desc",
         limit: "",
+        onlyWithAppointments: false,
         exportFormat: "csv" as "csv" | "pdf",
         exportContent: {
             basicInfo: true,
@@ -422,6 +429,12 @@ export default function CliniciansTable() {
         }
 
         // Apply advanced search
+        if (advancedSearch.last_appointment) {
+            result = result.filter((clinician) => {
+                if (!clinician.last_appointment) return false;
+                return clinician.last_appointment.toLowerCase().includes(advancedSearch.last_appointment.toLowerCase());
+            });
+        }
         if (advancedSearch.age) {
             result = result.filter((clinician) =>
                 clinician.age?.toLowerCase().includes(advancedSearch.age.toLowerCase())
@@ -463,26 +476,69 @@ export default function CliniciansTable() {
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         onRowSelectionChange: setRowSelection,
+        getPaginationRowModel: getPaginationRowModel(),
+        onPaginationChange: setPagination,
         state: {
             sorting,
             rowSelection,
+            pagination,
         },
     });
 
     const getExportClinicians = () => {
         let result = [...filteredClinicians];
 
+        // Filter clinicians with appointments if the option is selected
+        if (exportFilters.onlyWithAppointments) {
+            result = result.filter(clinician => clinician.last_appointment !== null);
+        }
+
         if (exportFilters.startDate || exportFilters.endDate) {
             result = result.filter((clinician) => {
                 if (!clinician.last_appointment) return false;
-                const apptDate = new Date(clinician.last_appointment);
-                const start = exportFilters.startDate
-                    ? new Date(exportFilters.startDate).setHours(0, 0, 0, 0)
-                    : -Infinity;
-                const end = exportFilters.endDate
-                    ? new Date(exportFilters.endDate).setHours(23, 59, 59, 999)
-                    : Infinity;
-                return apptDate.getTime() >= start && apptDate.getTime() <= end;
+                
+                try {
+                    // Parse the appointment date and time
+                    const [datePart, timePart] = clinician.last_appointment.split(' at ');
+                    const [month, day, year] = datePart.split(' ');
+                    
+                    // Convert month name to month number
+                    const months = {
+                        'January': 0, 'February': 1, 'March': 2, 'April': 3,
+                        'May': 4, 'June': 5, 'July': 6, 'August': 7,
+                        'September': 8, 'October': 9, 'November': 10, 'December': 11
+                    };
+                    
+                    // Create date object from appointment
+                    const apptDate = new Date(
+                        parseInt(year),
+                        months[month as keyof typeof months],
+                        parseInt(day)
+                    );
+                    
+                    // Create date objects from filters
+                    const startDate = exportFilters.startDate ? new Date(exportFilters.startDate) : null;
+                    const endDate = exportFilters.endDate ? new Date(exportFilters.endDate) : null;
+                    
+                    // Set times for consistent comparison
+                    apptDate.setHours(0, 0, 0, 0);
+                    if (startDate) startDate.setHours(0, 0, 0, 0);
+                    if (endDate) endDate.setHours(23, 59, 59, 999);
+                    
+                    // Compare dates
+                    if (startDate && endDate) {
+                        return apptDate >= startDate && apptDate <= endDate;
+                    } else if (startDate) {
+                        return apptDate >= startDate;
+                    } else if (endDate) {
+                        return apptDate <= endDate;
+                    }
+                    
+                    return true;
+                } catch (error) {
+                    console.error('Error parsing date:', error);
+                    return false;
+                }
             });
         }
 
@@ -969,7 +1025,7 @@ export default function CliniciansTable() {
 
                         <Dialog open={openExportDialog} onOpenChange={setOpenExportDialog}>
                             <DialogTrigger asChild>
-                                <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => setOpenExportDialog(true)}>
+                                <Button size="sm" variant="outline" className="h-8 gap-1">
                                     <Download />
                                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Export</span>
                                 </Button>
@@ -1003,6 +1059,23 @@ export default function CliniciansTable() {
                                                 </SelectContent>
                                             </Select>
                                         </div>
+
+                                        <div className="space-y-2">
+                                            <div className="flex items-center space-x-2">
+                                                <Checkbox
+                                                    id="onlyWithAppointments"
+                                                    checked={exportFilters.onlyWithAppointments}
+                                                    onCheckedChange={(checked) =>
+                                                        setExportFilters({
+                                                            ...exportFilters,
+                                                            onlyWithAppointments: !!checked,
+                                                        })
+                                                    }
+                                                />
+                                                <Label htmlFor="onlyWithAppointments">Only Clinicians with Appointments</Label>
+                                            </div>
+                                        </div>
+
                                         <div className="space-y-2 mb-6">
                                             <Label>Export Content</Label>
                                             <div className="grid grid-cols-3 gap-4">
@@ -1150,7 +1223,7 @@ export default function CliniciansTable() {
                                             />
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                                         <div className="space-y-2">
                                             <Label>Status</Label>
                                             <Select
@@ -1214,26 +1287,26 @@ export default function CliniciansTable() {
                                                 </SelectContent>
                                             </Select>
                                         </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <Label>Export Limit</Label>
-                                        <Input
-                                            type="number"
-                                            placeholder="e.g., 3"
-                                            value={exportFilters.limit}
-                                            onChange={(e) =>
-                                                setExportFilters({
-                                                    ...exportFilters,
-                                                    limit: e.target.value,
-                                                })
-                                            }
-                                        />
+                                        <div className="space-y-2">
+                                            <Label>Export Limit</Label>
+                                            <Input
+                                                type="number"
+                                                placeholder="e.g., 3"
+                                                value={exportFilters.limit}
+                                                onChange={(e) =>
+                                                    setExportFilters({
+                                                        ...exportFilters,
+                                                        limit: e.target.value,
+                                                    })
+                                                }
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                                 <DialogFooter>
-                                    <Button variant="outline" onClick={() => setOpenExportDialog(false)}>
-                                        Cancel
-                                    </Button>
+                                    <DialogClose asChild>
+                                        <Button variant="outline">Cancel</Button>
+                                    </DialogClose>
                                     <Button onClick={handleExport} disabled={isExporting}>
                                         {isExporting ? "Exporting..." : "Export"}
                                     </Button>
@@ -1322,10 +1395,28 @@ export default function CliniciansTable() {
                                 </Table>
                             )}
                         </CardContent>
-                        <CardFooter>
+                        <CardFooter className="flex items-center justify-between">
                             <div className="text-xs text-muted-foreground">
-                                Showing <strong>1-{filteredClinicians.length}</strong> of{" "}
+                                Showing <strong>{table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}-{Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, filteredClinicians.length)}</strong> of{" "}
                                 <strong>{clinicians.length}</strong> clinicians
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => table.previousPage()}
+                                    disabled={!table.getCanPreviousPage()}
+                                >
+                                    Previous
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => table.nextPage()}
+                                    disabled={!table.getCanNextPage()}
+                                >
+                                    Next
+                                </Button>
                             </div>
                         </CardFooter>
                     </Card>

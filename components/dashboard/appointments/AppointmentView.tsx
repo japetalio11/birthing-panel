@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog";
 import {
   Card,
@@ -29,8 +31,11 @@ import {
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import SupplementRecommendation from "@/components/dashboard/person/SupplementRecommendation";
+import Prescriptions from "@/components/dashboard/person/Prescriptions";
 import VitalsForm from "./VitalsForm";
 import UpdateAppointmentForm from "./UpdateAppointmentForm";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 interface Person {
   id: number;
@@ -41,6 +46,7 @@ interface Person {
   age: string | null;
   contact_number: string | null;
   address: string | null;
+  fileurl?: string;
 }
 
 interface Patient {
@@ -92,32 +98,48 @@ export default function AppointmentView() {
   const [openExportDialog, setOpenExportDialog] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
   const [isCancelled, setIsCancelled] = useState(false);
-  const [userData, setUserData] = useState<{ isAdmin: boolean; isDoctor: boolean } | null>(null);
+  const { userData } = useCurrentUser();
+  const [vitals, setVitals] = useState<Vitals[]>([]);
+  const [hasExistingVitals, setHasExistingVitals] = useState(false);
+  const [showUpdateForm, setShowUpdateForm] = useState(false);
+  const [showVitalsForm, setShowVitalsForm] = useState(false);
   const [exportOptions, setExportOptions] = useState({
     appointmentInfo: true,
     patientInfo: false,
     clinicianInfo: false,
     vitals: false,
+    prescriptions: false,
+    supplements: false
   });
   const [exportFormat, setExportFormat] = useState("pdf");
   const [isExporting, setIsExporting] = useState(false);
-  const [vitals, setVitals] = useState<Vitals[]>([]);
-  const [showVitalsForm, setShowVitalsForm] = useState(false);
-  const [hasExistingVitals, setHasExistingVitals] = useState(false);
-  const [showUpdateForm, setShowUpdateForm] = useState(false);
+  const [profileImageSignedUrl, setProfileImageSignedUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    // Get user data from session storage
-    const storedUser = sessionStorage.getItem('user');
-    if (storedUser) {
-      const user = JSON.parse(storedUser);
-      setUserData({
-        isAdmin: user.isAdmin,
-        isDoctor: user.isDoctor
-      });
+  const getProfileImageUrl = async (filePath: string) => {
+    try {
+      const path = filePath.split('profile-pictures/')[1] || filePath;
+      const { data, error } = await supabase.storage
+        .from('profile-pictures')
+        .createSignedUrl(path, 3600);
+      if (error) {
+        console.error('Error generating profile image signed URL:', error.message);
+        return null;
+      }
+      return data.signedUrl;
+    } catch (error) {
+      console.error('Unexpected error generating profile image signed URL:', error);
+      return null;
     }
-  }, []);
+  };
 
+  // Add debug logs for user role
+  useEffect(() => {
+    console.log("Current user data:", userData);
+    console.log("Is doctor?", userData?.role === "Doctor");
+    console.log("Is admin?", userData?.isAdmin);
+  }, [userData]);
+
+  // Fetch appointment data from Supabase
   useEffect(() => {
     if (!id) {
       toast.error("No appointment ID provided.");
@@ -131,7 +153,7 @@ export default function AppointmentView() {
           .from("appointment")
           .select(`
             *,
-            patient:patient_id (
+            patients:patient_id (
               person (
                 id,
                 first_name,
@@ -140,10 +162,11 @@ export default function AppointmentView() {
                 birth_date,
                 age,
                 contact_number,
-                address
+                address,
+                fileurl
               )
             ),
-            clinician:clinician_id (
+            clinicians:clinician_id (
               role,
               specialization,
               person (
@@ -154,40 +177,51 @@ export default function AppointmentView() {
               )
             )
           `)
-          .eq("id", id)
+          .eq('id', id)
           .single();
 
         if (appointmentError) {
-          console.error("Supabase query error:", appointmentError);
-          toast.error(`Failed to fetch appointment: ${appointmentError.message}`);
+          console.error("Error fetching appointment:", appointmentError);
+          toast.error(`Failed to fetch appointment data: ${appointmentError.message}`);
           setLoading(false);
-          router.push("/Dashboard/Appointments");
           return;
         }
 
         if (!appointmentData) {
-          console.warn("No appointment found with ID:", id);
-          toast.error("Appointment not found.");
+          console.error("No appointment found with ID:", id);
+          toast.error("Appointment not found");
           setLoading(false);
           router.push("/Dashboard/Appointments");
           return;
         }
 
-        const transformedData: Appointment = {
+        // Transform the data
+        const transformedData = {
           ...appointmentData,
-          patient: appointmentData.patient ? {
-            id: appointmentData.patient.id,
-            person: appointmentData.patient.person
+          patient: appointmentData.patients ? {
+            id: appointmentData.patients.person.id,
+            person: appointmentData.patients.person
           } : undefined,
-          clinician: appointmentData.clinician ? {
-            role: appointmentData.clinician.role,
-            specialization: appointmentData.clinician.specialization,
-            person: appointmentData.clinician.person
+          clinician: appointmentData.clinicians ? {
+            role: appointmentData.clinicians.role,
+            specialization: appointmentData.clinicians.specialization,
+            person: appointmentData.clinicians.person
           } : undefined
         };
 
+        console.log("Fetched Data:", {
+          appointment: appointmentData,
+          transformed: transformedData
+        });
+
         setAppointment(transformedData);
         setIsCancelled(transformedData.status.toLowerCase() === "canceled");
+
+        // Get profile image URL if fileurl exists
+        if (transformedData.patient?.person?.fileurl) {
+          const signedUrl = await getProfileImageUrl(transformedData.patient.person.fileurl);
+          setProfileImageSignedUrl(signedUrl);
+        }
 
         // Fetch vitals for this appointment
         try {
@@ -221,7 +255,7 @@ export default function AppointmentView() {
     }
 
     fetchAppointment();
-  }, [router, id]);
+  }, [id, router]);
 
   const handleCancelToggle = async () => {
     if (!appointment) return;
@@ -264,7 +298,7 @@ export default function AppointmentView() {
     if (!id) return;
 
     try {
-      const { data: appointmentData, error: appointmentError } = await supabase
+      const { data: appointmentData, error: appointmentError }: { data: Appointment | null; error: any } = await supabase
         .from("appointment")
         .select(`
           *,
@@ -295,7 +329,7 @@ export default function AppointmentView() {
 
       if (appointmentError) throw appointmentError;
 
-      const transformedData = {
+      const transformedData = appointmentData ? {
         ...appointmentData,
         patient: appointmentData.patient ? {
           id: appointmentData.patient.id,
@@ -306,10 +340,12 @@ export default function AppointmentView() {
           specialization: appointmentData.clinician.specialization,
           person: appointmentData.clinician.person
         } : undefined
-      };
+      } : null;
 
-      setAppointment(transformedData);
-      setIsCancelled(transformedData.status.toLowerCase() === "canceled");
+      if (transformedData) {
+        setAppointment(transformedData);
+        setIsCancelled(transformedData.status.toLowerCase() === "canceled");
+      }
     } catch (err: any) {
       console.error("Error refreshing appointment data:", err);
       toast.error("Failed to refresh appointment data");
@@ -335,13 +371,53 @@ export default function AppointmentView() {
     try {
       console.log("Preparing export data with options:", exportOptions);
 
+      // Fetch prescriptions if needed
+      let prescriptionsData = null;
+      if (exportOptions.prescriptions) {
+        console.log("Fetching prescriptions for patient:", appointment.patient_id);
+        const { data: prescriptions, error: prescriptionsError } = await supabase
+          .from("prescriptions")
+          .select("*")
+          .eq("patient_id", appointment.patient_id);
+
+        if (prescriptionsError) {
+          console.error("Error fetching prescriptions:", prescriptionsError);
+        } else {
+          console.log("Fetched prescriptions:", prescriptions);
+          prescriptionsData = prescriptions;
+        }
+      }
+
+      // Fetch supplements if needed
+      let supplementsData = null;
+      if (exportOptions.supplements) {
+        console.log("Fetching supplements for patient:", appointment.patient_id);
+        const { data: supplements, error: supplementsError } = await supabase
+          .from("supplements")
+          .select("*")
+          .eq("patient_id", appointment.patient_id);
+
+        if (supplementsError) {
+          console.error("Error fetching supplements:", supplementsError);
+        } else {
+          console.log("Fetched supplements:", supplements);
+          supplementsData = supplements;
+        }
+      }
+
+      // Include vitals data in the export
       const exportData = {
         appointment: {
           ...appointment,
-          vitals: vitals[0] || null
+          vitals: vitals[0] || null,
+          prescriptions: prescriptionsData,
+          supplements: supplementsData
         },
-        exportOptions
+        exportOptions,
+        exportFormat
       };
+
+      console.log("Final export data being sent:", JSON.stringify(exportData, null, 2));
 
       console.log("Sending request to /api/export/appointment...");
       const response = await fetch("/api/export/appointment", {
@@ -356,7 +432,7 @@ export default function AppointmentView() {
         throw new Error(errorData.error || `API request failed with status ${response.status}`);
       }
 
-      console.log("Processing PDF download...");
+      console.log("Processing download...");
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const patientName = appointment.patient
@@ -364,7 +440,7 @@ export default function AppointmentView() {
         : "Unknown";
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Appointment_Report_${patientName}_${new Date(appointment.date).toISOString().split('T')[0]}.pdf`;
+      a.download = `Appointment_Report_${patientName}_${new Date(appointment.date).toISOString().split('T')[0]}.${exportFormat}`;
       a.click();
       window.URL.revokeObjectURL(url);
 
@@ -407,12 +483,21 @@ export default function AppointmentView() {
             <CardHeader>
               <div className="flex items-center gap-4">
                 <div className="relative w-30 h-30 rounded-full overflow-hidden border-1">
-                  <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                    <div className="w-full h-3/4 flex flex-col items-center justify-center">
-                      <div className="w-12 h-12 bg-gray-500 rounded-full mb-1"></div>
-                      <div className="w-20 h-10 bg-gray-500 rounded-t-full"></div>
+                  {profileImageSignedUrl ? (
+                    <img
+                      src={profileImageSignedUrl}
+                      alt={`${getPatientName()}'s profile`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => console.error('Failed to load profile image:', profileImageSignedUrl)}
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                      <div className="w-full h-3/4 flex flex-col items-center justify-center">
+                        <div className="w-12 h-12 bg-gray-500 rounded-full mb-1"></div>
+                        <div className="w-20 h-10 bg-gray-500 rounded-t-full"></div>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
                 <div className="flex flex-col gap-2">
                   <Label className="text-sm">Patient Name</Label>
@@ -478,7 +563,7 @@ export default function AppointmentView() {
                     <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
                       <DialogTrigger asChild>
                         <Button variant="outline">
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4 mr-2" />
                           Delete Appointment
                         </Button>
                       </DialogTrigger>
@@ -500,13 +585,14 @@ export default function AppointmentView() {
                           </div>
                         </DialogHeader>
                         <DialogFooter>
-                          <DialogPrimitive.Close>
+                          <DialogClose asChild>
                             <Button variant="outline">Cancel</Button>
-                          </DialogPrimitive.Close>
+                          </DialogClose>
                           <Button
                             variant="destructive"
-                            onClick={() => handleDelete(appointment.id)}
+                            onClick={() => appointment && handleDelete(appointment.id)}
                             disabled={!isDeleteEnabled}
+                            className={!isDeleteEnabled ? "opacity-50" : ""}
                           >
                             Yes, delete this appointment.
                           </Button>
@@ -525,6 +611,10 @@ export default function AppointmentView() {
             <TabsList>
               <TabsTrigger value="overview">Appointment Overview</TabsTrigger>
               <TabsTrigger value="vitals">Vitals</TabsTrigger>
+              <TabsTrigger value="supplements">Supplements</TabsTrigger>
+              {(userData?.isAdmin || userData?.role === "Doctor") && (
+                <TabsTrigger value="prescriptions">Prescriptions</TabsTrigger>
+              )}
             </TabsList>
             <div className="ml-auto flex items-center gap-2">
               <Dialog open={openExportDialog} onOpenChange={setOpenExportDialog}>
@@ -551,13 +641,15 @@ export default function AppointmentView() {
                             appointmentInfo: !!checked,
                             patientInfo: !!checked,
                             clinicianInfo: !!checked,
-                            vitals: !!checked
+                            vitals: !!checked,
+                            prescriptions: !!checked,
+                            supplements: !!checked
                           });
                         }}
                       />
                       <Label htmlFor="selectAll" className="font-semibold">Select All</Label>
                     </div>
-                    <div className="h-px bg-border" />
+                    <Separator className="my-2" />
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id="appointmentInfo"
@@ -598,6 +690,26 @@ export default function AppointmentView() {
                       />
                       <Label htmlFor="vitals">Vitals</Label>
                     </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="prescriptions"
+                        checked={exportOptions.prescriptions}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, prescriptions: !!checked })
+                        }
+                      />
+                      <Label htmlFor="prescriptions">Prescriptions</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="supplements"
+                        checked={exportOptions.supplements}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, supplements: !!checked })
+                        }
+                      />
+                      <Label htmlFor="supplements">Supplements</Label>
+                    </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                       <Label htmlFor="format" className="text-right">Format</Label>
                       <Select value={exportFormat} onValueChange={setExportFormat}>
@@ -606,14 +718,15 @@ export default function AppointmentView() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="pdf">PDF</SelectItem>
+                          <SelectItem value="csv">CSV</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
                   <DialogFooter>
-                    <DialogPrimitive.Close>
+                    <DialogClose asChild>
                       <Button variant="outline">Cancel</Button>
-                    </DialogPrimitive.Close>
+                    </DialogClose>
                     <Button onClick={handleExport} disabled={isExporting}>
                       {isExporting ? "Exporting..." : "Export"}
                     </Button>
@@ -760,6 +873,24 @@ export default function AppointmentView() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="supplements">
+            <SupplementRecommendation 
+              context="patient" 
+              id={appointment?.patient_id || null} 
+              appointment_id={id}
+            />
+          </TabsContent>
+
+          {(userData?.isAdmin || userData?.role === "Doctor") && (
+            <TabsContent value="prescriptions">
+              <Prescriptions 
+                context="patient" 
+                id={appointment?.patient_id || null} 
+                appointment_id={id}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 
@@ -807,7 +938,7 @@ export default function AppointmentView() {
 
                 if (appointmentError) throw appointmentError;
 
-                const transformedData = {
+                const transformedData = appointmentData ? {
                   ...appointmentData,
                   patient: appointmentData.patient ? {
                     id: appointmentData.patient.id,
@@ -818,9 +949,11 @@ export default function AppointmentView() {
                     specialization: appointmentData.clinician.specialization,
                     person: appointmentData.clinician.person
                   } : undefined
-                };
+                } : null;
 
-                setAppointment(transformedData);
+                if (transformedData) {
+                  setAppointment(transformedData);
+                }
 
                 const { data: vitalsData, error: vitalsError } = await supabase
                   .from("vitals")
@@ -861,6 +994,14 @@ export default function AppointmentView() {
             service: appointment?.service || "",
             status: appointment?.status || "",
             payment_status: appointment?.payment_status || "",
+            patient: appointment?.patient ? {
+              id: appointment.patient_id,
+              display: `${appointment.patient.person.first_name} ${appointment.patient.person.middle_name ? appointment.patient.person.middle_name + ' ' : ''}${appointment.patient.person.last_name}`
+            } : undefined,
+            clinician: appointment?.clinician ? {
+              id: appointment.clinician_id,
+              display: `${appointment.clinician.person.first_name} ${appointment.clinician.person.middle_name ? appointment.clinician.person.middle_name + ' ' : ''}${appointment.clinician.person.last_name}`
+            } : undefined
           }}
           onSuccess={handleUpdateSuccess}
         />

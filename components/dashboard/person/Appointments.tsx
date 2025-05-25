@@ -41,10 +41,13 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { debounce } from "lodash";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { DatePicker } from "@/components/ui/date-picker";
 
 type Props = {
     context: "patient" | "clinician";
     id: string | null;
+    refreshTrigger?: number;
 };
 
 interface Appointment {
@@ -57,11 +60,12 @@ interface Appointment {
     payment_status: string;
 }
 
-export default function Appointments({ context, id }: Props) {
+export default function Appointments({ context, id, refreshTrigger = 0 }: Props) {
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("all");
     const [dateFilter, setDateFilter] = useState<string>("");
+    const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("all");
     const { isAdmin } = useIsAdmin();
     const [loading, setLoading] = useState(true);
 
@@ -145,7 +149,7 @@ export default function Appointments({ context, id }: Props) {
         }
 
         fetchAppointments();
-    }, [id, context]);
+    }, [id, context, refreshTrigger]);
 
     // Filter appointments based on search term and filters
     const filteredAppointments = appointments.filter((appointment) => {
@@ -158,7 +162,10 @@ export default function Appointments({ context, id }: Props) {
         
         const matchesDate = !dateFilter || appointment.date === new Date(dateFilter).toLocaleDateString();
 
-        return matchesSearch && matchesStatus && matchesDate;
+        const matchesPaymentStatus = paymentStatusFilter === "all" || 
+            appointment.payment_status.toLowerCase() === paymentStatusFilter.toLowerCase();
+
+        return matchesSearch && matchesStatus && matchesDate && matchesPaymentStatus;
     });
 
     const handleDelete = async (appointmentId: number) => {
@@ -291,14 +298,14 @@ export default function Appointments({ context, id }: Props) {
                 </div>
                 <div className="relative flex items-center">
                     <Dialog>
-                        <DialogTrigger asChild>
+                        {/* <DialogTrigger asChild>
                             <Button size="sm" className="h-8 flex items-center gap-1">
                                 <Calendar className="h-4 w-4" />
                                 <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
                                     New Appointment
                                 </span>
                             </Button>
-                        </DialogTrigger>
+                        </DialogTrigger> */}
                         <DialogContent>
                             <DialogHeader>
                                 <DialogTitle>New Appointment</DialogTitle>
@@ -317,7 +324,7 @@ export default function Appointments({ context, id }: Props) {
             <CardContent>
                 <div className="flex flex-col gap-4 mb-4">
                     <div className="flex flex-wrap gap-4">
-                        <div className="flex-1 min-w-[200px]">
+                        <div className="flex-1 min-w-[180px] max-w-[790px]">
                             <Input
                                 type="search"
                                 placeholder="Search by name or service..."
@@ -326,23 +333,34 @@ export default function Appointments({ context, id }: Props) {
                                 className="w-full"
                             />
                         </div>
-                        <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Filter by status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Status</SelectItem>
-                                <SelectItem value="scheduled">Scheduled</SelectItem>
-                                <SelectItem value="completed">Completed</SelectItem>
-                                <SelectItem value="cancelled">Cancelled</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Input
-                            type="date"
-                            value={dateFilter}
-                            onChange={(e) => setDateFilter(e.target.value)}
-                            className="w-[180px]"
-                        />
+                        <div className="flex-none w-[180px]">
+                            <Select value={statusFilter} onValueChange={setStatusFilter}>
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Filter by status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Status</SelectItem>
+                                    <SelectItem value="scheduled" className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-blue-400" />
+                                        Scheduled
+                                    </SelectItem>
+                                    <SelectItem value="completed" className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-green-400" />
+                                        Completed
+                                    </SelectItem>
+                                    <SelectItem value="cancelled" className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-red-400" />
+                                        Cancelled
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex-none w-[200px]">
+                            <DatePicker
+                                value={dateFilter ? new Date(dateFilter) : undefined}
+                                onChange={(date) => setDateFilter(date ? date.toISOString() : "")}
+                            />
+                        </div>
                     </div>
                 </div>
 
@@ -351,7 +369,7 @@ export default function Appointments({ context, id }: Props) {
                 ) : filteredAppointments.length === 0 ? (
                     <div className="text-center py-4">
                         <p className="text-sm text-muted-foreground">
-                            {searchTerm || statusFilter !== "all" || dateFilter
+                            {searchTerm || statusFilter !== "all" || dateFilter || paymentStatusFilter !== "all"
                                 ? "No appointments found matching the search criteria."
                                 : context === 'patient'
                                     ? "No appointments scheduled for this patient."
