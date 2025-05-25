@@ -702,6 +702,7 @@ export default function SupplementRecommendation({
                                                             <Select
                                                                 onValueChange={field.onChange}
                                                                 value={field.value}
+                                                                disabled={!userData?.isAdmin}
                                                             >
                                                                 <SelectTrigger>
                                                                     <SelectValue placeholder="Select clinician" />

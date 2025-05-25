@@ -5,14 +5,19 @@ export async function POST(req: NextRequest) {
   console.log("Received POST request to /api/export/appointment");
   try {
     const data = await req.json();
-    console.log("Request body:", data);
+    console.log("Received export request with data:", JSON.stringify(data, null, 2));
 
     if (!data.appointment || !data.exportOptions) {
       console.error("Missing appointment data or export options");
       return NextResponse.json({ error: "Missing appointment data or export options" }, { status: 400 });
     }
 
-    const { appointment, exportOptions } = data;
+    const { appointment, exportOptions, exportFormat } = data;
+    console.log("Processing appointment:", appointment.id);
+    console.log("Export options:", exportOptions);
+    console.log("Prescriptions data:", appointment.prescriptions);
+    console.log("Supplements data:", appointment.supplements);
+
     const patientName = appointment.patient ? 
       `${appointment.patient.person.first_name} ${appointment.patient.person.middle_name ? appointment.patient.person.middle_name + " " : ""}${appointment.patient.person.last_name}` : 
       "Unknown Patient";

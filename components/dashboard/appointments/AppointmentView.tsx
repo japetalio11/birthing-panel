@@ -35,6 +35,7 @@ import SupplementRecommendation from "@/components/dashboard/person/SupplementRe
 import Prescriptions from "@/components/dashboard/person/Prescriptions";
 import VitalsForm from "./VitalsForm";
 import UpdateAppointmentForm from "./UpdateAppointmentForm";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 interface Person {
   id: number;
@@ -97,7 +98,7 @@ export default function AppointmentView() {
   const [openExportDialog, setOpenExportDialog] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
   const [isCancelled, setIsCancelled] = useState(false);
-  const [userData, setUserData] = useState<{ isAdmin: boolean; isDoctor: boolean } | null>(null);
+  const { userData } = useCurrentUser();
   const [vitals, setVitals] = useState<Vitals[]>([]);
   const [hasExistingVitals, setHasExistingVitals] = useState(false);
   const [showUpdateForm, setShowUpdateForm] = useState(false);
@@ -130,6 +131,13 @@ export default function AppointmentView() {
       return null;
     }
   };
+
+  // Add debug logs for user role
+  useEffect(() => {
+    console.log("Current user data:", userData);
+    console.log("Is doctor?", userData?.role === "Doctor");
+    console.log("Is admin?", userData?.isAdmin);
+  }, [userData]);
 
   // Fetch appointment data from Supabase
   useEffect(() => {
@@ -363,17 +371,53 @@ export default function AppointmentView() {
     try {
       console.log("Preparing export data with options:", exportOptions);
 
+      // Fetch prescriptions if needed
+      let prescriptionsData = null;
+      if (exportOptions.prescriptions) {
+        console.log("Fetching prescriptions for patient:", appointment.patient_id);
+        const { data: prescriptions, error: prescriptionsError } = await supabase
+          .from("prescriptions")
+          .select("*")
+          .eq("patient_id", appointment.patient_id);
+
+        if (prescriptionsError) {
+          console.error("Error fetching prescriptions:", prescriptionsError);
+        } else {
+          console.log("Fetched prescriptions:", prescriptions);
+          prescriptionsData = prescriptions;
+        }
+      }
+
+      // Fetch supplements if needed
+      let supplementsData = null;
+      if (exportOptions.supplements) {
+        console.log("Fetching supplements for patient:", appointment.patient_id);
+        const { data: supplements, error: supplementsError } = await supabase
+          .from("supplements")
+          .select("*")
+          .eq("patient_id", appointment.patient_id);
+
+        if (supplementsError) {
+          console.error("Error fetching supplements:", supplementsError);
+        } else {
+          console.log("Fetched supplements:", supplements);
+          supplementsData = supplements;
+        }
+      }
+
       // Include vitals data in the export
       const exportData = {
         appointment: {
           ...appointment,
-          vitals: vitals[0] || null  // Include the first vitals record if it exists
+          vitals: vitals[0] || null,
+          prescriptions: prescriptionsData,
+          supplements: supplementsData
         },
         exportOptions,
         exportFormat
       };
 
-      console.log("Export data prepared:", exportData);
+      console.log("Final export data being sent:", JSON.stringify(exportData, null, 2));
 
       console.log("Sending request to /api/export/appointment...");
       const response = await fetch("/api/export/appointment", {
@@ -515,43 +559,45 @@ export default function AppointmentView() {
                     <RefreshCcw className="h-4 w-4" />
                     Update Appointment
                   </Button>
-                  <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline">
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete Appointment
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Delete Appointment</DialogTitle>
-                        <DialogDescription>
-                          Are you sure you want to delete this appointment? This action cannot be undone.
-                        </DialogDescription>
-                        <div className="grid gap-2 py-4">
-                          <Label htmlFor="reason">Type "confirm" to confirm deletion</Label>
-                          <Input
-                            id="reason"
-                            className="focus:border-red-500 focus:ring-red-500"
-                            placeholder="Enter 'confirm'"
-                            value={deleteInput}
-                            onChange={(e) => setDeleteInput(e.target.value)}
-                          />
-                        </div>
-                      </DialogHeader>
+                  {userData?.isAdmin && (
+                    <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline">
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete Appointment
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Delete Appointment</DialogTitle>
+                          <DialogDescription>
+                            Are you sure you want to delete this appointment? This action cannot be undone.
+                          </DialogDescription>
+                          <div className="grid gap-2 py-4">
+                            <Label htmlFor="reason">Type "{fullName}" to confirm deletion</Label>
+                            <Input
+                              id="reason"
+                              className="focus:border-red-500 focus:ring-red-500"
+                              placeholder={`Enter patient name`}
+                              value={deleteInput}
+                              onChange={(e) => setDeleteInput(e.target.value)}
+                            />
+                          </div>
+                        </DialogHeader>
 
-                      {isDeleteEnabled && (
-                        <DialogFooter>
-                          <Button
-                            variant="destructive"
-                            onClick={() => appointment && handleDelete(appointment.id)}
-                          >
-                            Confirm Delete
-                          </Button>
-                        </DialogFooter>
-                      )}
-                    </DialogContent>
-                  </Dialog>
+                        {isDeleteEnabled && (
+                          <DialogFooter>
+                            <Button
+                              variant="destructive"
+                              onClick={() => appointment && handleDelete(appointment.id)}
+                            >
+                              Confirm Delete
+                            </Button>
+                          </DialogFooter>
+                        )}
+                      </DialogContent>
+                    </Dialog>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -564,7 +610,7 @@ export default function AppointmentView() {
               <TabsTrigger value="overview">Appointment Overview</TabsTrigger>
               <TabsTrigger value="vitals">Vitals</TabsTrigger>
               <TabsTrigger value="supplements">Supplements</TabsTrigger>
-              {(userData?.isAdmin || userData?.isDoctor) && (
+              {(userData?.isAdmin || userData?.role === "Doctor") && (
                 <TabsTrigger value="prescriptions">Prescriptions</TabsTrigger>
               )}
             </TabsList>
@@ -584,6 +630,24 @@ export default function AppointmentView() {
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="selectAll"
+                        checked={Object.values(exportOptions).every(Boolean)}
+                        onCheckedChange={(checked) => {
+                          setExportOptions({
+                            appointmentInfo: !!checked,
+                            patientInfo: !!checked,
+                            clinicianInfo: !!checked,
+                            vitals: !!checked,
+                            prescriptions: !!checked,
+                            supplements: !!checked
+                          });
+                        }}
+                      />
+                      <Label htmlFor="selectAll" className="font-semibold">Select All</Label>
+                    </div>
+                    <Separator className="my-2" />
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id="appointmentInfo"
@@ -744,50 +808,55 @@ export default function AppointmentView() {
                   <CardDescription>Record and view patient vitals for this appointment</CardDescription>
                 </div>
                 <Button onClick={() => setShowVitalsForm(true)}>
+                  <RefreshCcw className="h-4 w-4" />
                   {hasExistingVitals ? "Update Vitals" : "Add Vitals"}
                 </Button>
               </CardHeader>
-              <CardContent>
+              <CardContent className="text-sm">
                 <div className="space-y-6">
                   {vitals.map((vital) => (
                     <div key={vital.id}>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-4">
-                          <div>
-                            <Label className="font-semibold mr-2">Weight</Label>
-                            <span className="text-sm">{appointment?.weight ? `${appointment.weight} kg` : "Not recorded"}</span>
-                          </div>
-                          <div>
-                            <Label className="font-semibold mr-2">Gestational Age</Label>
-                            <span className="text-sm">{appointment?.gestational_age ? `${appointment.gestational_age} weeks` : "Not recorded"}</span>
-                          </div>
-                          <div>
-                            <Label className="font-semibold mr-2">Blood Pressure</Label>
-                            <span className="text-sm">{vital.blood_pressure || "Not recorded"}</span>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label className="text-right">Weight</Label>
+                          <div className="col-span-3">
+                            {appointment?.weight ? `${appointment.weight} kg` : "Not recorded"}
                           </div>
                         </div>
-                        <div className="space-y-4">
-                          <div>
-                            <Label className="font-semibold mr-2">Temperature</Label>
-                            <span className="text-sm">{vital.temperature ? `${vital.temperature} °C` : "Not recorded"}</span>
-                          </div>
-                          <div>
-                            <Label className="font-semibold mr-2">Pulse Rate</Label>
-                            <span className="text-sm">{vital.pulse_rate ? `${vital.pulse_rate} bpm` : "Not recorded"}</span>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label className="text-right">Gestational Age</Label>
+                          <div className="col-span-3">
+                            {appointment?.gestational_age ? `${appointment.gestational_age} weeks` : "Not recorded"}
                           </div>
                         </div>
-                        <div className="space-y-4">
-                          <div>
-                            <Label className="font-semibold mr-2">Respiration Rate</Label>
-                            <span className="text-sm">
-                              {vital.respiration_rate ? `${vital.respiration_rate} breaths/min` : "Not recorded"}
-                            </span>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label className="text-right">Temperature</Label>
+                          <div className="col-span-3">
+                            {vital.temperature ? `${vital.temperature} °C` : "Not recorded"}
                           </div>
-                          <div>
-                            <Label className="font-semibold mr-2">Oxygen Saturation</Label>
-                            <span className="text-sm">
-                              {vital.oxygen_saturation ? `${vital.oxygen_saturation}%` : "Not recorded"}
-                            </span>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label className="text-right">Pulse Rate</Label>
+                          <div className="col-span-3">
+                            {vital.pulse_rate ? `${vital.pulse_rate} bpm` : "Not recorded"}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label className="text-right">Blood Pressure</Label>
+                          <div className="col-span-3">
+                            {vital.blood_pressure || "Not recorded"}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label className="text-right">Respiration Rate</Label>
+                          <div className="col-span-3">
+                            {vital.respiration_rate ? `${vital.respiration_rate} breaths/min` : "Not recorded"}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label className="text-right">Oxygen Saturation</Label>
+                          <div className="col-span-3">
+                            {vital.oxygen_saturation ? `${vital.oxygen_saturation}%` : "Not recorded"}
                           </div>
                         </div>
                       </div>
@@ -811,7 +880,7 @@ export default function AppointmentView() {
             />
           </TabsContent>
 
-          {(userData?.isAdmin || userData?.isDoctor) && (
+          {(userData?.isAdmin || userData?.role === "Doctor") && (
             <TabsContent value="prescriptions">
               <Prescriptions 
                 context="patient" 

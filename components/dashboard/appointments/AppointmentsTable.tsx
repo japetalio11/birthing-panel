@@ -767,6 +767,7 @@ export default function AppointmentsTable() {
   // Update the getExportAppointments function
   const getExportAppointments = async () => {
     try {
+      console.log("Starting export with filters:", exportFilters);
       // First get the filtered appointments
       let result = [...filteredAppointments];
 
@@ -784,20 +785,12 @@ export default function AppointmentsTable() {
         });
       }
 
-        // Apply status filter
-        if (exportFilters.status !== "all") {
-            result = result.filter((appointment) =>
-                appointment.status.toLowerCase() === exportFilters.status
-          );
-        }
-
-        // Apply limit
-        if (exportFilters.limit) {
-            const limit = parseInt(exportFilters.limit);
-            if (!isNaN(limit) && limit > 0) {
-                result = result.slice(0, limit);
-            }
-        }
+      // Apply status filter
+      if (exportFilters.status !== "all") {
+        result = result.filter((appointment) =>
+          appointment.status.toLowerCase() === exportFilters.status
+        );
+      }
 
       // Apply sorting
       if (exportFilters.sort !== "none") {
@@ -808,83 +801,96 @@ export default function AppointmentsTable() {
         });
       }
 
-      // Apply limit
+      // Apply limit BEFORE fetching details
       if (exportFilters.limit) {
         const limit = parseInt(exportFilters.limit);
         if (!isNaN(limit) && limit > 0) {
+          console.log(`Limiting results to ${limit} appointments`);
           result = result.slice(0, limit);
         }
       }
 
+      console.log(`Processing ${result.length} appointments for export`);
+
       // Now fetch complete data for each filtered appointment
       const appointmentsWithDetails = await Promise.all(
         result.map(async (appointment) => {
+          console.log(`Fetching details for appointment ${appointment.id}`);
           // Fetch appointment with related data
           const { data: appointmentData, error: appointmentError } = await supabase
             .from("appointment")
             .select(`
-                *,
-                patients:patient_id (
-                    person (
-                        id,
-                        first_name,
-                        middle_name,
-                        last_name,
-                        birth_date,
-                        age,
-                        contact_number,
-                        address
-                    )
-                ),
-                clinicians:clinician_id (
-                    role,
-                    specialization,
-                    person (
-                        id,
-                        first_name,
-                        middle_name,
-                        last_name
-                    )
+              *,
+              patients:patient_id (
+                person (
+                  id,
+                  first_name,
+                  middle_name,
+                  last_name,
+                  birth_date,
+                  age,
+                  contact_number,
+                  address
                 )
+              ),
+              clinicians:clinician_id (
+                role,
+                specialization,
+                person (
+                  id,
+                  first_name,
+                  middle_name,
+                  last_name
+                )
+              )
             `)
             .eq("id", appointment.id)
             .single();
 
-          if (appointmentError) {
-            console.error("Error fetching appointment details:", appointmentError);
-            return appointment;
-          }
+          if (appointmentError) throw appointmentError;
 
           // Fetch vitals data
           const { data: vitalsData, error: vitalsError } = await supabase
             .from("vitals")
             .select(`
-                id,
-                temperature,
-                pulse_rate,
-                blood_pressure,
-                respiration_rate,
-                oxygen_saturation
+              id,
+              temperature,
+              pulse_rate,
+              blood_pressure,
+              respiration_rate,
+              oxygen_saturation
             `)
             .eq("id", appointment.id)
             .single();
 
           if (vitalsError && vitalsError.code !== "PGRST116") {
-            // Ignore not found error
             console.error("Error fetching vitals:", vitalsError);
           }
 
           // Fetch prescriptions if selected
           let prescriptionsData = null;
           if (exportFilters.exportContent.prescriptions) {
+            console.log(`Fetching prescriptions for patient ${appointmentData.patient_id}`);
             const { data: prescriptions, error: prescriptionsError } = await supabase
               .from("prescriptions")
-              .select("*")
-              .eq("appointment_id", appointment.id);
+              .select(`
+                id,
+                name,
+                strength,
+                amount,
+                frequency,
+                route,
+                status,
+                date,
+                patient_id,
+                clinician_id
+              `)
+              .eq("patient_id", appointmentData.patient_id);
 
             if (prescriptionsError) {
               console.error("Error fetching prescriptions:", prescriptionsError);
             } else {
+              console.log(`Found ${prescriptions?.length || 0} prescriptions for patient ${appointmentData.patient_id}`);
               prescriptionsData = prescriptions;
             }
           }
@@ -892,30 +898,58 @@ export default function AppointmentsTable() {
           // Fetch supplements if selected
           let supplementsData = null;
           if (exportFilters.exportContent.supplements) {
+            console.log(`Fetching supplements for patient ${appointmentData.patient_id}`);
             const { data: supplements, error: supplementsError } = await supabase
               .from("supplements")
-              .select("*")
-              .eq("appointment_id", appointment.id);
+              .select(`
+                id,
+                name,
+                strength,
+                amount,
+                frequency,
+                route,
+                status,
+                date,
+                patient_id
+              `)
+              .eq("patient_id", appointmentData.patient_id);
 
             if (supplementsError) {
               console.error("Error fetching supplements:", supplementsError);
             } else {
+              console.log(`Found ${supplements?.length || 0} supplements for patient ${appointmentData.patient_id}`);
               supplementsData = supplements;
             }
           }
 
           // Combine all data
-          return {
+          const combinedData = {
             ...appointmentData,
             vitals: vitalsData || null,
-            prescriptions: prescriptionsData || null,
-            supplements: supplementsData || null,
-            patient: appointmentData?.patient || null,
-            clinician: appointmentData?.clinician || null,
+            prescriptions: prescriptionsData,
+            supplements: supplementsData,
+            patient: appointmentData?.patients ? {
+              id: appointmentData.patients.person.id,
+              person: appointmentData.patients.person
+            } : null,
+            clinician: appointmentData?.clinicians ? {
+              role: appointmentData.clinicians.role,
+              specialization: appointmentData.clinicians.specialization,
+              person: appointmentData.clinicians.person
+            } : null
           };
+
+          console.log("Combined data for appointment:", appointment.id, {
+            hasVitals: !!vitalsData,
+            prescriptionCount: prescriptionsData?.length || 0,
+            supplementCount: supplementsData?.length || 0
+          });
+
+          return combinedData;
         })
       );
 
+      console.log(`Completed processing ${appointmentsWithDetails.length} appointments`);
       return appointmentsWithDetails;
     } catch (error) {
       console.error("Error in getExportAppointments:", error);
@@ -924,10 +958,13 @@ export default function AppointmentsTable() {
     }
   };
 
-  // Update the handleExport function to use the async getExportAppointments
+  // Update the handleExport function
   const handleExport = async () => {
     try {
+      console.log("Starting export process with filters:", exportFilters);
       const appointmentsToExport = await getExportAppointments();
+      console.log(`Preparing to export ${appointmentsToExport.length} appointments`);
+
       try {
         if (exportFilters.exportFormat === "csv") {
           // Declare and initialize headers array before using it
@@ -965,11 +1002,11 @@ export default function AppointmentsTable() {
 
           if (exportFilters.exportContent.prescriptions) {
             headers.push(
-              "Medicine",
-              "Dosage",
+              "Prescription Name",
+              "Strength",
+              "Amount",
               "Frequency",
-              "Duration",
-              "Instructions",
+              "Route",
               "Prescription Status",
               "Date Prescribed"
             );
@@ -1058,11 +1095,11 @@ export default function AppointmentsTable() {
             if (exportFilters.exportContent.prescriptions) {
               const prescription = appointment.prescriptions?.[0] || {};
               row.push(
-                prescription.medicine || "",
-                prescription.dosage || "",
+                prescription.name || "",
+                prescription.strength || "",
+                prescription.amount || "",
                 prescription.frequency || "",
-                prescription.duration || "",
-                prescription.instructions || "",
+                prescription.route || "",
                 prescription.status || "",
                 prescription.date ? new Date(prescription.date).toLocaleDateString() : ""
               );
@@ -1100,34 +1137,40 @@ export default function AppointmentsTable() {
           toast.success("CSV exported successfully.");
           setOpenExportDialog(false);
         } else if (exportFilters.exportFormat === "pdf") {
-          for (const appointment of appointments) {
+          for (const appointment of appointmentsToExport) {
+            console.log(`Exporting PDF for appointment ${appointment.id}`, {
+              hasVitals: !!appointment.vitals,
+              prescriptionCount: appointment.prescriptions?.length || 0,
+              supplementCount: appointment.supplements?.length || 0
+            });
+
             const exportData = {
               appointment,
               exportOptions: exportFilters.exportContent
-              };
-    
-              const response = await fetch("/api/export/appointment", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(exportData),
-              });
-    
-              if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `Failed to export PDF for appointment on ${new Date(appointment.date).toLocaleDateString()}`);
-              }
-    
-              const pdfBlob = await response.blob();
-              const url = window.URL.createObjectURL(pdfBlob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `Appointment_Report_${new Date(appointment.date).toLocaleDateString()}.pdf`;
-              a.click();
-              window.URL.revokeObjectURL(url);
+            };
+
+            const response = await fetch("/api/export/appointment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(exportData),
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || `Failed to export PDF for appointment on ${new Date(appointment.date).toLocaleDateString()}`);
             }
-    
-            toast.success("PDF(s) exported successfully.");
-            setOpenExportDialog(false);
+
+            const pdfBlob = await response.blob();
+            const url = window.URL.createObjectURL(pdfBlob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `Appointment_Report_${new Date(appointment.date).toLocaleDateString()}.pdf`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+          }
+
+          toast.success("PDF(s) exported successfully.");
+          setOpenExportDialog(false);
         }
       } catch (error) {
         console.error("Export failed:", error);

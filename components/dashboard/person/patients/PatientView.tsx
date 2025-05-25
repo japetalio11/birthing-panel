@@ -300,7 +300,9 @@ export default function PatientView() {
           .select(
             `
             *,
-            clinicians!clinician_id (
+            clinicians:clinician_id (
+              role,
+              specialization,
               person (
                 first_name,
                 middle_name,
@@ -313,13 +315,13 @@ export default function PatientView() {
         if (error) throw new Error(`Failed to fetch supplements: ${error.message}`);
         supplements = data.map((supp: any) => ({
           ...supp,
-          clinician: [
+          clinician: supp.clinicians?.person ? [
             supp.clinicians.person.first_name,
             supp.clinicians.person.middle_name,
             supp.clinicians.person.last_name,
           ]
             .filter((part) => part)
-            .join(" ") || "Unknown Clinician",
+            .join(" ") : "Unknown Clinician"
         }));
         console.log("Supplements fetched:", supplements);
       }
@@ -342,7 +344,9 @@ export default function PatientView() {
           .select(
             `
             *,
-            clinicians!clinician_id (
+            clinicians:clinician_id (
+              role,
+              specialization,
               person (
                 first_name,
                 middle_name,
@@ -355,13 +359,13 @@ export default function PatientView() {
         if (error) throw new Error(`Failed to fetch prescriptions: ${error.message}`);
         prescriptions = data.map((pres: any) => ({
           ...pres,
-          clinician: [
+          clinician: pres.clinicians?.person ? [
             pres.clinicians.person.first_name,
             pres.clinicians.person.middle_name,
             pres.clinicians.person.last_name,
           ]
             .filter((part) => part)
-            .join(" ") || "Unknown Clinician",
+            .join(" ") : "Unknown Clinician"
         }));
         console.log("Prescriptions fetched:", prescriptions);
       }
@@ -372,7 +376,9 @@ export default function PatientView() {
           .from("appointment")
           .select(`
             *,
-            clinicians!clinician_id (
+            clinicians:clinician_id (
+              role,
+              specialization,
               person (
                 first_name,
                 middle_name,
@@ -384,13 +390,13 @@ export default function PatientView() {
         if (error) throw new Error(`Failed to fetch appointments: ${error.message}`);
         appointments = data.map((app: any) => ({
           ...app,
-          clinician: [
+          clinician: app.clinicians?.person ? [
             app.clinicians.person.first_name,
             app.clinicians.person.middle_name,
             app.clinicians.person.last_name,
           ]
             .filter((part) => part)
-            .join(" ") || "Unknown Clinician",
+            .join(" ") : "Unknown Clinician",
           date: new Date(app.date).toLocaleDateString()
         }));
         console.log("Appointments fetched:", appointments);

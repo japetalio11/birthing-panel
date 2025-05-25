@@ -66,10 +66,28 @@ import {
 } from "@/components/ui/select";
 import { debounce } from "lodash";
 import AppointmentForm from "@/components/dashboard/appointments/AppointmentForm";
+import { ResponsiveContainer } from "recharts";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 // Define the shape of the chart data
 interface ChartData {
   age: string;
+  numberOfPatients: number;
+}
+
+// Define the shape of clinician patient count data
+interface ClinicianPatientCount {
+  clinicianName: string;
   numberOfPatients: number;
 }
 
@@ -89,9 +107,23 @@ interface Appointment {
   clinician_name: string;
 }
 
+interface ClinicianPerson {
+  first_name: string;
+  middle_name: string | null;
+  last_name: string;
+}
+
+interface ClinicianWithPatients {
+  id: string;
+  person: ClinicianPerson;
+  appointments: { patient_id: string }[];
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [clinicianData, setClinicianData] = useState<ClinicianPatientCount[]>([]);
+  const [chartView, setChartView] = useState<"age" | "clinician">("age");
   const [activePatients, setActivePatients] = useState<number>(0);
   const [activeClinicians, setActiveClinicians] = useState<number>(0);
   const [totalAppointments, setTotalAppointments] = useState<number>(0);
@@ -108,132 +140,182 @@ export default function Dashboard() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState({});
   const [showAppointmentForm, setShowAppointmentForm] = useState(false);
+  const [openExportDialog, setOpenExportDialog] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportOptions, setExportOptions] = useState({
+    overview: true,
+    ageDistribution: false,
+    clinicianDistribution: false,
+    appointments: false
+  });
+  const [exportFormat, setExportFormat] = useState("pdf");
 
   // Fetch data from Supabase
-  useEffect(() => {
-    async function fetchDashboardData() {
-      try {
-        setLoading(true);
-        setError(null);
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        // Fetch active patients
-        const { data: patientsData, error: patientsError } = await supabase
-          .from("person")
-          .select("id")
-          .eq("status", "Active")
-          .in("id", (await supabase.from("patients").select("id")).data?.map(p => p.id) || []);
+      // Fetch active patients
+      const { data: patientsData, error: patientsError } = await supabase
+        .from("person")
+        .select("id")
+        .eq("status", "Active")
+        .in("id", (await supabase.from("patients").select("id")).data?.map(p => p.id) || []);
 
-        if (patientsError) throw new Error(`Patients query error: ${patientsError.message}`);
-        setActivePatients(patientsData?.length || 0);
+      if (patientsError) throw new Error(`Patients query error: ${patientsError.message}`);
+      setActivePatients(patientsData?.length || 0);
 
-        // Fetch active clinicians
-        const { data: cliniciansData, error: cliniciansError } = await supabase
-          .from("person")
-          .select("id")
-          .eq("status", "Active")
-          .in("id", (await supabase.from("clinicians").select("id")).data?.map(c => c.id) || []);
+      // Fetch active clinicians
+      const { data: cliniciansData, error: cliniciansError } = await supabase
+        .from("person")
+        .select("id")
+        .eq("status", "Active")
+        .in("id", (await supabase.from("clinicians").select("id")).data?.map(c => c.id) || []);
 
-        if (cliniciansError) throw new Error(`Clinicians query error: ${cliniciansError.message}`);
-        setActiveClinicians(cliniciansData?.length || 0);
+      if (cliniciansError) throw new Error(`Clinicians query error: ${cliniciansError.message}`);
+      setActiveClinicians(cliniciansData?.length || 0);
 
-        // Fetch total appointments count
-        const { count: appointmentsCount, error: appointmentsError } = await supabase
-          .from("appointment")
-          .select("*", { count: "exact", head: true });
+      // Fetch total appointments count
+      const { count: appointmentsCount, error: appointmentsError } = await supabase
+        .from("appointment")
+        .select("*", { count: "exact", head: true });
 
-        if (appointmentsError) throw new Error(`Appointments query error: ${appointmentsError.message}`);
-        setTotalAppointments(appointmentsCount || 0);
+      if (appointmentsError) throw new Error(`Appointments query error: ${appointmentsError.message}`);
+      setTotalAppointments(appointmentsCount || 0);
 
-        // Fetch patient age distribution
-        const { data: ageData, error: ageError } = await supabase
-          .from("person")
-          .select("age")
-          .not("age", "is", null)
-          .in("id", (await supabase.from("patients").select("id")).data?.map(p => p.id) || []);
+      // Fetch patient age distribution
+      const { data: ageData, error: ageError } = await supabase
+        .from("person")
+        .select("age")
+        .not("age", "is", null)
+        .in("id", (await supabase.from("patients").select("id")).data?.map(p => p.id) || []);
 
-        if (ageError) throw new Error(`Age distribution query error: ${ageError.message}`);
-        if (!ageData || ageData.length === 0) {
-          setChartData([]);
-          setError("No patient data found");
-        } else {
-          // Aggregate age data
-          const ageCounts = ageData.reduce((acc: { [key: string]: number }, row) => {
-            const age = row.age.toString();
-            acc[age] = (acc[age] || 0) + 1;
-            return acc;
-          }, {});
+      if (ageError) throw new Error(`Age distribution query error: ${ageError.message}`);
+      if (!ageData || ageData.length === 0) {
+        setChartData([]);
+        setError("No patient data found");
+      } else {
+        // Aggregate age data
+        const ageCounts = ageData.reduce((acc: { [key: string]: number }, row) => {
+          const age = row.age.toString();
+          acc[age] = (acc[age] || 0) + 1;
+          return acc;
+        }, {});
 
-          // Convert to chart data format and sort
-          const formattedData = Object.entries(ageCounts)
-            .map(([age, count]) => ({
-              age,
-              numberOfPatients: count,
-            }))
-            .sort((a, b) => a.age.localeCompare(b.age, undefined, { numeric: true }));
+        // Convert to chart data format and sort
+        const formattedData = Object.entries(ageCounts)
+          .map(([age, count]) => ({
+            age,
+            numberOfPatients: count,
+          }))
+          .sort((a, b) => a.age.localeCompare(b.age, undefined, { numeric: true }));
 
-          setChartData(formattedData);
-        }
-
-        // Fetch today's appointments
-        const today = new Date().toISOString().split('T')[0];
-        const { data: appointmentsData, error: todayAppointmentsError } = await supabase
-          .from("appointment")
-          .select(`
-            *,
-            patient:patient_id (
-              person (
-                first_name,
-                middle_name,
-                last_name
-              )
-            ),
-            clinician:clinician_id (
-              person (
-                first_name,
-                middle_name,
-                last_name
-              )
-            ),
-            vitals (
-              temperature,
-              pulse_rate,
-              blood_pressure,
-              respiration_rate,
-              oxygen_saturation
-            )
-          `)
-          .eq("date", today);
-
-        if (todayAppointmentsError) throw new Error(`Today's appointments query error: ${todayAppointmentsError.message}`);
-
-        const formattedAppointments: Appointment[] = appointmentsData?.map((appointment: any) => {
-          const patient = appointment.patient?.person || {};
-          const clinician = appointment.clinician?.person || {};
-          return {
-            id: appointment.id,
-            patient_id: appointment.patient_id,
-            clinician_id: appointment.clinician_id,
-            date: appointment.date,
-            service: appointment.service,
-            weight: appointment.weight,
-            vitals: appointment.vitals,
-            gestational_age: appointment.gestational_age,
-            status: appointment.status,
-            payment_status: appointment.payment_status,
-            patient_name: `${patient.first_name || ""} ${patient.middle_name || ""} ${patient.last_name || ""}`.trim(),
-            clinician_name: `${clinician.first_name || ""} ${clinician.middle_name || ""} ${clinician.last_name || ""}`.trim(),
-          };
-        }) || [];
-
-        setTodayAppointments(formattedAppointments);
-
-      } catch (err: any) {
-        console.error("Failed to fetch dashboard data:", err);
-        setError(`Failed to load dashboard data: ${err.message || "Unknown error"}`);
-      } finally {
-        setLoading(false);
+        setChartData(formattedData);
       }
+
+      // Fetch clinician-patient distribution
+      const { data: clinicianPatientData, error: clinicianPatientError } = await supabase
+        .from("clinicians")
+        .select(`
+          id,
+          person!id (
+            first_name,
+            middle_name,
+            last_name
+          ),
+          appointments:appointment!clinician_id (
+            patient_id
+          )
+        `);
+
+      if (clinicianPatientError) throw new Error(`Clinician-patient query error: ${clinicianPatientError.message}`);
+      
+      if (clinicianPatientData) {
+        // Process and aggregate clinician-patient data
+        const clinicianCounts = (clinicianPatientData as unknown as ClinicianWithPatients[]).map(clinician => {
+          // Use only first name
+          const firstName = clinician.person.first_name;
+          
+          // Count unique patients for each clinician
+          const uniquePatients = new Set(clinician.appointments?.map(p => p.patient_id) || []);
+          
+          return {
+            clinicianName: firstName,
+            numberOfPatients: uniquePatients.size
+          };
+        });
+
+        // Sort by number of patients and get top 5
+        const top5Clinicians = clinicianCounts
+          .sort((a, b) => b.numberOfPatients - a.numberOfPatients)
+          .slice(0, 5);
+
+        setClinicianData(top5Clinicians);
+      }
+
+      // Fetch today's appointments
+      const today = new Date().toISOString().split('T')[0];
+      const { data: appointmentsData, error: todayAppointmentsError } = await supabase
+        .from("appointment")
+        .select(`
+          *,
+          patient:patient_id (
+            person (
+              first_name,
+              middle_name,
+              last_name
+            )
+          ),
+          clinician:clinician_id (
+            person (
+              first_name,
+              middle_name,
+              last_name
+            )
+          ),
+          vitals (
+            temperature,
+            pulse_rate,
+            blood_pressure,
+            respiration_rate,
+            oxygen_saturation
+          )
+        `)
+        .eq("date", today);
+
+      if (todayAppointmentsError) throw new Error(`Today's appointments query error: ${todayAppointmentsError.message}`);
+
+      const formattedAppointments: Appointment[] = appointmentsData?.map((appointment: any) => {
+        const patient = appointment.patient?.person || {};
+        const clinician = appointment.clinician?.person || {};
+        return {
+          id: appointment.id,
+          patient_id: appointment.patient_id,
+          clinician_id: appointment.clinician_id,
+          date: appointment.date,
+          service: appointment.service,
+          weight: appointment.weight,
+          vitals: appointment.vitals,
+          gestational_age: appointment.gestational_age,
+          status: appointment.status,
+          payment_status: appointment.payment_status,
+          patient_name: `${patient.first_name || ""} ${patient.middle_name || ""} ${patient.last_name || ""}`.trim(),
+          clinician_name: `${clinician.first_name || ""} ${clinician.middle_name || ""} ${clinician.last_name || ""}`.trim(),
+        };
+      }) || [];
+
+      setTodayAppointments(formattedAppointments);
+
+    } catch (err: any) {
+      console.error("Failed to fetch dashboard data:", err);
+      setError(`Failed to load dashboard data: ${err.message || "Unknown error"}`);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     fetchDashboardData();
   }, []);
 
@@ -544,129 +626,67 @@ export default function Dashboard() {
     state: { sorting, rowSelection },
   });
 
-  async function fetchDashboardData() {
+  const handleExport = async () => {
+    console.log("Starting dashboard export process...");
+    if (!chartData || !clinicianData) {
+      console.error("No dashboard data available.");
+      toast.error("No dashboard data available for export.");
+      return;
+    }
+
+    const hasSelectedOptions = Object.values(exportOptions).some((option) => option);
+    if (!hasSelectedOptions) {
+      console.warn("No export options selected.");
+      toast.error("Please select at least one export option.");
+      return;
+    }
+
+    setIsExporting(true);
     try {
-      setLoading(true);
-      setError(null);
+      console.log("Preparing export data...");
+      const exportData = {
+        exportOptions,
+        exportFormat,
+        activePatients,
+        activeClinicians,
+        totalAppointments,
+        chartData,
+        clinicianData,
+        appointments: todayAppointments
+      };
 
-      // Fetch active patients
-      const { data: patientsData, error: patientsError } = await supabase
-        .from("person")
-        .select("id")
-        .eq("status", "Active")
-        .in("id", (await supabase.from("patients").select("id")).data?.map(p => p.id) || []);
+      console.log("Sending request to /api/dashboard-export...");
+      const response = await fetch("/api/dashboard-export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(exportData),
+      });
 
-      if (patientsError) throw new Error(`Patients query error: ${patientsError.message}`);
-      setActivePatients(patientsData?.length || 0);
-
-      // Fetch active clinicians
-      const { data: cliniciansData, error: cliniciansError } = await supabase
-        .from("person")
-        .select("id")
-        .eq("status", "Active")
-        .in("id", (await supabase.from("clinicians").select("id")).data?.map(c => c.id) || []);
-
-      if (cliniciansError) throw new Error(`Clinicians query error: ${cliniciansError.message}`);
-      setActiveClinicians(cliniciansData?.length || 0);
-
-      // Fetch total appointments count
-      const { count: appointmentsCount, error: appointmentsError } = await supabase
-        .from("appointment")
-        .select("*", { count: "exact", head: true });
-
-      if (appointmentsError) throw new Error(`Appointments query error: ${appointmentsError.message}`);
-      setTotalAppointments(appointmentsCount || 0);
-
-      // Fetch patient age distribution
-      const { data: ageData, error: ageError } = await supabase
-        .from("person")
-        .select("age")
-        .not("age", "is", null)
-        .in("id", (await supabase.from("patients").select("id")).data?.map(p => p.id) || []);
-
-      if (ageError) throw new Error(`Age distribution query error: ${ageError.message}`);
-      if (!ageData || ageData.length === 0) {
-        setChartData([]);
-        setError("No patient data found");
-      } else {
-        // Aggregate age data
-        const ageCounts = ageData.reduce((acc: { [key: string]: number }, row) => {
-          const age = row.age.toString();
-          acc[age] = (acc[age] || 0) + 1;
-          return acc;
-        }, {});
-
-        // Convert to chart data format and sort
-        const formattedData = Object.entries(ageCounts)
-          .map(([age, count]) => ({
-            age,
-            numberOfPatients: count,
-          }))
-          .sort((a, b) => a.age.localeCompare(b.age, undefined, { numeric: true }));
-
-        setChartData(formattedData);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `API request failed with status ${response.status}`);
       }
 
-      // Fetch today's appointments
-      const today = new Date().toISOString().split('T')[0];
-      const { data: appointmentsData, error: todayAppointmentsError } = await supabase
-        .from("appointment")
-        .select(`
-          *,
-          patient:patient_id (
-            person (
-              first_name,
-              middle_name,
-              last_name
-            )
-          ),
-          clinician:clinician_id (
-            person (
-              first_name,
-              middle_name,
-              last_name
-            )
-          ),
-          vitals (
-            temperature,
-            pulse_rate,
-            blood_pressure,
-            respiration_rate,
-            oxygen_saturation
-          )
-        `)
-        .eq("date", today);
+      console.log("Processing download...");
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Dashboard_Report_${new Date().toISOString().split('T')[0]}.${exportFormat}`;
+      a.click();
+      window.URL.revokeObjectURL(url);
 
-      if (todayAppointmentsError) throw new Error(`Today's appointments query error: ${todayAppointmentsError.message}`);
-
-      const formattedAppointments: Appointment[] = appointmentsData?.map((appointment: any) => {
-        const patient = appointment.patient?.person || {};
-        const clinician = appointment.clinician?.person || {};
-        return {
-          id: appointment.id,
-          patient_id: appointment.patient_id,
-          clinician_id: appointment.clinician_id,
-          date: appointment.date,
-          service: appointment.service,
-          weight: appointment.weight,
-          vitals: appointment.vitals,
-          gestational_age: appointment.gestational_age,
-          status: appointment.status,
-          payment_status: appointment.payment_status,
-          patient_name: `${patient.first_name || ""} ${patient.middle_name || ""} ${patient.last_name || ""}`.trim(),
-          clinician_name: `${clinician.first_name || ""} ${clinician.middle_name || ""} ${clinician.last_name || ""}`.trim(),
-        };
-      }) || [];
-
-      setTodayAppointments(formattedAppointments);
-
-    } catch (err: any) {
-      console.error("Failed to fetch dashboard data:", err);
-      setError(`Failed to load dashboard data: ${err.message || "Unknown error"}`);
+      console.log("Export successful.");
+      toast.success("Export generated successfully.");
+      setOpenExportDialog(false);
+    } catch (error: any) {
+      console.error("Export failed:", error);
+      const errorMessage = error.message || "An unexpected error occurred during export.";
+      toast.error(`Failed to generate export: ${errorMessage}`);
     } finally {
-      setLoading(false);
+      setIsExporting(false);
     }
-  }
+  };
 
   return (
     <main className="grid flex-1 gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
@@ -739,75 +759,244 @@ export default function Dashboard() {
 
       {/* Chart and Appointments stacked vertically */}
       <div className="w-full space-y-4">
-        {/* Pregnancy by Age Analysis Card */}
+        {/* Patient Distribution Analysis Card */}
         <Card className="@container/card rounded-lg border border-gray-200">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Pregnancy by Age Analysis</CardTitle>
-              <CardDescription>Distribution of patients by age</CardDescription>
+              <CardTitle>Patient Distribution Analysis</CardTitle>
+              <CardDescription>
+                {chartView === "age" ? "Distribution of patients by age" : "Top 5 clinicians by patient count"}
+              </CardDescription>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 flex items-center gap-1"
-              onClick={() => router.push("/Patients/Patient-Form")}
-            >
-              <Download />
-              <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                Export
-              </span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Select
+                value={chartView}
+                onValueChange={(value: "age" | "clinician") => setChartView(value)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Select view" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="age">Age Distribution</SelectItem>
+                  <SelectItem value="clinician">Clinician Distribution</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Dialog open={openExportDialog} onOpenChange={setOpenExportDialog}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="h-8 flex items-center gap-1">
+                    <Download className="h-4 w-4" />
+                    <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Export</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Export Dashboard Data</DialogTitle>
+                    <DialogDescription>
+                      Select the data to include in the export and choose the format.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="selectAll"
+                        checked={Object.values(exportOptions).every(Boolean)}
+                        onCheckedChange={(checked) => {
+                          setExportOptions({
+                            overview: !!checked,
+                            ageDistribution: !!checked,
+                            clinicianDistribution: !!checked,
+                            appointments: !!checked
+                          });
+                        }}
+                      />
+                      <Label htmlFor="selectAll" className="font-semibold">Select All</Label>
+                    </div>
+                    <div className="h-px bg-border" />
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="overview"
+                        checked={exportOptions.overview}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, overview: !!checked })
+                        }
+                      />
+                      <Label htmlFor="overview">Overview (Active Patients, Clinicians, Total Appointments)</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="ageDistribution"
+                        checked={exportOptions.ageDistribution}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, ageDistribution: !!checked })
+                        }
+                      />
+                      <Label htmlFor="ageDistribution">Age Distribution</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="clinicianDistribution"
+                        checked={exportOptions.clinicianDistribution}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, clinicianDistribution: !!checked })
+                        }
+                      />
+                      <Label htmlFor="clinicianDistribution">Clinician Distribution</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="appointments"
+                        checked={exportOptions.appointments}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, appointments: !!checked })
+                        }
+                      />
+                      <Label htmlFor="appointments">Today's Appointments</Label>
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="format" className="text-right">
+                        Format
+                      </Label>
+                      <Select value={exportFormat} onValueChange={setExportFormat}>
+                        <SelectTrigger className="col-span-3">
+                          <SelectValue placeholder="Select format" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pdf">PDF</SelectItem>
+                          <SelectItem value="csv">CSV</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <DialogClose asChild>
+                      <Button variant="outline">Cancel</Button>
+                    </DialogClose>
+                    <Button onClick={handleExport} disabled={isExporting}>
+                      {isExporting ? "Exporting..." : "Export"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* <Button
+                size="sm"
+                variant="outline"
+                className="h-8 flex items-center gap-1"
+                onClick={() => router.push("/Patients/Patient-Form")}
+              >
+                <Download />
+                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
+                  Export
+                </span>
+              </Button> */}
+            </div>
           </CardHeader>
-          <div className="p-4 bg-white rounded-lg">
+          <div className="p-4 bg-white rounded-lg h-[400px]">
             {loading ? (
               <div className="text-center">Loading...</div>
             ) : error ? (
               <div className="text-red-500 text-center">{error}</div>
-            ) : chartData.length === 0 ? (
-              <div className="text-center">No data available</div>
+            ) : chartView === "age" ? (
+              chartData.length === 0 ? (
+                <div className="text-center">No age distribution data available</div>
+              ) : (
+                <ChartContainer config={chartConfig}>
+                  <ResponsiveContainer width="100%" height={150}>
+                    <BarChart
+                      data={chartData}
+                      margin={{ top: 0, right: 20, left: 40, bottom: 300 }}
+                      barGap={2}
+                      barCategoryGap={2}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis
+                        dataKey="age"
+                        label={{
+                          value: "Age",
+                          position: "insideBottom",
+                          offset: -10,
+                        }}
+                        tickMargin={5}
+                      />
+                      <YAxis
+                        dataKey="numberOfPatients"
+                        label={{
+                          value: "Number of Patients",
+                          angle: -90,
+                          position: "insideLeft",
+                          offset: 0,
+                        }}
+                        domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.2)]}
+                        tickCount={5}
+                        allowDecimals={false}
+                        orientation="left"
+                      />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Bar
+                        dataKey="numberOfPatients"
+                        fill="black"
+                        barSize={70}
+                        radius={[4, 4, 0, 0]}
+                        minPointSize={0}
+                        maxBarSize={50}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              )
+            ) : clinicianData.length === 0 ? (
+              <div className="text-center">No clinician distribution data available</div>
             ) : (
               <ChartContainer config={chartConfig}>
-                <BarChart
-                  data={chartData}
-                  margin={{ top: 20, right: 20, left: 20, bottom: 20 }}
-                  barGap={0}
-                  barCategoryGap={0}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis
-                    dataKey="age"
-                    label={{
-                      value: "Age",
-                      position: "insideBottom",
-                      offset: -10,
-                    }}
-                  />
-                  <YAxis
-                    dataKey="numberOfPatients"
-                    label={{
-                      value: "Number of Patients",
-                      angle: -90,
-                      position: "insideLeft",
-                      offset: 10,
-                    }}
-                    domain={[0, "auto"]}
-                    tickCount={5}
-                  />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar
-                    dataKey="numberOfPatients"
-                    fill="black"
-                    barSize={50}
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
+                <ResponsiveContainer width="100%" height={150}>
+                  <BarChart
+                    data={clinicianData}
+                    margin={{ top: 0, right: 20, left: 40, bottom: 300 }}
+                    barGap={2}
+                    barCategoryGap={2}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis
+                      dataKey="clinicianName"
+                      label={{
+                        value: "Clinician",
+                        position: "insideBottom",
+                        offset: -10,
+                      }}
+                      tickMargin={5}
+                    />
+                    <YAxis
+                      dataKey="numberOfPatients"
+                      label={{
+                        value: "Number of Patients",
+                        angle: -90,
+                        position: "insideLeft",
+                        offset: 0,
+                      }}
+                      domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.2)]}
+                      tickCount={5}
+                      allowDecimals={false}
+                      orientation="left"
+                    />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar
+                      dataKey="numberOfPatients"
+                      fill="black"
+                      barSize={70}
+                      radius={[4, 4, 0, 0]}
+                      minPointSize={0}
+                      maxBarSize={50}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
               </ChartContainer>
             )}
           </div>
         </Card>
 
         {/* Appointments Today Card */}
-        <Tabs value={tab} onValueChange={setTab}>
+        <Tabs value={tab} onValueChange={setTab} className="mt-8">
           <div className="flex items-center">
             <TabsList>
               <TabsTrigger value="all">All</TabsTrigger>

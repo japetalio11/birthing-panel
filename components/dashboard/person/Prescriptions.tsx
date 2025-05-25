@@ -121,6 +121,7 @@ export default function Prescriptions({
     console.log("=== Prescriptions Component - User Authentication State ===");
     console.log("Current User Data:", userData);
     console.log("Is Admin?", userData?.isAdmin);
+    console.log("Is Doctor?", userData?.role === "Doctor");
     console.log("Clinician ID:", userData?.clinicianId);
   }, [userData]);
 
@@ -578,7 +579,7 @@ export default function Prescriptions({
           </CardDescription>
         </div>
         <div className="relative flex items-center">
-          {context === 'patient' && (
+          {context === 'patient' && (userData?.isAdmin || userData?.role === "Doctor") && (
             <Dialog
               open={openDialog}
               onOpenChange={(open) => {
