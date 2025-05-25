@@ -48,7 +48,7 @@ import { supabase } from "@/lib/supabase/client"
 type Props = {
   context: "patient"
   id: string | null
-  fields?: any[] // From useFieldArray or passed from PatientView
+  fields?: any[]
   append?: (allergy: any) => void
   remove?: (index: number) => void
 }
@@ -65,6 +65,9 @@ export default function Allergy({ context, id, fields = [], append, remove }: Pr
   const [openDialog, setOpenDialog] = useState(false)
   const [allergiesData, setAllergiesData] = useState<any[]>([])
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [dateFilter, setDateFilter] = useState<string>("")
 
   // Initialize form for adding allergies
   const form = useForm<FormValues>({
@@ -213,8 +216,15 @@ export default function Allergy({ context, id, fields = [], append, remove }: Pr
     })
   }
 
-  // Determine which data to display
+  // Filter allergies based on search term and filters
   const displayAllergies = fields.length > 0 ? fields : allergiesData
+  const filteredAllergies = displayAllergies.filter((allergy) => {
+    const matchesSearch = !searchTerm || allergy.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesStatus = statusFilter === "all" || (allergy.status && allergy.status.toLowerCase() === statusFilter.toLowerCase())
+    const matchesDate = !dateFilter || 
+      (allergy.date && new Date(allergy.date).toLocaleDateString() === new Date(dateFilter).toLocaleDateString())
+    return matchesSearch && matchesStatus && matchesDate
+  })
 
   return (
     <Card>
@@ -223,131 +233,173 @@ export default function Allergy({ context, id, fields = [], append, remove }: Pr
           <CardTitle>Allergies</CardTitle>
           <CardDescription>Identify your patient's allergies before it's too late</CardDescription>
         </div>
-        <div className="relative flex items-center w-full max-w-sm md:w-auto">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search allergies..."
-            className="w-full pl-8 rounded-lg bg-background"
-            onChange={(e) => {
-              // Implement search logic if needed
-            }}
-          />
-          <Dialog
-            open={openDialog}
-            onOpenChange={(open) => {
-              setOpenDialog(open)
-              if (!open) {
-                form.reset({ name: "", severity: "" })
-              }
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
-                <Dna className="h-4 w-4" />
-                <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Add Allergy</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Add Allergy</DialogTitle>
-                <DialogDescription>Add a new allergy to your patient. Click save when you're done!</DialogDescription>
-              </DialogHeader>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmitAllergy)} className="grid gap-4 py-4">
-                  <div className="grid grid-cols-2">
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem className="grid grid-cols-4 items-center gap-2">
-                          <FormLabel htmlFor="allergy" className="text-right">
-                            Allergy
-                          </FormLabel>
+        <Dialog
+          open={openDialog}
+          onOpenChange={(open) => {
+            setOpenDialog(open)
+            if (!open) {
+              form.reset({ name: "", severity: "" })
+            }
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button size="sm" className="h-8 ml-2 flex items-center gap-1">
+              <Dna className="h-4 w-4" />
+              <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">Add Allergy</span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Add Allergy</DialogTitle>
+              <DialogDescription>Add a new allergy to your patient. Click save when you're done!</DialogDescription>
+            </DialogHeader>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmitAllergy)} className="grid gap-4 py-4">
+                <div className="grid grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem className="grid grid-cols-4 items-center gap-2">
+                        <FormLabel htmlFor="allergy" className="text-right">
+                          Allergy
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            id="allergy"
+                            placeholder="Enter allergy"
+                            className="col-span-4"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage className="col-span-4" />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="severity"
+                    render={({ field }) => (
+                      <FormItem className="grid grid-cols-4 items-center gap-2 ml-5">
+                        <FormLabel htmlFor="severity" className="text-right">
+                          Severity
+                        </FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
-                            <Input
-                              id="allergy"
-                              placeholder="Enter allergy"
-                              className="col-span-4"
-                              {...field}
-                            />
+                            <SelectTrigger id="severity" className="col-span-4">
+                              <SelectValue placeholder="Select severity" />
+                            </SelectTrigger>
                           </FormControl>
-                          <FormMessage className="col-span-4" />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="severity"
-                      render={({ field }) => (
-                        <FormItem className="grid grid-cols-4 items-center gap-2 ml-5">
-                          <FormLabel htmlFor="severity" className="text-right">
-                            Severity
-                          </FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger id="severity" className="col-span-4">
-                                <SelectValue placeholder="Select severity" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="Mild">Mild</SelectItem>
-                              <SelectItem value="Moderate">Moderate</SelectItem>
-                              <SelectItem value="Severe">Severe</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage className="col-span-4" />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <DialogFooter>
-                    <Button type="submit">Save allergy</Button>
-                  </DialogFooter>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
-        </div>
+                          <SelectContent>
+                            <SelectItem value="Mild">Mild</SelectItem>
+                            <SelectItem value="Moderate">Moderate</SelectItem>
+                            <SelectItem value="Severe">Severe</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage className="col-span-4" />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <DialogFooter>
+                  <Button type="submit">Save allergy</Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
       </CardHeader>
 
       <CardContent>
+        <div className="flex flex-col gap-4 mb-4">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <Input
+                type="search"
+                placeholder="Search by name or service..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="Inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="w-[180px]"
+            />
+          </div>
+        </div>
+
         {fetchError ? (
           <p className="text-sm text-red-600">{fetchError}</p>
-        ) : displayAllergies.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No allergies recorded for this patient.</p>
+        ) : filteredAllergies.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {searchTerm || statusFilter !== "all" || dateFilter
+              ? "No allergies found matching the search criteria."
+              : "No allergies recorded for this patient."}
+          </p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableCell>
-                  <Checkbox
-                    id="select-all"
-                    onCheckedChange={(checked) => {
-                      // Implement select all logic if needed
-                    }}
-                  />
-                </TableCell>
+                <TableHead>
+                  <Checkbox />
+                </TableHead>
                 <TableHead>Allergy</TableHead>
                 <TableHead>Severity</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {displayAllergies.map((allergy, index) => (
+              {filteredAllergies.map((allergy, index) => (
                 <TableRow key={allergy.id || index}>
                   <TableCell>
-                    <Checkbox id={`allergy-${allergy.id || index}`} />
+                    <Checkbox />
                   </TableCell>
                   <TableCell className="font-medium">{allergy.name}</TableCell>
                   <TableCell>{allergy.severity}</TableCell>
                   <TableCell>
-                    <Button 
-                        variant="outline"
-                        onClick={() => handleDelete(index)}
+                    <Select
+                      value={allergy.status || "Active"}
+                      onValueChange={(value) => {
+                        // Handle status change logic here if needed
+                      }}
                     >
-                        <Trash2 />
-                        Delete
+                      <SelectTrigger className="w-[140px]">
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Active" className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-green-400" />
+                          Active
+                        </SelectItem>
+                        <SelectItem value="Inactive" className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-red-400" />
+                          Inactive
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDelete(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -359,7 +411,8 @@ export default function Allergy({ context, id, fields = [], append, remove }: Pr
 
       <CardFooter>
         <div className="text-xs text-muted-foreground">
-          Showing <strong>{displayAllergies.length}</strong> of <strong>{displayAllergies.length}</strong> Allergies
+          Showing <strong>{filteredAllergies.length}</strong> of{" "}
+          <strong>{displayAllergies.length}</strong> Allergies
         </div>
       </CardFooter>
     </Card>

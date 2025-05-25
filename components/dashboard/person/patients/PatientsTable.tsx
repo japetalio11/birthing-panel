@@ -1380,7 +1380,7 @@ export default function PatientsTable() {
                                                     className="cursor-pointer hover:bg-zinc-100"
                                                 >
                                                     {row.getVisibleCells().map((cell) => (
-                                                        <TableCell key={cell.id} className="py-4">
+                                                        <TableCell key={cell.id}>
                                                             {flexRender(
                                                                 cell.column.columnDef.cell,
                                                                 cell.getContext()

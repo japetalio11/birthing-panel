@@ -127,16 +127,6 @@ export default function Sidebar({ className }: SidebarProps) {
                 <Settings className="h-4 w-4" />
                 Settings
               </Link>
-              {/* <button
-                onClick={handleLogout}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 transition-all text-left w-full",
-                  "text-muted-foreground hover:text-primary hover:bg-muted"
-                )}
-              >
-                <LogOut className="h-4 w-4" />
-                Logout
-              </button> */}
             </nav>
           </div>
         </div>

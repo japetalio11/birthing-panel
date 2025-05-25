@@ -169,12 +169,20 @@ export default function Prescriptions({
           if (clinicianError) throw clinicianError;
 
           if (cliniciansData && cliniciansData.length > 0) {
+            const firstClinician = cliniciansData[0] as unknown as { 
+              id: string; 
+              person: { 
+                first_name: string; 
+                middle_name: string | null; 
+                last_name: string; 
+              } 
+            };
             const clinicianList = [{
-              id: cliniciansData[0].id.toString(),
+              id: firstClinician.id.toString(),
               full_name: [
-                cliniciansData[0].person.first_name,
-                cliniciansData[0].person.middle_name,
-                cliniciansData[0].person.last_name,
+                firstClinician.person.first_name,
+                firstClinician.person.middle_name,
+                firstClinician.person.last_name,
               ]
                 .filter(Boolean)
                 .join(" "),
@@ -182,7 +190,7 @@ export default function Prescriptions({
 
             console.log("Single Clinician Data:", clinicianList);
             setClinicians(clinicianList);
-            form.setValue("clinician_id", cliniciansData[0].id.toString());
+            form.setValue("clinician_id", firstClinician.id.toString());
           }
         } else {
           console.log("Fetching all clinicians (Admin view)");
@@ -531,7 +539,7 @@ export default function Prescriptions({
     } catch (err) {
       console.error("Unexpected error updating status:", err);
       toast("Error", {
-        description: "An unexpected error occurred while updating the status.",
+        description: "An unexpected React.createElement updating the status.",
       });
     }
   };
@@ -544,16 +552,12 @@ export default function Prescriptions({
       const searchString = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm || (
         prescription.name?.toLowerCase().includes(searchString) ||
-        prescription.strength?.toLowerCase().includes(searchString) ||
-        prescription.amount?.toLowerCase().includes(searchString) ||
-        prescription.frequency?.toLowerCase().includes(searchString) ||
-        prescription.route?.toLowerCase().includes(searchString) ||
-        prescription.clinician?.toLowerCase().includes(searchString) ||
-        prescription.patient?.toLowerCase().includes(searchString) ||
-        prescription.status?.toLowerCase().includes(searchString)
+        (context === 'patient' 
+          ? prescription.clinician?.toLowerCase().includes(searchString)
+          : prescription.patient?.toLowerCase().includes(searchString))
       );
 
-      const matchesStatus = statusFilter === "all" || prescription.status === statusFilter;
+      const matchesStatus = statusFilter === "all" || prescription.status.toLowerCase() === statusFilter.toLowerCase();
       
       const matchesDate = !dateFilter || 
         (prescription.date && new Date(prescription.date).toLocaleDateString() === new Date(dateFilter).toLocaleDateString());
@@ -818,7 +822,6 @@ export default function Prescriptions({
             />
           </div>
         </div>
-
         {fetchError ? (
           <p className="text-sm text-red-600">{fetchError}</p>
         ) : displayPrescriptions.length === 0 ? (
@@ -867,7 +870,7 @@ export default function Prescriptions({
                       value={prescription.status}
                       onValueChange={(value) => handleStatusChange(index, value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="w-[140px]">
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -896,7 +899,7 @@ export default function Prescriptions({
                         variant="outline"
                         onClick={() => handleDelete(index)}
                       >
-                        <Trash2 />
+                        <Trash2 className="h-4 w-4" />
                         Delete
                       </Button>
                     </TableCell>
@@ -910,7 +913,7 @@ export default function Prescriptions({
       <CardFooter>
         <div className="text-xs text-muted-foreground">
           Showing <strong>{displayPrescriptions.length}</strong> of{" "}
-          <strong>{fields.length > 0 ? fields.length : prescriptionsData.length}</strong> Prescriptions
+          <strong>{fields.length > 0 ? fields.length : prescriptionsData.length}</strong>
         </div>
       </CardFooter>
     </Card>

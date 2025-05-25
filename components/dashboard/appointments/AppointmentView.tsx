@@ -29,13 +29,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import VitalsForm from "./VitalsForm";
-import UpdateAppointmentForm from "./UpdateAppointmentForm";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
-import Prescriptions from "../person/Prescriptions";
-import SupplementRecommendation from "../person/SupplementRecommendation";
+import SupplementRecommendation from "@/components/dashboard/person/SupplementRecommendation";
+import Prescriptions from "@/components/dashboard/person/Prescriptions";
+import VitalsForm from "./VitalsForm";
+import UpdateAppointmentForm from "./UpdateAppointmentForm";
 
 interface Person {
   id: number;
@@ -46,6 +45,7 @@ interface Person {
   age: string | null;
   contact_number: string | null;
   address: string | null;
+  fileurl?: string;
 }
 
 interface Patient {
@@ -89,18 +89,19 @@ interface Vitals {
 
 export default function AppointmentView() {
   const router = useRouter();
-  const [appointment, setAppointment] = useState<Appointment | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [deleteInput, setDeleteInput] = useState("");
-  const [isCancelled, setIsCancelled] = useState(false);
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
+  const [appointment, setAppointment] = useState<Appointment | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [openExportDialog, setOpenExportDialog] = useState(false);
+  const [deleteInput, setDeleteInput] = useState("");
+  const [isCancelled, setIsCancelled] = useState(false);
+  const [userData, setUserData] = useState<{ isAdmin: boolean; isDoctor: boolean } | null>(null);
   const [vitals, setVitals] = useState<Vitals[]>([]);
-  const [showVitalsForm, setShowVitalsForm] = useState(false);
   const [hasExistingVitals, setHasExistingVitals] = useState(false);
   const [showUpdateForm, setShowUpdateForm] = useState(false);
-  const [openExportDialog, setOpenExportDialog] = useState(false);
+  const [showVitalsForm, setShowVitalsForm] = useState(false);
   const [exportOptions, setExportOptions] = useState({
     appointmentInfo: true,
     patientInfo: false,
@@ -111,7 +112,24 @@ export default function AppointmentView() {
   });
   const [exportFormat, setExportFormat] = useState("pdf");
   const [isExporting, setIsExporting] = useState(false);
-  const { userData } = useCurrentUser();
+  const [profileImageSignedUrl, setProfileImageSignedUrl] = useState<string | null>(null);
+
+  const getProfileImageUrl = async (filePath: string) => {
+    try {
+      const path = filePath.split('profile-pictures/')[1] || filePath;
+      const { data, error } = await supabase.storage
+        .from('profile-pictures')
+        .createSignedUrl(path, 3600);
+      if (error) {
+        console.error('Error generating profile image signed URL:', error.message);
+        return null;
+      }
+      return data.signedUrl;
+    } catch (error) {
+      console.error('Unexpected error generating profile image signed URL:', error);
+      return null;
+    }
+  };
 
   // Fetch appointment data from Supabase
   useEffect(() => {
@@ -123,13 +141,11 @@ export default function AppointmentView() {
 
     async function fetchAppointment() {
       try {
-        // First fetch the basic appointment data
         const { data: appointmentData, error: appointmentError } = await supabase
           .from("appointment")
           .select(`
             *,
-            patient:patient_id (
-              *,
+            patients:patient_id (
               person (
                 id,
                 first_name,
@@ -138,11 +154,11 @@ export default function AppointmentView() {
                 birth_date,
                 age,
                 contact_number,
-                address
+                address,
+                fileurl
               )
             ),
-            clinician:clinician_id (
-              id,
+            clinicians:clinician_id (
               role,
               specialization,
               person (
@@ -153,50 +169,51 @@ export default function AppointmentView() {
               )
             )
           `)
-          .eq("id", id)
+          .eq('id', id)
           .single();
 
         if (appointmentError) {
-          console.error("Supabase query error:", appointmentError);
-          toast.error(`Failed to fetch appointment: ${appointmentError.message}`);
+          console.error("Error fetching appointment:", appointmentError);
+          toast.error(`Failed to fetch appointment data: ${appointmentError.message}`);
           setLoading(false);
-          router.push("/Dashboard/Appointments");
           return;
         }
 
         if (!appointmentData) {
-          console.warn("No appointment found with ID:", id);
-          toast.error("Appointment not found.");
+          console.error("No appointment found with ID:", id);
+          toast.error("Appointment not found");
           setLoading(false);
           router.push("/Dashboard/Appointments");
           return;
         }
 
         // Transform the data
-        const transformedData: Appointment = {
+        const transformedData = {
           ...appointmentData,
-          patient: appointmentData.patient ? {
-            id: appointmentData.patient.id,
-            person: appointmentData.patient.person
+          patient: appointmentData.patients ? {
+            id: appointmentData.patients.person.id,
+            person: appointmentData.patients.person
           } : undefined,
-          clinician: appointmentData.clinician ? {
-            role: appointmentData.clinician.role,
-            specialization: appointmentData.clinician.specialization,
-            person: appointmentData.clinician.person
+          clinician: appointmentData.clinicians ? {
+            role: appointmentData.clinicians.role,
+            specialization: appointmentData.clinicians.specialization,
+            person: appointmentData.clinicians.person
           } : undefined
         };
 
         console.log("Fetched Data:", {
           appointment: appointmentData,
-          patient: appointmentData.patient,
-          clinician: appointmentData.clinician,
           transformed: transformedData
         });
 
         setAppointment(transformedData);
         setIsCancelled(transformedData.status.toLowerCase() === "canceled");
 
-        console.log("Starting vitals fetch for appointment:", id);
+        // Get profile image URL if fileurl exists
+        if (transformedData.patient?.person?.fileurl) {
+          const signedUrl = await getProfileImageUrl(transformedData.patient.person.fileurl);
+          setProfileImageSignedUrl(signedUrl);
+        }
 
         // Fetch vitals for this appointment
         try {
@@ -212,23 +229,12 @@ export default function AppointmentView() {
             `)
             .eq("id", id);
 
-          console.log("Raw vitals response:", vitalsData);
-
-          if (vitalsError) {
-            throw vitalsError;
-          }
+          if (vitalsError) throw vitalsError;
 
           setVitals(vitalsData || []);
           setHasExistingVitals(vitalsData && vitalsData.length > 0);
-
         } catch (error: any) {
-          console.error("Detailed vitals fetch error:", {
-            error,
-            errorType: typeof error,
-            errorKeys: error ? Object.keys(error) : 'no keys',
-            errorString: error ? error.toString() : 'no toString',
-            errorStack: error?.stack || 'no stack trace'
-          });
+          console.error("Error fetching vitals:", error);
         }
 
         setLoading(false);
@@ -243,7 +249,6 @@ export default function AppointmentView() {
     fetchAppointment();
   }, [id, router]);
 
-  // Handle cancel switch toggle
   const handleCancelToggle = async () => {
     if (!appointment) return;
 
@@ -264,7 +269,6 @@ export default function AppointmentView() {
     }
   };
 
-  // Handle delete appointment
   const handleDelete = async (id: string) => {
     try {
       const { error } = await supabase
@@ -275,26 +279,18 @@ export default function AppointmentView() {
       if (error) throw error;
 
       toast.success("Appointment deleted successfully.");
-      setOpenDialog(false);
+      setOpenDeleteDialog(false);
       router.push("/Dashboard/Appointments");
     } catch (err: any) {
       toast.error(`Error deleting appointment: ${err.message}`);
     }
   };
 
-  // Redirect to update appointment form
-  const handleUpdateAppointment = () => {
-    if (appointment) {
-      setShowUpdateForm(true);
-    }
-  };
-
   const handleUpdateSuccess = async () => {
-    // Refresh appointment data after update
     if (!id) return;
 
     try {
-      const { data: appointmentData, error: appointmentError } = await supabase
+      const { data: appointmentData, error: appointmentError }: { data: Appointment | null; error: any } = await supabase
         .from("appointment")
         .select(`
           *,
@@ -311,8 +307,9 @@ export default function AppointmentView() {
             )
           ),
           clinician:clinician_id (
+            role,
+            specialization,
             person (
-              id,
               first_name,
               middle_name,
               last_name
@@ -324,7 +321,7 @@ export default function AppointmentView() {
 
       if (appointmentError) throw appointmentError;
 
-      const transformedData = {
+      const transformedData = appointmentData ? {
         ...appointmentData,
         patient: appointmentData.patient ? {
           id: appointmentData.patient.id,
@@ -335,10 +332,12 @@ export default function AppointmentView() {
           specialization: appointmentData.clinician.specialization,
           person: appointmentData.clinician.person
         } : undefined
-      };
+      } : null;
 
-      setAppointment(transformedData);
-      setIsCancelled(transformedData.status.toLowerCase() === "canceled");
+      if (transformedData) {
+        setAppointment(transformedData);
+        setIsCancelled(transformedData.status.toLowerCase() === "canceled");
+      }
     } catch (err: any) {
       console.error("Error refreshing appointment data:", err);
       toast.error("Failed to refresh appointment data");
@@ -364,45 +363,11 @@ export default function AppointmentView() {
     try {
       console.log("Preparing export data with options:", exportOptions);
 
-      // Fetch prescriptions if selected
-      let prescriptionsData = null;
-      if (exportOptions.prescriptions) {
-        const { data: prescriptions, error: prescriptionsError } = await supabase
-          .from("prescriptions")
-          .select("*")
-          .eq("patient_id", appointment.patient_id);
-
-        if (prescriptionsError) {
-          console.error("Error fetching prescriptions:", prescriptionsError);
-          toast.error("Failed to fetch prescriptions data");
-        } else {
-          prescriptionsData = prescriptions;
-        }
-      }
-
-      // Fetch supplements if selected
-      let supplementsData = null;
-      if (exportOptions.supplements) {
-        const { data: supplements, error: supplementsError } = await supabase
-          .from("supplements")
-          .select("*")
-          .eq("patient_id", appointment.patient_id);
-
-        if (supplementsError) {
-          console.error("Error fetching supplements:", supplementsError);
-          toast.error("Failed to fetch supplements data");
-        } else {
-          supplementsData = supplements;
-        }
-      }
-
-      // Include vitals data and the newly fetched data in the export
+      // Include vitals data in the export
       const exportData = {
         appointment: {
           ...appointment,
-          vitals: vitals[0] || null,
-          prescriptions: prescriptionsData || null,
-          supplements: supplementsData || null
+          vitals: vitals[0] || null  // Include the first vitals record if it exists
         },
         exportOptions,
         exportFormat
@@ -426,9 +391,9 @@ export default function AppointmentView() {
       console.log("Processing download...");
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const patientName = appointment.patient ? 
-        `${appointment.patient.person.first_name} ${appointment.patient.person.middle_name ? appointment.patient.person.middle_name + " " : ""}${appointment.patient.person.last_name}` : 
-        "Unknown";
+      const patientName = appointment.patient
+        ? `${appointment.patient.person.first_name} ${appointment.patient.person.middle_name ? appointment.patient.person.middle_name + " " : ""}${appointment.patient.person.last_name}`
+        : "Unknown";
       const a = document.createElement("a");
       a.href = url;
       a.download = `Appointment_Report_${patientName}_${new Date(appointment.date).toISOString().split('T')[0]}.${exportFormat}`;
@@ -448,10 +413,8 @@ export default function AppointmentView() {
   }
 
   if (loading || !appointment) {
-    return <div>Loading...</div>;
+    return null;
   }
-
-  const isDeleteEnabled = deleteInput.trim().toLowerCase() === "confirm";
 
   const getPatientName = () => {
     const person = appointment?.patient?.person;
@@ -465,41 +428,61 @@ export default function AppointmentView() {
     return `${person.first_name}${person.middle_name ? ` ${person.middle_name}` : ""} ${person.last_name}`;
   };
 
+  const fullName = getPatientName();
+  const isDeleteEnabled = deleteInput.trim().toLowerCase() === fullName.trim().toLowerCase();
+
   return (
     <main className="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
       <div className="grid gap-4">
-        {/* Row for Basic Information and Quick Actions */}
         <div className="flex flex-col md:flex-row gap-4">
-          {/* Basic Information Card */}
           <Card className="flex-1 md:flex-[2]">
             <CardHeader>
-              <CardTitle className="text-2xl pt-2">Appointment Details</CardTitle>
+              <div className="flex items-center gap-4">
+                <div className="relative w-30 h-30 rounded-full overflow-hidden border-1">
+                  {profileImageSignedUrl ? (
+                    <img
+                      src={profileImageSignedUrl}
+                      alt={`${getPatientName()}'s profile`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => console.error('Failed to load profile image:', profileImageSignedUrl)}
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                      <div className="w-full h-3/4 flex flex-col items-center justify-center">
+                        <div className="w-12 h-12 bg-gray-500 rounded-full mb-1"></div>
+                        <div className="w-20 h-10 bg-gray-500 rounded-t-full"></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-sm">Patient Name</Label>
+                  <CardTitle className="text-4xl font-bold">{fullName}</CardTitle>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                 <div>
                   <Label className="font-semibold mb-2">Appointment Status</Label>
-                  <p className="text-sm">{appointment.status || "Not specified"}</p>
+                  <p className="text-m">{appointment.status || "Not specified"}</p>
                 </div>
                 <div>
                   <Label className="font-semibold mb-2">Appointment Date</Label>
-                  <p className="text-sm">
-                    {new Date(appointment.date).toLocaleDateString() || "Not specified"}
-                  </p>
+                  <p className="text-m">{new Date(appointment.date).toLocaleDateString() || "Not specified"}</p>
                 </div>
                 <div>
                   <Label className="font-semibold mb-2">Service</Label>
-                  <p className="text-sm">{appointment.service || "Not specified"}</p>
+                  <p className="text-m">{appointment.service || "Not specified"}</p>
                 </div>
                 <div>
                   <Label className="font-semibold mb-2">Payment Status</Label>
-                  <p className="text-sm">{appointment.payment_status || "Not specified"}</p>
+                  <p className="text-m">{appointment.payment_status || "Not specified"}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Quick Actions Card */}
           <Card className="flex-1 md:flex-1">
             <CardHeader>
               <CardTitle>Quick Actions</CardTitle>
@@ -527,50 +510,48 @@ export default function AppointmentView() {
                 <div className="flex flex-col gap-2">
                   <Button
                     variant="outline"
-                    onClick={handleUpdateAppointment}
+                    onClick={() => setShowUpdateForm(true)}
                   >
-                    <RefreshCcw className="h-4 w-4 mr-2" />
+                    <RefreshCcw className="h-4 w-4" />
                     Update Appointment
                   </Button>
-                  {userData?.isAdmin && (
-                    <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline">
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete Appointment
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Delete Appointment</DialogTitle>
-                          <DialogDescription>
-                            Are you sure you want to delete this appointment? This action cannot be undone.
-                          </DialogDescription>
-                          <div className="grid gap-2 py-4">
-                            <Label htmlFor="reason">Type "confirm" to confirm deletion</Label>
-                            <Input
-                              id="reason"
-                              className="focus:border-red-500 focus:ring-red-500"
-                              placeholder="Enter 'confirm'"
-                              value={deleteInput}
-                              onChange={(e) => setDeleteInput(e.target.value)}
-                            />
-                          </div>
-                        </DialogHeader>
+                  <Dialog open={openDeleteDialog} onOpenChange={setOpenDeleteDialog}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline">
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Appointment
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Delete Appointment</DialogTitle>
+                        <DialogDescription>
+                          Are you sure you want to delete this appointment? This action cannot be undone.
+                        </DialogDescription>
+                        <div className="grid gap-2 py-4">
+                          <Label htmlFor="reason">Type "confirm" to confirm deletion</Label>
+                          <Input
+                            id="reason"
+                            className="focus:border-red-500 focus:ring-red-500"
+                            placeholder="Enter 'confirm'"
+                            value={deleteInput}
+                            onChange={(e) => setDeleteInput(e.target.value)}
+                          />
+                        </div>
+                      </DialogHeader>
 
-                        {isDeleteEnabled && (
-                          <DialogFooter>
-                            <Button
-                              variant="destructive"
-                              onClick={() => appointment && handleDelete(appointment.id)}
-                            >
-                              Confirm Delete
-                            </Button>
-                          </DialogFooter>
-                        )}
-                      </DialogContent>
-                    </Dialog>
-                  )}
+                      {isDeleteEnabled && (
+                        <DialogFooter>
+                          <Button
+                            variant="destructive"
+                            onClick={() => appointment && handleDelete(appointment.id)}
+                          >
+                            Confirm Delete
+                          </Button>
+                        </DialogFooter>
+                      )}
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </div>
             </CardContent>
@@ -603,24 +584,6 @@ export default function AppointmentView() {
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="selectAll"
-                        checked={Object.values(exportOptions).every(Boolean)}
-                        onCheckedChange={(checked) => {
-                          setExportOptions({
-                            appointmentInfo: !!checked,
-                            patientInfo: !!checked,
-                            clinicianInfo: !!checked,
-                            vitals: !!checked,
-                            prescriptions: !!checked,
-                            supplements: !!checked,
-                          });
-                        }}
-                      />
-                      <Label htmlFor="selectAll" className="font-semibold">Select All</Label>
-                    </div>
-                    <Separator className="my-2" />
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id="appointmentInfo"
@@ -682,9 +645,7 @@ export default function AppointmentView() {
                       <Label htmlFor="supplements">Supplements</Label>
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="format" className="text-right">
-                        Format
-                      </Label>
+                      <Label htmlFor="format" className="text-right">Format</Label>
                       <Select value={exportFormat} onValueChange={setExportFormat}>
                         <SelectTrigger className="col-span-3">
                           <SelectValue placeholder="Select format" />
@@ -710,61 +671,64 @@ export default function AppointmentView() {
           </div>
 
           <TabsContent value="overview">
-            <div className="grid gap-4">
-              {/* Patient Information Card */}
-              <Card>
-                <CardHeader>
+            <Card x-chunk="dashboard-06-chunk-0">
+              <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-1">
                   <CardTitle>Patient Information</CardTitle>
                   <CardDescription>All gathered patient information</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="font-semibold mr-2">Name</Label>
-                      <span className="text-sm">{getPatientName()}</span>
-                    </div>
-                    <div>
-                      <Label className="font-semibold mr-2">Date of Birth</Label>
-                      <span className="text-sm">
-                        {appointment?.patient?.person?.birth_date ? 
-                          new Date(appointment.patient.person.birth_date).toLocaleDateString() 
-                          : "Not provided"}
-                      </span>
-                    </div>
-                    <div>
-                      <Label className="font-semibold mr-2">Age</Label>
-                      <span className="text-sm">{appointment?.patient?.person?.age || "Not provided"}</span>
-                    </div>
-                    <div>
-                      <Label className="font-semibold mr-2">Contact Number</Label>
-                      <span className="text-sm">{appointment?.patient?.person?.contact_number || "Not provided"}</span>
-                    </div>
-                    <div className="col-span-2">
-                      <Label className="font-semibold mr-2">Address</Label>
-                      <span className="text-sm">{appointment?.patient?.person?.address || "Not provided"}</span>
+                </div>
+              </CardHeader>
+              <CardContent className="text-sm">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Name</Label>
+                    <div className="col-span-3">{getPatientName()}</div>
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Date of Birth</Label>
+                    <div className="col-span-3">
+                      {appointment?.patient?.person?.birth_date
+                        ? new Date(appointment.patient.person.birth_date).toLocaleDateString()
+                        : "Not provided"}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Age</Label>
+                    <div className="col-span-3">{appointment?.patient?.person?.age || "Not provided"}</div>
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Contact</Label>
+                    <div className="col-span-3">{appointment?.patient?.person?.contact_number || "Not provided"}</div>
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-right">Address</Label>
+                    <div className="col-span-3">{appointment?.patient?.person?.address || "Not provided"}</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-              {/* Clinician Information Card */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Clinician Information</CardTitle>
+            <div className="pt-8">
+              <Card x-chunk="dashboard-06-chunk-0">
+                <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="space-y-1">
+                    <CardTitle>Clinician Information</CardTitle>
+                    <CardDescription>Details about the assigned clinician</CardDescription>
+                  </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="text-sm">
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="font-semibold mr-2">Name</Label>
-                      <span className="text-sm">{getClinicianName()}</span>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label className="text-right">Name</Label>
+                      <div className="col-span-3">{getClinicianName()}</div>
                     </div>
-                    <div>
-                      <Label className="font-semibold mr-2">Role</Label>
-                      <span className="text-sm">{appointment?.clinician?.role || "Not specified"}</span>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label className="text-right">Role</Label>
+                      <div className="col-span-3">{appointment?.clinician?.role || "Not specified"}</div>
                     </div>
-                    <div className="col-span-2">
-                      <Label className="font-semibold mr-2">Specialization</Label>
-                      <span className="text-sm">{appointment?.clinician?.specialization || "Not specified"}</span>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label className="text-right">Specialization</Label>
+                      <div className="col-span-3">{appointment?.clinician?.specialization || "Not specified"}</div>
                     </div>
                   </div>
                 </CardContent>
@@ -786,9 +750,8 @@ export default function AppointmentView() {
               <CardContent>
                 <div className="space-y-6">
                   {vitals.map((vital) => (
-                    <div key={vital.id} className="border rounded-lg p-4">
+                    <div key={vital.id}>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {/* Measurements Column */}
                         <div className="space-y-4">
                           <div>
                             <Label className="font-semibold mr-2">Weight</Label>
@@ -803,8 +766,6 @@ export default function AppointmentView() {
                             <span className="text-sm">{vital.blood_pressure || "Not recorded"}</span>
                           </div>
                         </div>
-
-                        {/* Vital Signs Column 1 */}
                         <div className="space-y-4">
                           <div>
                             <Label className="font-semibold mr-2">Temperature</Label>
@@ -815,8 +776,6 @@ export default function AppointmentView() {
                             <span className="text-sm">{vital.pulse_rate ? `${vital.pulse_rate} bpm` : "Not recorded"}</span>
                           </div>
                         </div>
-
-                        {/* Vital Signs Column 2 */}
                         <div className="space-y-4">
                           <div>
                             <Label className="font-semibold mr-2">Respiration Rate</Label>
@@ -864,22 +823,19 @@ export default function AppointmentView() {
         </Tabs>
       </div>
 
-      {/* Vitals Form Dialog */}
       {appointment && (
         <VitalsForm
           open={showVitalsForm}
           onOpenChange={setShowVitalsForm}
           appointmentId={id!}
           existingVitals={vitals[0]}
-          appointmentData={appointment ? {
+          appointmentData={{
             weight: appointment.weight ? Number(appointment.weight) : null,
             gestational_age: appointment.gestational_age ? Number(appointment.gestational_age) : null,
-          } : null}
+          }}
           onSuccess={() => {
-            // Refresh both vitals and appointment data after successful submission
             const refreshData = async () => {
               try {
-                // Fetch updated appointment data
                 const { data: appointmentData, error: appointmentError } = await supabase
                   .from("appointment")
                   .select(`
@@ -911,8 +867,7 @@ export default function AppointmentView() {
 
                 if (appointmentError) throw appointmentError;
 
-                // Transform and update appointment state
-                const transformedData = {
+                const transformedData = appointmentData ? {
                   ...appointmentData,
                   patient: appointmentData.patient ? {
                     id: appointmentData.patient.id,
@@ -923,11 +878,12 @@ export default function AppointmentView() {
                     specialization: appointmentData.clinician.specialization,
                     person: appointmentData.clinician.person
                   } : undefined
-                };
+                } : null;
 
-                setAppointment(transformedData);
+                if (transformedData) {
+                  setAppointment(transformedData);
+                }
 
-                // Fetch updated vitals data
                 const { data: vitalsData, error: vitalsError } = await supabase
                   .from("vitals")
                   .select(`
@@ -944,7 +900,6 @@ export default function AppointmentView() {
 
                 setVitals(vitalsData || []);
                 setHasExistingVitals(vitalsData && vitalsData.length > 0);
-
               } catch (error: any) {
                 console.error("Error refreshing data:", error);
                 toast.error("Failed to refresh data");

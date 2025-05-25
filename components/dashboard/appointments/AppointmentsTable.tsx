@@ -131,9 +131,9 @@ interface AdvancedSearch {
   payment_status?: string;
 }
 
-interface Column extends ColumnDef<Appointment> {
+type Column = ColumnDef<Appointment> & {
   accessorFn?: (row: Appointment) => string;
-}
+};
 
 // Helper functions to get names
 const getPatientName = (appointment: Appointment) => {
@@ -322,86 +322,338 @@ export default function AppointmentsTable() {
   });
   const { userData } = useCurrentUser();
 
+  const columns: ColumnDef<Appointment>[] = [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <Checkbox
+          checked={
+            table.getIsAllPageRowsSelected() ||
+            (table.getIsSomePageRowsSelected() && "indeterminate")
+          }
+          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+          aria-label="Select all"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => row.toggleSelected(!!value)}
+          aria-label="Select row"
+        />
+      ),
+      enableSorting: false,
+    },
+    {
+      accessorKey: "patient_name",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Patient Name
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => <div className="font-medium">{row.getValue("patient_name")}</div>,
+    },
+    {
+      accessorKey: "clinician_name",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Clinician Name
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => <div className="font-medium">{row.getValue("clinician_name")}</div>,
+    },
+    {
+      accessorKey: "date",
+      header: ({ column }) => (
+        <Button
+          variant="ghost"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Date
+          <ArrowUpDown className="ml-2 h-4 w-4" />
+        </Button>
+      ),
+      cell: ({ row }) => (
+        <div>{new Date(row.getValue("date")).toLocaleDateString()}</div>
+      ),
+      sortingFn: (rowA, rowB, columnId) => {
+        return new Date(rowA.getValue(columnId)).getTime() - new Date(rowB.getValue(columnId)).getTime();
+      },
+    },
+    {
+      accessorKey: "service",
+      header: "Service",
+      cell: ({ row }) => <div>{row.getValue("service")}</div>,
+    },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const appointment = row.original;
+        const validStatuses = ["Scheduled", "Completed", "Canceled"];
+        const updateAppointmentStatus = async (newStatus: "Scheduled" | "Completed" | "Canceled") => {
+          if (!validStatuses.includes(newStatus)) {
+            toast.error("Invalid status value.");
+            return false;
+          }
+          try {
+            // Optimistically update local state
+            setAppointments((prev) =>
+              prev.map((appt) =>
+                appt.id === appointment.id ? { ...appt, status: newStatus } : appt
+              )
+            );
+
+            const { error } = await supabase
+              .from("appointment")
+              .update({ status: newStatus })
+              .eq("id", appointment.id);
+
+            if (error) {
+              // Revert optimistic update on error
+              setAppointments((prev) =>
+                prev.map((appt) =>
+                  appt.id === appointment.id ? { ...appt, status: appointment.status } : appt
+                )
+              );
+              console.error("Appointment status update error:", error);
+              toast.error(`Failed to update appointment status: ${error.message}`);
+              return false;
+            }
+
+            toast.success("Status Updated", {
+              description: `Appointment status changed to ${newStatus}.`,
+            });
+            return true;
+          } catch (err) {
+            // Revert optimistic update on unexpected error
+            setAppointments((prev) =>
+              prev.map((appt) =>
+                appt.id === appointment.id ? { ...appt, status: appointment.status } : appt
+              )
+            );
+            console.error("Unexpected error updating status:", err);
+            toast.error("An unexpected error occurred while updating the status.");
+            return false;
+          }
+        };
+
+        const debouncedUpdateAppointmentStatus = debounce(updateAppointmentStatus, 300);
+
+        return (
+          <Select
+            value={appointment.status || "Scheduled"}
+            onValueChange={async (value) => {
+              const newStatus = value as "Scheduled" | "Completed" | "Canceled";
+              const success = await debouncedUpdateAppointmentStatus(newStatus);
+              if (!success) {
+                fetchAppointments();
+              }
+            }}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Select status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Scheduled" className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-400" />
+                Scheduled
+              </SelectItem>
+              <SelectItem value="Completed" className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-400" />
+                Completed
+              </SelectItem>
+              <SelectItem value="Canceled" className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-red-400" />
+                Canceled
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        );
+      },
+      enableSorting: false,
+    },
+    {
+      accessorKey: "payment_status",
+      header: "Payment Status",
+      cell: ({ row }) => {
+        const appointment = row.original;
+        const validPaymentStatuses = ["Pending", "Paid", "Unpaid"];
+        const updatePaymentStatus = async (newStatus: "Pending" | "Paid" | "Unpaid") => {
+          if (!validPaymentStatuses.includes(newStatus)) {
+            toast.error("Invalid payment status value.");
+            return false;
+          }
+          try {
+            // Optimistically update local state
+            setAppointments((prev) =>
+              prev.map((appt) =>
+                appt.id === appointment.id ? { ...appt, payment_status: newStatus } : appt
+              )
+            );
+
+            const { error } = await supabase
+              .from("appointment")
+              .update({ payment_status: newStatus })
+              .eq("id", appointment.id);
+
+            if (error) {
+              // Revert optimistic update on error
+              setAppointments((prev) =>
+                prev.map((appt) =>
+                  appt.id === appointment.id ? { ...appt, payment_status: appointment.payment_status } : appt
+                )
+              );
+              console.error("Payment status update error:", error);
+              toast.error(`Failed to update payment status: ${error.message}`);
+              return false;
+            }
+
+            toast.success("Payment Status Updated", {
+              description: `Payment status changed to ${newStatus}.`,
+            });
+            return true;
+          } catch (err) {
+            // Revert optimistic update on unexpected error
+            setAppointments((prev) =>
+              prev.map((appt) =>
+                appt.id === appointment.id ? { ...appt, payment_status: appointment.payment_status } : appt
+              )
+            );
+            console.error("Unexpected error updating payment status:", err);
+            toast.error("An unexpected error occurred while updating the payment status.");
+            return false;
+          }
+        };
+
+        const debouncedUpdatePaymentStatus = debounce(updatePaymentStatus, 300);
+
+        return (
+          <Select
+            value={appointment.payment_status || "Pending"}
+            onValueChange={async (value) => {
+              const newStatus = value as "Pending" | "Paid" | "Unpaid";
+              const success = await debouncedUpdatePaymentStatus(newStatus);
+              if (!success) {
+                fetchAppointments();
+              }
+            }}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Select payment status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Pending" className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-yellow-400" />
+                Pending
+              </SelectItem>
+              <SelectItem value="Paid" className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-400" />
+                Paid
+              </SelectItem>
+              <SelectItem value="Unpaid" className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-red-400" />
+                Unpaid
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        );
+      },
+      enableSorting: false,
+    },
+  ];
+
   // Fetch appointments from Supabase
-  useEffect(() => {
+  const fetchAppointments = React.useCallback(async () => {
+    if (!userData) return; // Don't fetch if user data isn't available yet
+  
+    setLoading(true); // Set loading state before fetching
     let isMounted = true;
-
-    async function fetchAppointments() {
-      if (!userData) return; // Don't fetch if user data isn't available yet
-      
-      setLoading(true); // Set loading state before fetching
-      try {
-        let query = supabase
-          .from("appointment")
-          .select(`
-            *,
-            patient:patient_id (
-              person (
-                id,
-                first_name,
-                middle_name,
-                last_name,
-                birth_date,
-                age,
-                contact_number,
-                address
-              )
-            ),
-            clinician:clinician_id (
-              role,
-              specialization,
-              person (
-                first_name,
-                middle_name,
-                last_name
-              )
+    try {
+      let query = supabase
+        .from("appointment")
+        .select(`
+          *,
+          patients:patient_id (
+            person (
+              id,
+              first_name,
+              middle_name,
+              last_name,
+              birth_date,
+              age,
+              contact_number,
+              address
             )
-          `);
-
-        // If user is not admin, only show their appointments
-        if (!userData.isAdmin && userData.clinicianId) {
-          query = query.eq('clinician_id', userData.clinicianId);
-        }
-
-        const { data, error } = await query;
-
-        if (error) {
-          throw error;
-        }
-
-        if (isMounted) {
-          // Transform the data
-          const transformedData = data.map((appointment) => ({
-            ...appointment,
-            patient: appointment.patient ? {
-              id: appointment.patient.id,
-              person: appointment.patient.person
-            } : undefined,
-            clinician: appointment.clinician ? {
-              role: appointment.clinician.role,
-              specialization: appointment.clinician.specialization,
-              person: appointment.clinician.person
-            } : undefined
-          }));
-
-          setAppointments(transformedData);
-        }
-      } catch (error: any) {
-        console.error('Error fetching appointments:', error);
-        toast.error('Failed to fetch appointments');
-      } finally {
-        if (isMounted) {
-          setLoading(false); // Set loading state to false after fetch completes
-        }
+          ),
+          clinicians:clinician_id (
+            role,
+            specialization,
+            person (
+              first_name,
+              middle_name,
+              last_name
+            )
+          )
+        `);
+  
+      // If user is not admin, only show their appointments
+      if (!userData.isAdmin && userData.clinicianId) {
+        query = query.eq('clinician_id', userData.clinicianId);
+      }
+  
+      const { data, error } = await query;
+  
+      if (error) {
+        throw error;
+      }
+  
+      if (isMounted) {
+        // Transform the data
+        const transformedData = data.map((appointment) => ({
+          ...appointment,
+          patient_name: appointment.patients?.person ? 
+            `${appointment.patients.person.first_name}${appointment.patients.person.middle_name ? ` ${appointment.patients.person.middle_name}` : ""} ${appointment.patients.person.last_name}` : 
+            "Unknown Patient",
+          clinician_name: appointment.clinicians?.person ? 
+            `${appointment.clinicians.person.first_name}${appointment.clinicians.person.middle_name ? ` ${appointment.clinicians.person.middle_name}` : ""} ${appointment.clinicians.person.last_name}` : 
+            "Unknown Clinician",
+          patient: appointment.patients ? {
+            id: appointment.patients.person.id,
+            person: appointment.patients.person
+          } : undefined,
+          clinician: appointment.clinicians ? {
+            role: appointment.clinicians.role,
+            specialization: appointment.clinicians.specialization,
+            person: appointment.clinicians.person
+          } : undefined
+        }));
+  
+        setAppointments(transformedData);
+      }
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+      toast.error('Failed to fetch appointments');
+    } finally {
+      if (isMounted) {
+        setLoading(false); // Set loading state to false after fetch completes
       }
     }
-
+  }, [userData]);
+  
+  React.useEffect(() => {
     fetchAppointments();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [userData]); // Only depend on userData
+  
+    // No need to handle isMounted here since fetchAppointments is stable
+  }, [fetchAppointments]);
 
   // Handle search and filtering
   const filteredAppointments = React.useMemo(() => {
@@ -430,7 +682,7 @@ export default function AppointmentsTable() {
         const patientName = appointment.patient?.person ? 
           `${appointment.patient.person.first_name}${appointment.patient.person.middle_name ? ` ${appointment.patient.person.middle_name}` : ""} ${appointment.patient.person.last_name}` : 
           "";
-        return patientName.toLowerCase().includes(advancedSearch.patient_name.toLowerCase());
+        return patientName.toLowerCase().includes((advancedSearch.patient_name ?? "").toLowerCase());
       });
     }
     if (advancedSearch.clinician_name) {
@@ -438,24 +690,24 @@ export default function AppointmentsTable() {
         const clinicianName = appointment.clinician?.person ? 
           `${appointment.clinician.person.first_name}${appointment.clinician.person.middle_name ? ` ${appointment.clinician.person.middle_name}` : ""} ${appointment.clinician.person.last_name}` : 
           "";
-        return clinicianName.toLowerCase().includes(advancedSearch.clinician_name.toLowerCase());
+        return clinicianName.toLowerCase().includes((advancedSearch.clinician_name ?? "").toLowerCase());
       });
     }
     if (advancedSearch.service) {
       result = result.filter((appointment) =>
-        appointment.service.toLowerCase().includes(advancedSearch.service.toLowerCase())
+        appointment.service.toLowerCase().includes((advancedSearch.service ?? "").toLowerCase())
       );
     }
     if (advancedSearch.status) {
       result = result.filter((appointment) =>
-        appointment.status.toLowerCase().includes(advancedSearch.status.toLowerCase())
+        appointment.status.toLowerCase().includes((advancedSearch.status ?? "").toLowerCase())
       );
     }
     if (advancedSearch.payment_status) {
       result = result.filter((appointment) =>
         appointment.payment_status
           .toLowerCase()
-          .includes(advancedSearch.payment_status.toLowerCase())
+          .includes((advancedSearch.payment_status ?? "").toLowerCase())
       );
     }
 
@@ -515,37 +767,28 @@ export default function AppointmentsTable() {
   // Update the getExportAppointments function
   const getExportAppointments = async () => {
     try {
-        // First get the filtered appointments
-        let result = [...filteredAppointments];
+      // First get the filtered appointments
+      let result = [...filteredAppointments];
 
-        // Apply date filters
-        if (exportFilters.startDate || exportFilters.endDate) {
-            result = result.filter((appointment) => {
-                const apptDate = new Date(appointment.date);
-                const start = exportFilters.startDate
-                    ? new Date(exportFilters.startDate).setHours(0, 0, 0, 0)
-                    : -Infinity;
-                const end = exportFilters.endDate
-                    ? new Date(exportFilters.endDate).setHours(23, 59, 59, 999)
-                    : Infinity;
-                return apptDate.getTime() >= start && apptDate.getTime() <= end;
-            });
-        }
+      // Apply date filters
+      if (exportFilters.startDate || exportFilters.endDate) {
+        result = result.filter((appointment) => {
+          const apptDate = new Date(appointment.date);
+          const start = exportFilters.startDate
+            ? new Date(exportFilters.startDate).setHours(0, 0, 0, 0)
+            : -Infinity;
+          const end = exportFilters.endDate
+            ? new Date(exportFilters.endDate).setHours(23, 59, 59, 999)
+            : Infinity;
+          return apptDate.getTime() >= start && apptDate.getTime() <= end;
+        });
+      }
 
         // Apply status filter
         if (exportFilters.status !== "all") {
             result = result.filter((appointment) =>
                 appointment.status.toLowerCase() === exportFilters.status
-            );
-        }
-
-        // Apply sorting
-        if (exportFilters.sort !== "none") {
-            result.sort((a, b) => {
-                const dateA = new Date(a.date).getTime();
-                const dateB = new Date(b.date).getTime();
-                return exportFilters.sort === "asc" ? dateA - dateB : dateB - dateA;
-            });
+          );
         }
 
         // Apply limit
@@ -556,327 +799,343 @@ export default function AppointmentsTable() {
             }
         }
 
-        // Fetch complete data for each filtered appointment
-        const appointmentsWithDetails = await Promise.all(
-            result.map(async (appointment) => {
-                // Fetch appointment with related data
-                const { data: appointmentData, error: appointmentError } = await supabase
-                    .from("appointment")
-                    .select(`
-                        *,
-                        patient:patient_id (
-                            person (
-                                id,
-                                first_name,
-                                middle_name,
-                                last_name,
-                                birth_date,
-                                age,
-                                contact_number,
-                                address
-                            )
-                        ),
-                        clinician:clinician_id (
-                            role,
-                            specialization,
-                            person (
-                                id,
-                                first_name,
-                                middle_name,
-                                last_name
-                            )
-                        )
-                    `)
-                    .eq('id', appointment.id)
-                    .single();
+      // Apply sorting
+      if (exportFilters.sort !== "none") {
+        result.sort((a, b) => {
+          const dateA = new Date(a.date).getTime();
+          const dateB = new Date(b.date).getTime();
+          return exportFilters.sort === "asc" ? dateA - dateB : dateB - dateA;
+        });
+      }
 
-                if (appointmentError) {
-                    console.error("Error fetching appointment details:", appointmentError);
-                    return appointment;
-                }
+      // Apply limit
+      if (exportFilters.limit) {
+        const limit = parseInt(exportFilters.limit);
+        if (!isNaN(limit) && limit > 0) {
+          result = result.slice(0, limit);
+        }
+      }
 
-                // Fetch vitals data
-                const { data: vitalsData, error: vitalsError } = await supabase
-                    .from("vitals")
-                    .select(`
+      // Now fetch complete data for each filtered appointment
+      const appointmentsWithDetails = await Promise.all(
+        result.map(async (appointment) => {
+          // Fetch appointment with related data
+          const { data: appointmentData, error: appointmentError } = await supabase
+            .from("appointment")
+            .select(`
+                *,
+                patients:patient_id (
+                    person (
                         id,
-                        temperature,
-                        pulse_rate,
-                        blood_pressure,
-                        respiration_rate,
-                        oxygen_saturation
-                    `)
-                    .eq("id", appointment.id)
-                    .single();
+                        first_name,
+                        middle_name,
+                        last_name,
+                        birth_date,
+                        age,
+                        contact_number,
+                        address
+                    )
+                ),
+                clinicians:clinician_id (
+                    role,
+                    specialization,
+                    person (
+                        id,
+                        first_name,
+                        middle_name,
+                        last_name
+                    )
+                )
+            `)
+            .eq("id", appointment.id)
+            .single();
 
-                if (vitalsError && vitalsError.code !== 'PGRST116') {
-                    console.error("Error fetching vitals:", vitalsError);
-                }
+          if (appointmentError) {
+            console.error("Error fetching appointment details:", appointmentError);
+            return appointment;
+          }
 
-                // Fetch prescriptions if selected
-                let prescriptionsData = null;
-                if (exportFilters.exportContent.prescriptions) {
-                    const { data: prescriptions, error: prescriptionsError } = await supabase
-                        .from("prescriptions")
-                        .select("*")
-                        .eq("appointment_id", appointment.id);
+          // Fetch vitals data
+          const { data: vitalsData, error: vitalsError } = await supabase
+            .from("vitals")
+            .select(`
+                id,
+                temperature,
+                pulse_rate,
+                blood_pressure,
+                respiration_rate,
+                oxygen_saturation
+            `)
+            .eq("id", appointment.id)
+            .single();
 
-                    if (prescriptionsError) {
-                        console.error("Error fetching prescriptions:", prescriptionsError);
-                    } else {
-                        prescriptionsData = prescriptions;
-                    }
-                }
+          if (vitalsError && vitalsError.code !== "PGRST116") {
+            // Ignore not found error
+            console.error("Error fetching vitals:", vitalsError);
+          }
 
-                // Fetch supplements if selected
-                let supplementsData = null;
-                if (exportFilters.exportContent.supplements) {
-                    const { data: supplements, error: supplementsError } = await supabase
-                        .from("supplements")
-                        .select("*")
-                        .eq("appointment_id", appointment.id);
+          // Fetch prescriptions if selected
+          let prescriptionsData = null;
+          if (exportFilters.exportContent.prescriptions) {
+            const { data: prescriptions, error: prescriptionsError } = await supabase
+              .from("prescriptions")
+              .select("*")
+              .eq("appointment_id", appointment.id);
 
-                    if (supplementsError) {
-                        console.error("Error fetching supplements:", supplementsError);
-                    } else {
-                        supplementsData = supplements;
-                    }
-                }
+            if (prescriptionsError) {
+              console.error("Error fetching prescriptions:", prescriptionsError);
+            } else {
+              prescriptionsData = prescriptions;
+            }
+          }
 
-                // Combine all data
-                return {
-                    ...appointmentData,
-                    vitals: vitalsData || null,
-                    prescriptions: prescriptionsData || null,
-                    supplements: supplementsData || null,
-                    patient: appointmentData?.patient || null,
-                    clinician: appointmentData?.clinician || null
-                };
-            })
-        );
+          // Fetch supplements if selected
+          let supplementsData = null;
+          if (exportFilters.exportContent.supplements) {
+            const { data: supplements, error: supplementsError } = await supabase
+              .from("supplements")
+              .select("*")
+              .eq("appointment_id", appointment.id);
 
-        return appointmentsWithDetails;
+            if (supplementsError) {
+              console.error("Error fetching supplements:", supplementsError);
+            } else {
+              supplementsData = supplements;
+            }
+          }
+
+          // Combine all data
+          return {
+            ...appointmentData,
+            vitals: vitalsData || null,
+            prescriptions: prescriptionsData || null,
+            supplements: supplementsData || null,
+            patient: appointmentData?.patient || null,
+            clinician: appointmentData?.clinician || null,
+          };
+        })
+      );
+
+      return appointmentsWithDetails;
     } catch (error) {
-        console.error("Error in getExportAppointments:", error);
-        toast.error("Error preparing export data");
-        return [];
+      console.error("Error in getExportAppointments:", error);
+      toast.error("Error preparing export data");
+      return [];
     }
   };
 
   // Update the handleExport function to use the async getExportAppointments
   const handleExport = async () => {
     try {
-        const appointmentsToExport = await getExportAppointments();
-        
+      const appointmentsToExport = await getExportAppointments();
+      try {
         if (exportFilters.exportFormat === "csv") {
-            // Generate CSV headers based on selected content
-            const headers = [];
+          // Declare and initialize headers array before using it
+          const headers: string[] = [];
+
+          if (exportFilters.exportContent.appointmentInfo) {
+            headers.push("Date", "Service", "Status", "Payment Status");
+          }
+
+          if (exportFilters.exportContent.patientInfo) {
+            headers.push(
+              "Patient Name",
+              "Patient Birth Date",
+              "Patient Age",
+              "Patient Contact",
+              "Patient Address"
+            );
+          }
+
+          if (exportFilters.exportContent.clinicianInfo) {
+            headers.push("Clinician Name", "Role", "Specialization");
+          }
+
+          if (exportFilters.exportContent.vitals) {
+            headers.push(
+              "Weight",
+              "Gestational Age",
+              "Temperature",
+              "Pulse Rate",
+              "Blood Pressure",
+              "Respiration Rate",
+              "Oxygen Saturation"
+            );
+          }
+
+          if (exportFilters.exportContent.prescriptions) {
+            headers.push(
+              "Medicine",
+              "Dosage",
+              "Frequency",
+              "Duration",
+              "Instructions",
+              "Prescription Status",
+              "Date Prescribed"
+            );
+          }
+
+          if (exportFilters.exportContent.supplements) {
+            headers.push(
+              "Supplement Name",
+              "Strength",
+              "Amount",
+              "Frequency",
+              "Route",
+              "Supplement Status",
+              "Date Recommended"
+            );
+          }
+
+          // Generate rows
+          const rows = appointmentsToExport.map(appointment => {
+            const row: string[] = [];
+            
             if (exportFilters.exportContent.appointmentInfo) {
-                headers.push(
-                    "Date",
-                    "Service",
-                    "Status",
-                    "Payment Status"
-                );
+              row.push(
+                new Date(appointment.date).toLocaleString(),
+                appointment.service || "",
+                appointment.status || "",
+                appointment.payment_status || ""
+              );
             }
+            
             if (exportFilters.exportContent.patientInfo) {
-                headers.push(
-                    "Patient Name",
-                    "Patient Birth Date",
-                    "Patient Age",
-                    "Patient Contact",
-                    "Patient Address"
-                );
+              const patientPerson = appointment.patient?.person || {
+                first_name: "",
+                middle_name: null,
+                last_name: "",
+                birth_date: "",
+                age: null,
+                contact_number: null,
+                address: null
+              };
+              row.push(
+                `${patientPerson.first_name || ""} ${patientPerson.middle_name || ""} ${patientPerson.last_name || ""}`.trim(),
+                patientPerson.birth_date ? new Date(patientPerson.birth_date).toLocaleDateString() : "",
+                patientPerson.age || "",
+                patientPerson.contact_number || "",
+                patientPerson.address || ""
+              );
             }
+            
             if (exportFilters.exportContent.clinicianInfo) {
-                headers.push(
-                    "Clinician Name",
-                    "Role",
-                    "Specialization"
-                );
+              const clinicianData = appointment.clinician || {
+                role: "",
+                specialization: "",
+                person: {
+                  first_name: "",
+                  middle_name: null,
+                  last_name: ""
+                }
+              };
+              row.push(
+                `${clinicianData.person.first_name || ""} ${clinicianData.person.middle_name || ""} ${clinicianData.person.last_name || ""}`.trim(),
+                clinicianData.role || "",
+                clinicianData.specialization || ""
+              );
             }
+            
             if (exportFilters.exportContent.vitals) {
-                headers.push(
-                    "Weight",
-                    "Gestational Age",
-                    "Temperature",
-                    "Pulse Rate",
-                    "Blood Pressure",
-                    "Respiration Rate",
-                    "Oxygen Saturation"
-                );
+              const vitalsData = appointment.vitals || {
+                temperature: null,
+                pulse_rate: null,
+                blood_pressure: null,
+                respiration_rate: null,
+                oxygen_saturation: null
+              };
+              row.push(
+                appointment.weight || "",
+                appointment.gestational_age || "",
+                vitalsData.temperature || "",
+                vitalsData.pulse_rate || "",
+                vitalsData.blood_pressure || "",
+                vitalsData.respiration_rate || "",
+                vitalsData.oxygen_saturation || ""
+              );
             }
 
             if (exportFilters.exportContent.prescriptions) {
-                headers.push(
-                    "Medicine",
-                    "Dosage",
-                    "Frequency",
-                    "Duration",
-                    "Instructions",
-                    "Prescription Status",
-                    "Date Prescribed"
-                );
+              const prescription = appointment.prescriptions?.[0] || {};
+              row.push(
+                prescription.medicine || "",
+                prescription.dosage || "",
+                prescription.frequency || "",
+                prescription.duration || "",
+                prescription.instructions || "",
+                prescription.status || "",
+                prescription.date ? new Date(prescription.date).toLocaleDateString() : ""
+              );
             }
 
             if (exportFilters.exportContent.supplements) {
-                headers.push(
-                    "Supplement Name",
-                    "Strength",
-                    "Amount",
-                    "Frequency",
-                    "Route",
-                    "Supplement Status",
-                    "Date Recommended"
-                );
+              const supplement = appointment.supplements?.[0] || {};
+              row.push(
+                supplement.name || "",
+                supplement.strength || "",
+                supplement.amount || "",
+                supplement.frequency || "",
+                supplement.route || "",
+                supplement.status || "",
+                supplement.date ? new Date(supplement.date).toLocaleDateString() : ""
+              );
             }
+            
+            return row;
+          });
 
-            // Generate rows
-            const rows = appointmentsToExport.map(appointment => {
-                const row: string[] = [];
-                
-                if (exportFilters.exportContent.appointmentInfo) {
-                    row.push(
-                        new Date(appointment.date).toLocaleString(),
-                        appointment.service || "",
-                        appointment.status || "",
-                        appointment.payment_status || ""
-                    );
-                }
-                
-                if (exportFilters.exportContent.patientInfo) {
-                    const patientPerson = appointment.patient?.person || {
-                        first_name: "",
-                        middle_name: null,
-                        last_name: "",
-                        birth_date: "",
-                        age: null,
-                        contact_number: null,
-                        address: null
-                    };
-                    row.push(
-                        `${patientPerson.first_name || ""} ${patientPerson.middle_name || ""} ${patientPerson.last_name || ""}`.trim(),
-                        patientPerson.birth_date ? new Date(patientPerson.birth_date).toLocaleDateString() : "",
-                        patientPerson.age || "",
-                        patientPerson.contact_number || "",
-                        patientPerson.address || ""
-                    );
-                }
-                
-                if (exportFilters.exportContent.clinicianInfo) {
-                    const clinicianData = appointment.clinician || {
-                        role: "",
-                        specialization: "",
-                        person: {
-                            first_name: "",
-                            middle_name: null,
-                            last_name: ""
-                        }
-                    };
-                    row.push(
-                        `${clinicianData.person.first_name || ""} ${clinicianData.person.middle_name || ""} ${clinicianData.person.last_name || ""}`.trim(),
-                        clinicianData.role || "",
-                        clinicianData.specialization || ""
-                    );
-                }
-                
-                if (exportFilters.exportContent.vitals) {
-                    const vitalsData = appointment.vitals || {
-                        temperature: null,
-                        pulse_rate: null,
-                        blood_pressure: null,
-                        respiration_rate: null,
-                        oxygen_saturation: null
-                    };
-                    row.push(
-                        appointment.weight || "",
-                        appointment.gestational_age || "",
-                        vitalsData.temperature || "",
-                        vitalsData.pulse_rate || "",
-                        vitalsData.blood_pressure || "",
-                        vitalsData.respiration_rate || "",
-                        vitalsData.oxygen_saturation || ""
-                    );
-                }
+          // Create CSV content
+          const csvContent = [
+            headers.join(","),
+            ...rows.map(row => row.map(cell => `"${(cell || "").toString().replace(/"/g, '""')}"`).join(","))
+          ].join("\n");
 
-                if (exportFilters.exportContent.prescriptions) {
-                    const prescription = appointment.prescriptions?.[0] || {};
-                    row.push(
-                        prescription.medicine || "",
-                        prescription.dosage || "",
-                        prescription.frequency || "",
-                        prescription.duration || "",
-                        prescription.instructions || "",
-                        prescription.status || "",
-                        prescription.date ? new Date(prescription.date).toLocaleDateString() : ""
-                    );
-                }
-
-                if (exportFilters.exportContent.supplements) {
-                    const supplement = appointment.supplements?.[0] || {};
-                    row.push(
-                        supplement.name || "",
-                        supplement.strength || "",
-                        supplement.amount || "",
-                        supplement.frequency || "",
-                        supplement.route || "",
-                        supplement.status || "",
-                        supplement.date ? new Date(supplement.date).toLocaleDateString() : ""
-                    );
-                }
-                
-                return row;
-            });
-
-            // Create CSV content
-            const csvContent = [
-                headers.join(","),
-                ...rows.map(row => row.map(cell => `"${(cell || "").toString().replace(/"/g, '""')}"`).join(","))
-            ].join("\n");
-
-            // Download CSV file
-            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-            const link = document.createElement("a");
-            const today = new Date().toISOString().split('T')[0];
-            link.href = URL.createObjectURL(blob);
-            link.download = `appointments_export_${today}.csv`;
-            link.click();
-            toast.success("CSV exported successfully.");
-            setOpenExportDialog(false);
-        } else {
-            // For PDF export
-            for (const appointment of appointmentsToExport) {
-                const exportData = {
-                    appointment,
-                    exportOptions: exportFilters.exportContent
-                };
-
-                const response = await fetch("/api/export/appointment", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(exportData),
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `Failed to export PDF for appointment on ${new Date(appointment.date).toLocaleDateString()}`);
-                }
-
-                const pdfBlob = await response.blob();
-                const url = window.URL.createObjectURL(pdfBlob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `Appointment_Report_${new Date(appointment.date).toLocaleDateString()}.pdf`;
-                a.click();
-                window.URL.revokeObjectURL(url);
+          // Download CSV file
+          const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+          const link = document.createElement("a");
+          const today = new Date().toISOString().split('T')[0];
+          link.href = URL.createObjectURL(blob);
+          link.download = `appointments_export_${today}.csv`;
+          link.click();
+          toast.success("CSV exported successfully.");
+          setOpenExportDialog(false);
+        } else if (exportFilters.exportFormat === "pdf") {
+          for (const appointment of appointments) {
+            const exportData = {
+              appointment,
+              exportOptions: exportFilters.exportContent
+              };
+    
+              const response = await fetch("/api/export/appointment", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(exportData),
+              });
+    
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Failed to export PDF for appointment on ${new Date(appointment.date).toLocaleDateString()}`);
+              }
+    
+              const pdfBlob = await response.blob();
+              const url = window.URL.createObjectURL(pdfBlob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `Appointment_Report_${new Date(appointment.date).toLocaleDateString()}.pdf`;
+              a.click();
+              window.URL.revokeObjectURL(url);
             }
-
+    
             toast.success("PDF(s) exported successfully.");
             setOpenExportDialog(false);
         }
-    } catch (error: any) {
+      } catch (error) {
         console.error("Export failed:", error);
-        toast.error(`Failed to generate export: ${error.message}`);
+        toast.error(`Failed to generate export: ${(error as Error).message}`);
+      }
+    } catch (error) {
+      console.error("Export failed:", error);
+      toast.error(`Failed to generate export: ${(error as Error).message}`);
     }
   };
 
@@ -991,7 +1250,6 @@ export default function AppointmentsTable() {
                     <div className="space-y-2 mb-6">
                       <Label>Export Content</Label>
                       <div className="grid grid-cols-2 gap-4">
-                        {/* First Row */}
                         <div className="flex items-center space-x-2">
                           <Checkbox
                             id="selectAllContent"
@@ -1293,81 +1551,30 @@ export default function AppointmentsTable() {
         </TabsContent>
       </Tabs>
 
-      {/* Add Appointment Form Dialog */}
       <AppointmentForm
         open={showAppointmentForm}
         onOpenChange={setShowAppointmentForm}
         onSuccess={() => {
-          // Refresh appointments data after successful creation
-          const fetchAppointments = async () => {
-            try {
-              const { data: appointmentsData, error: appointmentsError } = await supabase
-                .from("appointment")
-                .select(`
-                  *,
-                  patient:patient_id (
-                    person (
-                      first_name,
-                      middle_name,
-                      last_name
-                    )
-                  ),
-                  clinician:clinician_id (
-                    person (
-                      first_name,
-                      middle_name,
-                      last_name
-                    )
-                  )
-                `)
-                .order("date", { ascending: false });
-
-              if (appointmentsError) {
-                console.error("Appointments fetch error:", appointmentsError);
-                toast.error(`Failed to fetch appointments: ${appointmentsError.message}`);
-                return;
-              }
-
-              if (!appointmentsData || appointmentsData.length === 0) {
-                console.log("No appointments data found");
-                toast.info("No appointments found.");
-                setAppointments([]);
-                return;
-              }
-
-              const formattedAppointments: Appointment[] = appointmentsData.map((appointment: any) => {
-                const patient = appointment.patient?.person || {};
-                const clinician = appointment.clinician?.person || {};
-
-                return {
-                  id: appointment.id,
-                  patient_id: appointment.patient_id,
-                  clinician_id: appointment.clinician_id,
-                  date: appointment.date,
-                  service: appointment.service,
-                  weight: appointment.weight,
-                  vitals: appointment.vitals,
-                  gestational_age: appointment.gestational_age,
-                  status: appointment.status,
-                  payment_status: appointment.payment_status,
-                  patient_name: `${patient.first_name || ""} ${patient.middle_name || ""} ${
-                    patient.last_name || ""
-                  }`.trim(),
-                  clinician_name: `${clinician.first_name || ""} ${clinician.middle_name || ""} ${
-                    clinician.last_name || ""
-                  }`.trim(),
-                };
-              });
-
-              setAppointments(formattedAppointments);
-              toast.success("Appointments refreshed successfully.");
-            } catch (err: any) {
-              toast.error(`Error fetching appointments: ${err.message}`);
-            }
-          };
           fetchAppointments();
         }}
       />
     </main>
   );
+}
+
+// Simple debounce implementation for async functions
+function debounce<T extends (...args: any[]) => Promise<any>>(fn: T, wait: number) {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let lastPromise: Promise<any> | null = null;
+
+  return (...args: Parameters<T>) => {
+    if (timeout) clearTimeout(timeout);
+    return new Promise<ReturnType<T>>((resolve, reject) => {
+      timeout = setTimeout(() => {
+        lastPromise = fn(...args)
+          .then(resolve)
+          .catch(reject);
+      }, wait);
+    });
+  };
 }

@@ -51,7 +51,6 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { supabase } from "@/lib/supabase/client";
-import { Separator } from "@radix-ui/react-dropdown-menu";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 
@@ -170,12 +169,20 @@ export default function SupplementRecommendation({
                     if (clinicianError) throw clinicianError;
 
                     if (cliniciansData && cliniciansData.length > 0) {
+                        const firstClinician = cliniciansData[0] as unknown as { 
+                            id: string; 
+                            person: { 
+                                first_name: string; 
+                                middle_name: string | null; 
+                                last_name: string; 
+                            } 
+                        };
                         const clinicianList = [{
-                            id: cliniciansData[0].id.toString(),
+                            id: firstClinician.id.toString(),
                             full_name: [
-                                cliniciansData[0].person.first_name,
-                                cliniciansData[0].person.middle_name,
-                                cliniciansData[0].person.last_name,
+                                firstClinician.person.first_name,
+                                firstClinician.person.middle_name,
+                                firstClinician.person.last_name,
                             ]
                                 .filter(Boolean)
                                 .join(" "),
@@ -518,15 +525,17 @@ export default function SupplementRecommendation({
 
     const displaySupplements = fields.length > 0 ? fields : supplementsData;
 
-    // Filter supplements based on search term and filters
+    // Filter supplements based on search term, status, and date
     const filteredSupplements = displaySupplements.filter((supplement) => {
-        const matchesSearch = 
+        const matchesSearch =
             supplement.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            supplement.patient?.toLowerCase().includes(searchTerm.toLowerCase());
-        
-        const matchesStatus = statusFilter === "all" || supplement.status === statusFilter;
-        
-        const matchesDate = !dateFilter || 
+            (context === 'patient' 
+                ? supplement.clinician?.toLowerCase().includes(searchTerm.toLowerCase())
+                : supplement.patient?.toLowerCase().includes(searchTerm.toLowerCase()));
+
+        const matchesStatus = statusFilter === "all" || supplement.status.toLowerCase() === statusFilter.toLowerCase();
+
+        const matchesDate = !dateFilter ||
             (supplement.date && new Date(supplement.date).toLocaleDateString() === new Date(dateFilter).toLocaleDateString());
 
         return matchesSearch && matchesStatus && matchesDate;
@@ -534,11 +543,11 @@ export default function SupplementRecommendation({
 
     return (
         <Card>
-            <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="space-y-1">
                     <CardTitle>Supplements</CardTitle>
                     <CardDescription>
-                        {context === 'patient' 
+                        {context === 'patient'
                             ? "Identify your patient's supplements before it's too late"
                             : "View all supplements you have given to patients"}
                     </CardDescription>
@@ -689,24 +698,23 @@ export default function SupplementRecommendation({
                                                 render={({ field }) => (
                                                     <FormItem>
                                                         <FormLabel>Clinician</FormLabel>
-                                                        <Select 
-                                                            value={field.value} 
-                                                            onValueChange={field.onChange}
-                                                            disabled={!userData?.isAdmin}
-                                                        >
-                                                            <FormControl>
+                                                        <FormControl>
+                                                            <Select
+                                                                onValueChange={field.onChange}
+                                                                value={field.value}
+                                                            >
                                                                 <SelectTrigger>
                                                                     <SelectValue placeholder="Select clinician" />
                                                                 </SelectTrigger>
-                                                            </FormControl>
-                                                            <SelectContent>
-                                                                {clinicians.map((clinician) => (
-                                                                    <SelectItem key={clinician.id} value={clinician.id}>
-                                                                        {clinician.full_name}
-                                                                    </SelectItem>
-                                                                ))}
-                                                            </SelectContent>
-                                                        </Select>
+                                                                <SelectContent>
+                                                                    {clinicians.map((clinician) => (
+                                                                        <SelectItem key={clinician.id} value={clinician.id}>
+                                                                            {clinician.full_name}
+                                                                        </SelectItem>
+                                                                    ))}
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </FormControl>
                                                         <FormMessage />
                                                     </FormItem>
                                                 )}
@@ -728,7 +736,7 @@ export default function SupplementRecommendation({
                         <div className="flex-1 min-w-[200px]">
                             <Input
                                 type="search"
-                                placeholder="Search by supplement name or patient..."
+                                placeholder="Search by name or clinician/patient..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full"
@@ -753,7 +761,6 @@ export default function SupplementRecommendation({
                         />
                     </div>
                 </div>
-
                 {fetchError ? (
                     <p className="text-sm text-red-600">{fetchError}</p>
                 ) : filteredSupplements.length === 0 ? (
@@ -802,7 +809,7 @@ export default function SupplementRecommendation({
                                             value={supplement.status}
                                             onValueChange={(value) => handleStatusChange(index, value)}
                                         >
-                                            <SelectTrigger>
+                                            <SelectTrigger className="w-[140px]">
                                                 <SelectValue placeholder="Select status" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -831,7 +838,7 @@ export default function SupplementRecommendation({
                                                 variant="outline"
                                                 onClick={() => handleDelete(index)}
                                             >
-                                                <Trash2 />
+                                                <Trash2 className="h-4 w-4" />
                                                 Delete
                                             </Button>
                                         </TableCell>

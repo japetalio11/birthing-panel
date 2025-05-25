@@ -460,42 +460,47 @@ export default function PatientView() {
         <div className="flex flex-col md:flex-row gap-4">
           <Card className="flex-1 md:flex-[2]">
             <CardHeader>
-              <div className="relative w-40 h-40 rounded-full overflow-hidden border">
-                {profileImageSignedUrl ? (
-                  <img
-                    src={profileImageSignedUrl}
-                    alt={`${patient.first_name}'s profile`}
-                    className="w-full h-full object-cover"
-                    onError={(e) => console.error('Failed to load profile image:', profileImageSignedUrl)}
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                    <div className="w-full h-3/4 flex flex-col items-center justify-center">
-                      <div className="w-12 h-12 bg-gray-500 rounded-full mb-1"></div>
-                      <div className="w-20 h-10 bg-gray-500 rounded-t-full"></div>
+              <div className="flex items-center gap-4">
+                <div className="relative w-30 h-30 rounded-full overflow-hidden border-1">
+                  {profileImageSignedUrl ? (
+                    <img
+                      src={profileImageSignedUrl}
+                      alt={`${patient.first_name}'s profile`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => console.error('Failed to load profile image:', profileImageSignedUrl)}
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                      <div className="w-full h-3/4 flex flex-col items-center justify-center">
+                        <div className="w-12 h-12 bg-gray-500 rounded-full mb-1"></div>
+                        <div className="w-20 h-10 bg-gray-500 rounded-t-full"></div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-sm">Patient Name</Label>
+                  <CardTitle className="text-4xl font-bold">{fullName}</CardTitle>
+                </div>
               </div>
-              <CardTitle className="text-2xl pt-2">{fullName}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                 <div>
                   <Label className="font-semibold mb-2">Patient Status</Label>
-                  <p className="text-sm">{patient.status || "Not specified"}</p>
+                  <p className="text-m">{patient.status || "Not specified"}</p>
                 </div>
                 <div>
                   <Label className="font-semibold mb-2">Estimated Date of Confinement</Label>
-                  <p className="text-sm">{patient.expected_date_of_confinement || "Not specified"}</p>
+                  <p className="text-m">{patient.expected_date_of_confinement || "Not specified"}</p>
                 </div>
                 <div>
                   <Label className="font-semibold mb-2">Next Appointment</Label>
-                  <p className="text-sm">{patient.next_appointment || "Not scheduled"}</p>
+                  <p className="text-m">{patient.next_appointment || "Not scheduled"}</p>
                 </div>
                 <div>
                   <Label className="font-semibold mb-2">Last Visit</Label>
-                  <p className="text-sm">{patient.last_visit || "No record"}</p>
+                  <p className="text-m">{patient.last_visit || "No record"}</p>
                 </div>
               </div>
             </CardContent>

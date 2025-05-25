@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Calendar, Search, Trash2 } from "lucide-react";
+import { Calendar, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -40,7 +40,7 @@ import {
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
-import { Badge } from "@/components/ui/badge";
+import { debounce } from "lodash";
 
 type Props = {
     context: "patient" | "clinician";
@@ -178,6 +178,106 @@ export default function Appointments({ context, id }: Props) {
         }
     };
 
+    const updateAppointmentStatus = async (appointmentId: number, newStatus: string) => {
+        const validStatuses = ["Scheduled", "Completed", "Cancelled"];
+        if (!validStatuses.includes(newStatus)) {
+            toast.error("Invalid status value.");
+            return false;
+        }
+        try {
+            // Optimistically update local state
+            setAppointments((prev) =>
+                prev.map((appt) =>
+                    appt.id === appointmentId ? { ...appt, status: newStatus } : appt
+                )
+            );
+
+            const { error } = await supabase
+                .from("appointment")
+                .update({ status: newStatus })
+                .eq("id", appointmentId);
+
+            if (error) {
+                // Revert optimistic update on error
+                setAppointments((prev) =>
+                    prev.map((appt) =>
+                        appt.id === appointmentId ? { ...appt, status: appt.status } : appt
+                    )
+                );
+                console.error("Appointment status update error:", error);
+                toast.error(`Failed to update appointment status: ${error.message}`);
+                return false;
+            }
+
+            toast.success("Status Updated", {
+                description: `Appointment status changed to ${newStatus}.`,
+            });
+            return true;
+        } catch (err) {
+            // Revert optimistic update on unexpected error
+            setAppointments((prev) =>
+                prev.map((appt) =>
+                    appt.id === appointmentId ? { ...appt, status: appt.status } : appt
+                )
+            );
+            console.error("Unexpected error updating status:", err);
+            toast.error("An unexpected error occurred while updating the status.");
+            return false;
+        }
+    };
+
+    const debouncedUpdateAppointmentStatus = debounce(updateAppointmentStatus, 300);
+
+    const updatePaymentStatus = async (appointmentId: number, newStatus: string) => {
+        const validPaymentStatuses = ["Pending", "Paid", "Unpaid"];
+        if (!validPaymentStatuses.includes(newStatus)) {
+            toast.error("Invalid payment status value.");
+            return false;
+        }
+        try {
+            // Optimistically update local state
+            setAppointments((prev) =>
+                prev.map((appt) =>
+                    appt.id === appointmentId ? { ...appt, payment_status: newStatus } : appt
+                )
+            );
+
+            const { error } = await supabase
+                .from("appointment")
+                .update({ payment_status: newStatus })
+                .eq("id", appointmentId);
+
+            if (error) {
+                // Revert optimistic update on error
+                setAppointments((prev) =>
+                    prev.map((appt) =>
+                        appt.id === appointmentId ? { ...appt, payment_status: appt.payment_status } : appt
+                    )
+                );
+                console.error("Payment status update error:", error);
+                toast.error(`Failed to update payment status: ${error.message}`);
+                return false;
+            }
+
+            toast.success("Payment Status Updated", {
+                description: `Payment status changed to ${newStatus}.`,
+            });
+            return true;
+        } catch (err) {
+            // Revert optimistic update on unexpected error
+            setAppointments((prev) =>
+                prev.map((appt) =>
+                    appt.id === appointmentId ? { ...appt, payment_status: appt.payment_status } : appt
+                )
+            );
+            console.error("Unexpected error updating payment status:", err);
+            toast.error("An unexpected error occurred while updating the payment status.");
+            return false;
+        }
+    };
+
+    const debouncedUpdatePaymentStatus = debounce(updatePaymentStatus, 300);
+
     return (
         <Card>
             <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -270,7 +370,7 @@ export default function Appointments({ context, id }: Props) {
                                 ) : (
                                     <TableHead>Clinician Name</TableHead>
                                 )}
-                                <TableHead>Date</TableHead>
+                                <TableHead>Data</TableHead>
                                 <TableHead>Service</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Payment Status</TableHead>
@@ -291,38 +391,66 @@ export default function Appointments({ context, id }: Props) {
                                     <TableCell>{appointment.date}</TableCell>
                                     <TableCell>{appointment.service}</TableCell>
                                     <TableCell>
-                                        <Badge
-                                            variant="outline"
-                                            className="flex gap-1 px-1.5 text-muted-foreground [&_svg]:size-3"
+                                        <Select
+                                            value={appointment.status || "Scheduled"}
+                                            onValueChange={async (value) => {
+                                                const newStatus = value as "Scheduled" | "Completed" | "Cancelled";
+                                                const success = await debouncedUpdateAppointmentStatus(appointment.id, newStatus);
+                                                if (!success) {
+                                                    // Optionally refetch appointments on failure
+                                                    // For simplicity, we rely on the revert in the update function
+                                                }
+                                            }}
                                         >
-                                            <div
-                                                className={`w-2 h-2 rounded-full ${
-                                                    appointment.status.toLowerCase() === "completed"
-                                                        ? "bg-green-400"
-                                                        : appointment.status.toLowerCase() === "scheduled"
-                                                        ? "bg-blue-400"
-                                                        : "bg-red-400"
-                                                }`}
-                                            />
-                                            <span className="hidden sm:inline">{appointment.status}</span>
-                                        </Badge>
+                                            <SelectTrigger className="w-[140px]">
+                                                <SelectValue placeholder="Select status" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Scheduled" className="flex items-center gap-2">
+                                                    <div className="w-2 h-2 rounded-full bg-blue-400" />
+                                                    Scheduled
+                                                </SelectItem>
+                                                <SelectItem value="Completed" className="flex items-center gap-2">
+                                                    <div className="w-2 h-2 rounded-full bg-green-400" />
+                                                    Completed
+                                                </SelectItem>
+                                                <SelectItem value="Cancelled" className="flex items-center gap-2">
+                                                    <div className="w-2 h-2 rounded-full bg-red-400" />
+                                                    Cancelled
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge
-                                            variant="outline"
-                                            className="flex gap-1 px-1.5 text-muted-foreground [&_svg]:size-3"
+                                        <Select
+                                            value={appointment.payment_status || "Unpaid"}
+                                            onValueChange={async (value) => {
+                                                const newStatus = value as "Pending" | "Paid" | "Unpaid";
+                                                const success = await debouncedUpdatePaymentStatus(appointment.id, newStatus);
+                                                if (!success) {
+                                                    // Optionally refetch appointments on failure
+                                                    // For simplicity, we rely on the revert in the update function
+                                                }
+                                            }}
                                         >
-                                            <div
-                                                className={`w-2 h-2 rounded-full ${
-                                                    appointment.payment_status.toLowerCase() === "completed"
-                                                        ? "bg-green-400"
-                                                        : appointment.payment_status.toLowerCase() === "pending"
-                                                        ? "bg-yellow-400"
-                                                        : "bg-red-400"
-                                                }`}
-                                            />
-                                            <span className="hidden sm:inline">{appointment.payment_status}</span>
-                                        </Badge>
+                                            <SelectTrigger className="w-[140px]">
+                                                <SelectValue placeholder="Select payment status" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Pending" className="flex items-center gap-2">
+                                                    <div className="w-2 h-2 rounded-full bg-yellow-400" />
+                                                    Pending
+                                                </SelectItem>
+                                                <SelectItem value="Paid" className="flex items-center gap-2">
+                                                    <div className="w-2 h-2 rounded-full bg-green-400" />
+                                                    Paid
+                                                </SelectItem>
+                                                <SelectItem value="Unpaid" className="flex items-center gap-2">
+                                                    <div className="w-2 h-2 rounded-full bg-red-400" />
+                                                    Unpaid
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
                                     </TableCell>
                                     {isAdmin && (
                                         <TableCell>
@@ -332,6 +460,7 @@ export default function Appointments({ context, id }: Props) {
                                                 onClick={() => handleDelete(appointment.id)}
                                             >
                                                 <Trash2 className="h-4 w-4" />
+                                                Delete
                                             </Button>
                                         </TableCell>
                                     )}
