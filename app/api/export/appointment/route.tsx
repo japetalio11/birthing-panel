@@ -20,6 +20,83 @@ export async function POST(req: NextRequest) {
       `${appointment.clinician.person.first_name} ${appointment.clinician.person.middle_name ? appointment.clinician.person.middle_name + " " : ""}${appointment.clinician.person.last_name}` : 
       "Unknown Clinician";
 
+    // Check if CSV format is requested
+    if (data.exportFormat === "csv") {
+      console.log("Generating CSV export...");
+      const csvRows = [];
+      
+      // Add headers
+      const headers = ["Category", "Field", "Value"];
+      csvRows.push(headers.join(","));
+
+      if (exportOptions.appointmentInfo) {
+        csvRows.push(["Appointment", "Date", new Date(appointment.date).toLocaleDateString()]);
+        csvRows.push(["Appointment", "Service", appointment.service || "Not specified"]);
+        csvRows.push(["Appointment", "Status", appointment.status || "Not specified"]);
+        csvRows.push(["Appointment", "Payment Status", appointment.payment_status || "Not specified"]);
+        csvRows.push(["Appointment", "Weight", appointment.weight ? `${appointment.weight} kg` : "Not recorded"]);
+        csvRows.push(["Appointment", "Gestational Age", appointment.gestational_age ? `${appointment.gestational_age} weeks` : "Not recorded"]);
+      }
+
+      if (exportOptions.patientInfo && appointment.patient) {
+        csvRows.push(["Patient", "Name", patientName]);
+        csvRows.push(["Patient", "Birth Date", appointment.patient.person.birth_date || "Not specified"]);
+        csvRows.push(["Patient", "Age", appointment.patient.person.age || "Not specified"]);
+        csvRows.push(["Patient", "Contact Number", appointment.patient.person.contact_number || "Not provided"]);
+        csvRows.push(["Patient", "Address", appointment.patient.person.address || "Not provided"]);
+      }
+
+      if (exportOptions.clinicianInfo && appointment.clinician) {
+        csvRows.push(["Clinician", "Name", clinicianName]);
+        csvRows.push(["Clinician", "Role", appointment.clinician.role || "Not specified"]);
+        csvRows.push(["Clinician", "Specialization", appointment.clinician.specialization || "Not specified"]);
+      }
+
+      if (exportOptions.vitals && appointment.vitals) {
+        csvRows.push(["Vitals", "Weight", appointment.weight ? `${appointment.weight} kg` : "Not recorded"]);
+        csvRows.push(["Vitals", "Gestational Age", appointment.gestational_age ? `${appointment.gestational_age} weeks` : "Not recorded"]);
+        csvRows.push(["Vitals", "Temperature", appointment.vitals.temperature ? `${appointment.vitals.temperature} °C` : "Not recorded"]);
+        csvRows.push(["Vitals", "Pulse Rate", appointment.vitals.pulse_rate ? `${appointment.vitals.pulse_rate} bpm` : "Not recorded"]);
+        csvRows.push(["Vitals", "Blood Pressure", appointment.vitals.blood_pressure || "Not recorded"]);
+        csvRows.push(["Vitals", "Respiration Rate", appointment.vitals.respiration_rate ? `${appointment.vitals.respiration_rate} breaths/min` : "Not recorded"]);
+        csvRows.push(["Vitals", "Oxygen Saturation", appointment.vitals.oxygen_saturation ? `${appointment.vitals.oxygen_saturation}%` : "Not recorded"]);
+      }
+
+      if (exportOptions.prescriptions && appointment.prescriptions) {
+        appointment.prescriptions.forEach((prescription: any, index: number) => {
+          csvRows.push([`Prescription ${index + 1}`, "Medicine", prescription.medicine || "Not specified"]);
+          csvRows.push([`Prescription ${index + 1}`, "Dosage", prescription.dosage || "Not specified"]);
+          csvRows.push([`Prescription ${index + 1}`, "Frequency", prescription.frequency || "Not specified"]);
+          csvRows.push([`Prescription ${index + 1}`, "Duration", prescription.duration || "Not specified"]);
+          csvRows.push([`Prescription ${index + 1}`, "Instructions", prescription.instructions || "Not specified"]);
+          csvRows.push([`Prescription ${index + 1}`, "Status", prescription.status || "Not specified"]);
+          csvRows.push([`Prescription ${index + 1}`, "Date Prescribed", prescription.date ? new Date(prescription.date).toLocaleDateString() : "Not specified"]);
+        });
+      }
+
+      if (exportOptions.supplements && appointment.supplements) {
+        appointment.supplements.forEach((supplement: any, index: number) => {
+          csvRows.push([`Supplement ${index + 1}`, "Name", supplement.name || "Not specified"]);
+          csvRows.push([`Supplement ${index + 1}`, "Strength", supplement.strength || "Not specified"]);
+          csvRows.push([`Supplement ${index + 1}`, "Amount", supplement.amount || "Not specified"]);
+          csvRows.push([`Supplement ${index + 1}`, "Frequency", supplement.frequency || "Not specified"]);
+          csvRows.push([`Supplement ${index + 1}`, "Route", supplement.route || "Not specified"]);
+          csvRows.push([`Supplement ${index + 1}`, "Status", supplement.status || "Not specified"]);
+          csvRows.push([`Supplement ${index + 1}`, "Date Recommended", supplement.date ? new Date(supplement.date).toLocaleDateString() : "Not specified"]);
+        });
+      }
+
+      const csvContent = csvRows.join("\n");
+      return new NextResponse(csvContent, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/csv",
+          "Content-Disposition": `attachment; filename="Appointment_Report_${patientName}_${new Date(appointment.date).toISOString().split('T')[0]}.csv"`,
+        },
+      });
+    }
+
+    // If not CSV, continue with PDF generation
     console.log("Generating PDF for appointment with patient:", patientName);
 
     // Create jsPDF document for appointment report
@@ -157,6 +234,80 @@ export async function POST(req: NextRequest) {
         y += 10;
       });
       y += 20;
+    }
+
+    if (exportOptions.prescriptions) {
+      console.log("Adding prescriptions to PDF...");
+      doc.setFontSize(16);
+      checkPageBreak(20);
+      doc.setFillColor(220, 235, 255);
+      doc.rect(leftMargin, y - 10, tableWidth, 20, "F");
+      doc.text("Prescriptions", leftMargin, y);
+      y += 20;
+
+      doc.setFontSize(12);
+      if (appointment.prescriptions && appointment.prescriptions.length > 0) {
+        appointment.prescriptions.forEach((prescription: any) => {
+          checkPageBreak(40); // Ensure enough space for each prescription
+          const prescriptionInfo = [
+            ["Medicine", prescription.medicine || "Not specified"],
+            ["Dosage", prescription.dosage || "Not specified"],
+            ["Frequency", prescription.frequency || "Not specified"],
+            ["Duration", prescription.duration || "Not specified"],
+            ["Instructions", prescription.instructions || "Not specified"],
+            ["Status", prescription.status || "Not specified"],
+            ["Date Prescribed", prescription.date ? new Date(prescription.date).toLocaleDateString() : "Not specified"]
+          ];
+
+          prescriptionInfo.forEach((row) => {
+            checkPageBreak(10);
+            doc.text(`${row[0]}:`, leftMargin, y);
+            doc.text(row[1], leftMargin + 50, y);
+            y += 10;
+          });
+          y += 10; // Add space between prescriptions
+        });
+      } else {
+        doc.text("No prescriptions recorded", leftMargin, y);
+        y += 20;
+      }
+    }
+
+    if (exportOptions.supplements) {
+      console.log("Adding supplements to PDF...");
+      doc.setFontSize(16);
+      checkPageBreak(20);
+      doc.setFillColor(220, 235, 255);
+      doc.rect(leftMargin, y - 10, tableWidth, 20, "F");
+      doc.text("Supplements", leftMargin, y);
+      y += 20;
+
+      doc.setFontSize(12);
+      if (appointment.supplements && appointment.supplements.length > 0) {
+        appointment.supplements.forEach((supplement: any) => {
+          checkPageBreak(40); // Ensure enough space for each supplement
+          const supplementInfo = [
+            ["Name", supplement.name || "Not specified"],
+            ["Strength", supplement.strength || "Not specified"],
+            ["Amount", supplement.amount || "Not specified"],
+            ["Frequency", supplement.frequency || "Not specified"],
+            ["Route", supplement.route || "Not specified"],
+            ["Status", supplement.status || "Not specified"],
+            ["Date Recommended", supplement.date ? new Date(supplement.date).toLocaleDateString() : "Not specified"]
+          ];
+
+          supplementInfo.forEach((row) => {
+            checkPageBreak(10);
+            doc.text(`${row[0]}:`, leftMargin, y);
+            doc.text(row[1], leftMargin + 50, y);
+            y += 10;
+          });
+          y += 10; // Add space between supplements
+        });
+      } else {
+        doc.text("No supplements recorded", leftMargin, y);
+        y += 20;
+      }
     }
 
     // Generate PDF buffer

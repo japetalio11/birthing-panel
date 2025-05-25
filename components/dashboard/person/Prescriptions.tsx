@@ -27,6 +27,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectSeparator,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -51,6 +52,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { supabase } from "@/lib/supabase/client";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 type Props = {
   context: "patient" | "clinician";
@@ -58,6 +60,7 @@ type Props = {
   fields?: any[];
   append?: (prescription: any) => void;
   remove?: (index: number) => void;
+  appointment_id?: string | null;
 };
 
 const formSchema = z.object({
@@ -76,12 +79,32 @@ type Clinician = {
   full_name: string;
 };
 
+type ClinicianData = {
+  id: string;
+  person: {
+    first_name: string;
+    middle_name: string | null;
+    last_name: string;
+  };
+};
+
+// Add common prescription options
+const COMMON_PRESCRIPTIONS = [
+  { name: "Folic Acid", strength: "400mcg", amount: "1 tablet", frequency: "Once daily", route: "Oral" },
+  { name: "Iron Supplement", strength: "65mg", amount: "1 tablet", frequency: "Once daily", route: "Oral" },
+  { name: "Prenatal Vitamins", strength: "Multiple", amount: "1 tablet", frequency: "Once daily", route: "Oral" },
+  { name: "Calcium", strength: "500mg", amount: "1 tablet", frequency: "Twice daily", route: "Oral" },
+  { name: "Vitamin D", strength: "1000IU", amount: "1 tablet", frequency: "Once daily", route: "Oral" },
+  { name: "Magnesium", strength: "200mg", amount: "1 tablet", frequency: "Once daily", route: "Oral" },
+];
+
 export default function Prescriptions({
   context,
   id,
   fields = [],
   append,
   remove,
+  appointment_id,
 }: Props) {
   const [openDialog, setOpenDialog] = useState(false);
   const [prescriptionsData, setPrescriptionsData] = useState<any[]>([]);
@@ -91,6 +114,15 @@ export default function Prescriptions({
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<string>("");
   const { isAdmin } = useIsAdmin();
+  const { userData } = useCurrentUser();
+
+  // Add console logs to check user data
+  useEffect(() => {
+    console.log("=== Prescriptions Component - User Authentication State ===");
+    console.log("Current User Data:", userData);
+    console.log("Is Admin?", userData?.isAdmin);
+    console.log("Clinician ID:", userData?.clinicianId);
+  }, [userData]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -107,57 +139,89 @@ export default function Prescriptions({
   // Fetch clinicians
   useEffect(() => {
     async function fetchClinicians() {
+      console.log("=== Prescriptions Component - Fetching Clinicians ===");
+      console.log("User Role:", userData?.isAdmin ? "Admin" : "Clinician");
+      console.log("User Name:", userData?.name);
+
       try {
-        const { data, error } = await supabase
-          .from("clinicians")
-          .select(`
-            id,
-            role,
-            person (
-              first_name,
-              middle_name,
-              last_name
-            )
-          `)
-          .eq('role', 'Doctor'); // Only fetch doctors
+        // If not admin, only show current clinician
+        if (!userData?.isAdmin && userData?.name) {
+          console.log("Fetching single clinician data for name:", userData.name);
+          
+          // Split the name into parts
+          const nameParts = userData.name.split(' ');
+          const firstName = nameParts[0];
+          const lastName = nameParts[nameParts.length - 1];
+          
+          const { data: cliniciansData, error: clinicianError } = await supabase
+            .from("clinicians")
+            .select(`
+              id,
+              person!inner (
+                first_name,
+                middle_name,
+                last_name
+              )
+            `)
+            .eq('person.first_name', firstName)
+            .eq('person.last_name', lastName);
 
-        if (error) {
-          console.error("Clinician fetch error:", error.code, error.message, error.details);
-          toast("Error", {
-            description: "Failed to fetch clinicians: " + error.message,
-          });
-          return;
-        }
+          if (clinicianError) throw clinicianError;
 
-        const clinicianList: Clinician[] = data.map((clinician: any) => {
-          const nameParts = [
-            clinician.person?.first_name,
-            clinician.person?.middle_name,
-            clinician.person?.last_name,
-          ].filter((part) => part != null && part !== "");
-          const full_name = nameParts.length > 0 ? nameParts.join(" ") : "Unknown Clinician";
+          if (cliniciansData && cliniciansData.length > 0) {
+            const clinicianList = [{
+              id: cliniciansData[0].id.toString(),
+              full_name: [
+                cliniciansData[0].person.first_name,
+                cliniciansData[0].person.middle_name,
+                cliniciansData[0].person.last_name,
+              ]
+                .filter(Boolean)
+                .join(" "),
+            }];
 
-          if (!clinician.person?.first_name || !clinician.person?.last_name) {
-            console.warn(`Missing name data for clinician ID ${clinician.id}:`, clinician.person);
+            console.log("Single Clinician Data:", clinicianList);
+            setClinicians(clinicianList);
+            form.setValue("clinician_id", cliniciansData[0].id.toString());
           }
+        } else {
+          console.log("Fetching all clinicians (Admin view)");
+          // Admin can see all clinicians
+          const { data, error } = await supabase
+            .from("clinicians")
+            .select(`
+              id,
+              person (
+                first_name,
+                middle_name,
+                last_name
+              )
+            `);
 
-          return {
+          if (error) throw error;
+
+          const clinicianList = (data as unknown as ClinicianData[]).map((clinician) => ({
             id: clinician.id.toString(),
-            full_name,
-          };
-        });
+            full_name: [
+              clinician.person.first_name,
+              clinician.person.middle_name,
+              clinician.person.last_name,
+            ]
+              .filter(Boolean)
+              .join(" "),
+          }));
 
-        setClinicians(clinicianList);
+          console.log("All Clinicians Data:", clinicianList);
+          setClinicians(clinicianList);
+        }
       } catch (err) {
-        console.error("Unexpected error fetching clinicians:", err);
-        toast("Error", {
-          description: "Unexpected error fetching clinicians.",
-        });
+        console.error("Error fetching clinicians:", err);
+        toast.error("Failed to fetch clinicians");
       }
     }
 
     fetchClinicians();
-  }, []);
+  }, [userData, form]);
 
   // Fetch prescriptions
   useEffect(() => {
@@ -291,32 +355,28 @@ export default function Prescriptions({
 
     try {
       if (id) {
-        // Insert into prescriptions with prescription details
-        const currentDate = new Date().toISOString();
-        const { data: newPrescription, error: prescriptionError } = await supabase
+        const prescriptionData = {
+          patient_id: id,
+          clinician_id: parseInt(data.clinician_id),
+          appointment_id: appointment_id,
+          name: data.name,
+          strength: data.strength,
+          amount: data.amount,
+          frequency: data.frequency,
+          route: data.route,
+          status: "Active",
+          date: new Date().toISOString(),
+        };
+
+        const { data: newPrescription, error } = await supabase
           .from("prescriptions")
-          .insert([
-            {
-              patient_id: id,
-              clinician_id: parseInt(data.clinician_id),
-              appointment_id: null, // No appointment created
-              name: data.name,
-              strength: data.strength,
-              amount: data.amount,
-              frequency: data.frequency,
-              route: data.route,
-              status: "Active",
-              date: currentDate,
-            },
-          ])
+          .insert([prescriptionData])
           .select()
           .single();
 
-        if (prescriptionError) {
-          console.error("Prescription insert error:", prescriptionError.code, prescriptionError.message, prescriptionError.details);
-          toast("Error", {
-            description: `Failed to add prescription: ${prescriptionError.message}`,
-          });
+        if (error) {
+          console.error("Error adding prescription:", error);
+          toast.error(`Failed to add prescription: ${error.message}`);
           return;
         }
 
@@ -325,7 +385,7 @@ export default function Prescriptions({
           console.warn(`No clinician found for clinician_id ${data.clinician_id} during prescription insert`);
         }
 
-        const formattedDate = new Date(currentDate).toLocaleDateString();
+        const formattedDate = new Date(newPrescription.date).toLocaleDateString();
         if (append) {
           append({
             id: newPrescription.id,
@@ -336,7 +396,7 @@ export default function Prescriptions({
             route: data.route,
             clinician_id: data.clinician_id,
             clinician: clinicianName,
-            appointment_id: null,
+            appointment_id: appointment_id,
             status: newPrescription.status,
             date: formattedDate,
           });
@@ -352,13 +412,13 @@ export default function Prescriptions({
               route: data.route,
               clinician_id: data.clinician_id,
               clinician: clinicianName,
-              appointment_id: null,
+              appointment_id: appointment_id,
               status: newPrescription.status,
               date: formattedDate,
             },
           ]);
         }
-        toast("Prescription Added", {
+        toast.success("Prescription Added", {
           description: "New prescription has been added successfully.",
         });
       } else if (append) {
@@ -376,11 +436,11 @@ export default function Prescriptions({
           route: data.route,
           clinician_id: data.clinician_id,
           clinician: clinicianName,
-          appointment_id: null,
+          appointment_id: appointment_id,
           status: "Active",
           date: formattedDate,
         });
-        toast("Prescription Added", {
+        toast.success("Prescription Added", {
           description: "New prescription has been added successfully.",
         });
       }
@@ -394,11 +454,9 @@ export default function Prescriptions({
         clinician_id: "",
       });
       setOpenDialog(false);
-    } catch (err) {
-      console.error("Unexpected error saving prescription:", err);
-      toast("Error", {
-        description: "An unexpected error occurred while saving the prescription.",
-      });
+    } catch (err: any) {
+      console.error("Error saving prescription:", err);
+      toast.error(`Failed to save prescription: ${err.message || 'Unknown error'}`);
     }
   };
 
@@ -559,19 +617,51 @@ export default function Prescriptions({
                           control={form.control}
                           name="name"
                           render={({ field }) => (
-                            <FormItem className="grid grid-cols-4 items-center gap-2">
-                              <FormLabel htmlFor="prescription" className="text-right">
-                                Prescription
-                              </FormLabel>
-                              <FormControl>
-                                <Input
-                                  id="prescription"
-                                  placeholder="Enter prescription"
-                                  className="col-span-4"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage className="col-span-4" />
+                            <FormItem>
+                              <FormLabel>Prescription</FormLabel>
+                              <Select
+                                value={field.value}
+                                onValueChange={(value) => {
+                                  const prescription = COMMON_PRESCRIPTIONS.find(p => p.name === value);
+                                  if (prescription) {
+                                    form.setValue("name", prescription.name);
+                                    form.setValue("strength", prescription.strength);
+                                    form.setValue("amount", prescription.amount);
+                                    form.setValue("frequency", prescription.frequency);
+                                    form.setValue("route", prescription.route);
+                                  }
+                                }}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue>
+                                      {field.value || "Select or type prescription"}
+                                    </SelectValue>
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <input
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 mb-2"
+                                    placeholder="Type custom prescription..."
+                                    value={field.value}
+                                    onChange={(e) => {
+                                      field.onChange(e.target.value);
+                                      // Clear other fields when typing custom
+                                      form.setValue("strength", "");
+                                      form.setValue("amount", "");
+                                      form.setValue("frequency", "");
+                                      form.setValue("route", "");
+                                    }}
+                                  />
+                                  <SelectSeparator className="my-2" />
+                                  {COMMON_PRESCRIPTIONS.map((prescription) => (
+                                    <SelectItem key={prescription.name} value={prescription.name}>
+                                      {prescription.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
                             </FormItem>
                           )}
                         />
@@ -661,13 +751,15 @@ export default function Prescriptions({
                           control={form.control}
                           name="clinician_id"
                           render={({ field }) => (
-                            <FormItem className="grid grid-cols-4 items-center gap-2">
-                              <FormLabel htmlFor="clinician_id" className="text-right">
-                                Clinician
-                              </FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value}>
+                            <FormItem>
+                              <FormLabel>Clinician</FormLabel>
+                              <Select 
+                                value={field.value} 
+                                onValueChange={field.onChange}
+                                disabled={!userData?.isAdmin}
+                              >
                                 <FormControl>
-                                  <SelectTrigger id="clinician_id" className="col-span-4">
+                                  <SelectTrigger>
                                     <SelectValue placeholder="Select clinician" />
                                   </SelectTrigger>
                                 </FormControl>
@@ -679,7 +771,7 @@ export default function Prescriptions({
                                   ))}
                                 </SelectContent>
                               </Select>
-                              <FormMessage className="col-span-4" />
+                              <FormMessage />
                             </FormItem>
                           )}
                         />

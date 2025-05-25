@@ -65,6 +65,103 @@ export async function POST(req: NextRequest) {
       ? `${patient.ec_first_name} ${patient.ec_middle_name ? patient.ec_middle_name + " " : ""}${patient.ec_last_name}`
       : "Not provided";
 
+    // Check if CSV format is requested
+    if (data.exportFormat === "csv") {
+      console.log("Generating CSV export...");
+      const csvRows = [];
+      
+      // Add headers
+      const headers = ["Category", "Field", "Value"];
+      csvRows.push(headers.join(","));
+
+      if (exportOptions.basicInfo) {
+        csvRows.push(["Personal Info", "Full Name", fullName]);
+        csvRows.push(["Personal Info", "Date of Birth", patient.birth_date || "Not specified"]);
+        csvRows.push(["Personal Info", "Age", patient.age || "Not specified"]);
+        csvRows.push(["Personal Info", "Contact Number", patient.contact_number || "Not provided"]);
+        csvRows.push(["Personal Info", "Address", patient.address || "Not provided"]);
+        csvRows.push(["Personal Info", "Marital Status", patient.marital_status || "Not provided"]);
+        csvRows.push(["Personal Info", "Citizenship", patient.citizenship || "Not specified"]);
+        csvRows.push(["Personal Info", "Religion", patient.religion || "Not specified"]);
+        csvRows.push(["Personal Info", "Occupation", patient.occupation || "Not specified"]);
+        csvRows.push(["Personal Info", "SSN", patient.ssn || "Not provided"]);
+        csvRows.push(["Personal Info", "Member Status", patient.member || "Not specified"]);
+        csvRows.push(["Personal Info", "Status", patient.status || "Not specified"]);
+        csvRows.push(["Personal Info", "Expected Date of Confinement", patient.expected_date_of_confinement || "Not specified"]);
+
+        // Emergency Contact
+        csvRows.push(["Emergency Contact", "Name", ecFullName]);
+        csvRows.push(["Emergency Contact", "Relationship", patient.ec_relationship || "Not specified"]);
+        csvRows.push(["Emergency Contact", "Contact Number", patient.ec_contact_number || "Not provided"]);
+      }
+
+      if (exportOptions.allergies && allergies.length > 0) {
+        allergies.forEach((allergy: any, index: number) => {
+          csvRows.push([`Allergy ${index + 1}`, "Name", allergy.name || "Not specified"]);
+          csvRows.push([`Allergy ${index + 1}`, "Severity", allergy.severity || "Not specified"]);
+        });
+      }
+
+      if (exportOptions.supplements && supplements.length > 0) {
+        supplements.forEach((supplement: any, index: number) => {
+          csvRows.push([`Supplement ${index + 1}`, "Name", supplement.name || "Not specified"]);
+          csvRows.push([`Supplement ${index + 1}`, "Strength", supplement.strength || "Not specified"]);
+          csvRows.push([`Supplement ${index + 1}`, "Amount", supplement.amount || "Not specified"]);
+          csvRows.push([`Supplement ${index + 1}`, "Frequency", supplement.frequency || "Not specified"]);
+          csvRows.push([`Supplement ${index + 1}`, "Clinician", supplement.clinician || "Not specified"]);
+          csvRows.push([`Supplement ${index + 1}`, "Status", supplement.status || "Not specified"]);
+        });
+      }
+
+      if (exportOptions.prescriptions && prescriptions.length > 0) {
+        prescriptions.forEach((prescription: any, index: number) => {
+          csvRows.push([`Prescription ${index + 1}`, "Name", prescription.name || "Not specified"]);
+          csvRows.push([`Prescription ${index + 1}`, "Strength", prescription.strength || "Not specified"]);
+          csvRows.push([`Prescription ${index + 1}`, "Amount", prescription.amount || "Not specified"]);
+          csvRows.push([`Prescription ${index + 1}`, "Frequency", prescription.frequency || "Not specified"]);
+          csvRows.push([`Prescription ${index + 1}`, "Route", prescription.route || "Not specified"]);
+          csvRows.push([`Prescription ${index + 1}`, "Clinician", prescription.clinician || "Not specified"]);
+          csvRows.push([`Prescription ${index + 1}`, "Status", prescription.status || "Not specified"]);
+          csvRows.push([`Prescription ${index + 1}`, "Date", prescription.date ? new Date(prescription.date).toLocaleDateString() : "Not specified"]);
+        });
+      }
+
+      if (exportOptions.appointments && appointments.length > 0) {
+        appointments.forEach((appointment: any, index: number) => {
+          csvRows.push([`Appointment ${index + 1}`, "Service", appointment.service || "Not specified"]);
+          csvRows.push([`Appointment ${index + 1}`, "Date", appointment.date || "Not specified"]);
+          csvRows.push([`Appointment ${index + 1}`, "Clinician", appointment.clinician || "Not specified"]);
+          csvRows.push([`Appointment ${index + 1}`, "Status", appointment.status || "Not specified"]);
+          csvRows.push([`Appointment ${index + 1}`, "Payment Status", appointment.payment_status || "Not specified"]);
+        });
+      }
+
+      if (exportOptions.labRecords && labRecords.length > 0) {
+        labRecords.forEach((record: any, index: number) => {
+          csvRows.push([`Lab Record ${index + 1}`, "Type", record.type || "Not specified"]);
+          csvRows.push([`Lab Record ${index + 1}`, "Doctor", record.doctor || "Not specified"]);
+          csvRows.push([`Lab Record ${index + 1}`, "Company", record.company || "Not specified"]);
+          csvRows.push([`Lab Record ${index + 1}`, "Ordered Date", record.ordered_date || "Not specified"]);
+          csvRows.push([`Lab Record ${index + 1}`, "Received Date", record.received_date || "Not specified"]);
+          csvRows.push([`Lab Record ${index + 1}`, "Reported Date", record.reported_date || "Not specified"]);
+          csvRows.push([`Lab Record ${index + 1}`, "Impressions", record.impressions || "Not specified"]);
+          csvRows.push([`Lab Record ${index + 1}`, "Remarks", record.remarks || "Not specified"]);
+          csvRows.push([`Lab Record ${index + 1}`, "Recommendations", record.recommendations || "Not specified"]);
+          csvRows.push([`Lab Record ${index + 1}`, "Notes", record.notes || "Not specified"]);
+        });
+      }
+
+      const csvContent = csvRows.join("\n");
+      return new NextResponse(csvContent, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/csv",
+          "Content-Disposition": `attachment; filename="Patient_Report_${fullName}.csv"`,
+        },
+      });
+    }
+
+    // If not CSV, continue with PDF generation
     console.log("Generating PDF for patient:", fullName);
 
     // Create jsPDF document for patient report

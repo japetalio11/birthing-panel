@@ -35,6 +35,7 @@ CardTitle,
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import AppointmentForm from "../../appointments/AppointmentForm";
 
 // Define combined clinician data type
 interface Clinician {
@@ -82,6 +83,7 @@ export default function ClinicianView() {
         appointments: false
     });
     const [exportFormat, setExportFormat] = useState("pdf");
+    const [showAppointmentForm, setShowAppointmentForm] = useState(false);
 
     // Get user data from session storage
     useEffect(() => {
@@ -109,84 +111,83 @@ export default function ClinicianView() {
         }
     };
 
-    // Fetch clinician data
-    useEffect(() => {
-        async function fetchClinician() {
-            try {
-                const { data, error } = await supabase
-                    .from("clinicians")
-                    .select(
-                        `
-                            *,
-                            person (
-                                *
-                            )
-                        `
+    // Define fetchClinician function at component level
+    const fetchClinician = async () => {
+        if (!id) return;
+        
+        try {
+            const { data, error } = await supabase
+                .from("clinicians")
+                .select(`
+                    *,
+                    person (
+                        *
                     )
-                    .eq("id", id)
-                    .single();
+                `)
+                .eq("id", id)
+                .single();
 
-                if (error) {
-                    console.error("Supabase query error:", error);
-                    toast.error(`Failed to fetch clinician data: ${error.message}`);
-                    setLoading(false);
-                    return router.push("/Dashboard/Clinicians");
-                }
-
-                if (!data) {
-                    console.warn(`No clinician found with ID ${id}`);
-                    toast.error(`No clinician found with ID ${id}`);
-                    setLoading(false);
-                    return router.push("/Dashboard/Clinicians");
-                }
-
-                // Get signed URL for profile image if it exists
-                if (data.person.fileurl) {
-                    const signedUrl = await getProfileImageUrl(data.person.fileurl);
-                    setProfileImageSignedUrl(signedUrl);
-                }
-
-                // Combine person and clinician data
-                const combinedData: Clinician = {
-                    id: data.person.id,
-                    first_name: data.person.first_name,
-                    middle_name: data.person.middle_name,
-                    last_name: data.person.last_name,
-                    birth_date: data.person.birth_date,
-                    age: data.person.age,
-                    contact_number: data.person.contact_number,
-                    citizenship: data.person.citizenship,
-                    address: data.person.address,
-                    fileurl: data.person.fileurl,
-                    religion: data.person.religion,
-                    status: data.person.status,
-                    marital_status: data.marital_status,
-                    appointment_id: data.appointment_id,
-                    role: data.role,
-                    license_number: data.license_number,
-                    specialization: data.specialization,
-                    prescription_id: data.prescription_id,
-                    ec_first_name: data.person.ec_first_name,
-                    ec_middle_name: data.person.ec_middle_name,
-                    ec_last_name: data.person.ec_last_name,
-                    ec_contact_number: data.person.ec_contact_number,
-                    ec_relationship: data.person.ec_relationship,
-                };
-
-                setClinician(combinedData);
-                setIsDeactivated(combinedData.status === "Inactive");
-            } catch (err) {
-                console.error("Unexpected error fetching clinician:", err);
-                toast.error("An unexpected error occurred while fetching clinician data.");
+            if (error) {
+                console.error("Supabase query error:", error);
+                toast.error(`Failed to fetch clinician data: ${error.message}`);
                 setLoading(false);
                 return router.push("/Dashboard/Clinicians");
             }
-            setLoading(false);
-        }
 
-        if (id) {
-            fetchClinician();
+            if (!data) {
+                console.warn(`No clinician found with ID ${id}`);
+                toast.error(`No clinician found with ID ${id}`);
+                setLoading(false);
+                return router.push("/Dashboard/Clinicians");
+            }
+
+            // Get signed URL for profile image if it exists
+            if (data.person.fileurl) {
+                const signedUrl = await getProfileImageUrl(data.person.fileurl);
+                setProfileImageSignedUrl(signedUrl);
+            }
+
+            // Combine person and clinician data
+            const combinedData: Clinician = {
+                id: data.id,
+                first_name: data.person.first_name,
+                middle_name: data.person.middle_name,
+                last_name: data.person.last_name,
+                birth_date: data.person.birth_date,
+                age: data.person.age,
+                contact_number: data.person.contact_number,
+                citizenship: data.person.citizenship,
+                address: data.person.address,
+                fileurl: data.person.fileurl,
+                religion: data.person.religion,
+                status: data.person.status,
+                marital_status: data.marital_status || null,
+                appointment_id: data.appointment_id || null,
+                role: data.role,
+                license_number: data.license_number,
+                specialization: data.specialization,
+                prescription_id: data.prescription_id || null,
+                ec_first_name: data.person.ec_first_name,
+                ec_middle_name: data.person.ec_middle_name,
+                ec_last_name: data.person.ec_last_name,
+                ec_contact_number: data.person.ec_contact_number,
+                ec_relationship: data.person.ec_relationship
+            };
+
+            setClinician(combinedData);
+            setIsDeactivated(combinedData.status === "Inactive");
+        } catch (error: any) {
+            console.error("Unexpected error fetching clinician:", error);
+            toast.error("An unexpected error occurred while fetching clinician data.");
+            setLoading(false);
+            return router.push("/Dashboard/Clinicians");
         }
+        setLoading(false);
+    };
+
+    // Fetch clinician data on mount
+    useEffect(() => {
+        fetchClinician();
     }, [id, router]);
 
     // Handle deactivate switch toggle
@@ -352,6 +353,7 @@ export default function ClinicianView() {
             const exportData = {
                 clinician,
                 exportOptions,
+                exportFormat,
                 supplements,
                 prescriptions,
                 appointments
@@ -373,7 +375,7 @@ export default function ClinicianView() {
             const fullName = `${clinician.first_name} ${clinician.middle_name ? clinician.middle_name + " " : ""}${clinician.last_name}`;
             const a = document.createElement("a");
             a.href = url;
-            a.download = `Clinician_Report_${fullName}.pdf`;
+            a.download = `Clinician_Report_${fullName}.${exportFormat}`;
             a.click();
             window.URL.revokeObjectURL(url);
 
@@ -476,8 +478,11 @@ export default function ClinicianView() {
                                 </div>
 
                                 <div className="flex flex-col gap-2">
-                                    <Button variant="outline">
-                                        <Mail className=" h-4 w-4" />
+                                    <Button 
+                                        variant="outline" 
+                                        onClick={() => setShowAppointmentForm(true)}
+                                    >
+                                        <Mail className="h-4 w-4" />
                                         Set Appointment
                                     </Button>
                                     
@@ -634,6 +639,7 @@ export default function ClinicianView() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="pdf">PDF</SelectItem>
+                                        <SelectItem value="csv">CSV</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -737,6 +743,19 @@ export default function ClinicianView() {
             )}
             </Tabs>
         </div>
+
+        {/* Add AppointmentForm */}
+        {clinician && (
+            <AppointmentForm
+                open={showAppointmentForm}
+                onOpenChange={setShowAppointmentForm}
+                onSuccess={() => {
+                    setShowAppointmentForm(false);
+                    fetchClinician();
+                }}
+                defaultClinicianId={clinician.id.toString()}
+            />
+        )}
         </main>
     );
 }

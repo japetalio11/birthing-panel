@@ -257,7 +257,9 @@ export default function AppointmentsTable() {
       appointmentInfo: true,
       patientInfo: false,
       clinicianInfo: false,
-      vitals: false
+      vitals: false,
+      prescriptions: false,
+      supplements: false
     }
   });
 
@@ -435,7 +437,7 @@ export default function AppointmentsTable() {
             }
         }
 
-        // Now fetch complete data for each filtered appointment
+        // Fetch complete data for each filtered appointment
         const appointmentsWithDetails = await Promise.all(
             result.map(async (appointment) => {
                 // Fetch appointment with related data
@@ -488,14 +490,46 @@ export default function AppointmentsTable() {
                     .eq("id", appointment.id)
                     .single();
 
-                if (vitalsError && vitalsError.code !== 'PGRST116') { // Ignore not found error
+                if (vitalsError && vitalsError.code !== 'PGRST116') {
                     console.error("Error fetching vitals:", vitalsError);
+                }
+
+                // Fetch prescriptions if selected
+                let prescriptionsData = null;
+                if (exportFilters.exportContent.prescriptions) {
+                    const { data: prescriptions, error: prescriptionsError } = await supabase
+                        .from("prescriptions")
+                        .select("*")
+                        .eq("appointment_id", appointment.id);
+
+                    if (prescriptionsError) {
+                        console.error("Error fetching prescriptions:", prescriptionsError);
+                    } else {
+                        prescriptionsData = prescriptions;
+                    }
+                }
+
+                // Fetch supplements if selected
+                let supplementsData = null;
+                if (exportFilters.exportContent.supplements) {
+                    const { data: supplements, error: supplementsError } = await supabase
+                        .from("supplements")
+                        .select("*")
+                        .eq("appointment_id", appointment.id);
+
+                    if (supplementsError) {
+                        console.error("Error fetching supplements:", supplementsError);
+                    } else {
+                        supplementsData = supplements;
+                    }
                 }
 
                 // Combine all data
                 return {
                     ...appointmentData,
                     vitals: vitalsData || null,
+                    prescriptions: prescriptionsData || null,
+                    supplements: supplementsData || null,
                     patient: appointmentData?.patient || null,
                     clinician: appointmentData?.clinician || null
                 };
@@ -551,6 +585,30 @@ export default function AppointmentsTable() {
                     "Blood Pressure",
                     "Respiration Rate",
                     "Oxygen Saturation"
+                );
+            }
+
+            if (exportFilters.exportContent.prescriptions) {
+                headers.push(
+                    "Medicine",
+                    "Dosage",
+                    "Frequency",
+                    "Duration",
+                    "Instructions",
+                    "Prescription Status",
+                    "Date Prescribed"
+                );
+            }
+
+            if (exportFilters.exportContent.supplements) {
+                headers.push(
+                    "Supplement Name",
+                    "Strength",
+                    "Amount",
+                    "Frequency",
+                    "Route",
+                    "Supplement Status",
+                    "Date Recommended"
                 );
             }
 
@@ -619,6 +677,32 @@ export default function AppointmentsTable() {
                         vitalsData.blood_pressure || "",
                         vitalsData.respiration_rate || "",
                         vitalsData.oxygen_saturation || ""
+                    );
+                }
+
+                if (exportFilters.exportContent.prescriptions) {
+                    const prescription = appointment.prescriptions?.[0] || {};
+                    row.push(
+                        prescription.medicine || "",
+                        prescription.dosage || "",
+                        prescription.frequency || "",
+                        prescription.duration || "",
+                        prescription.instructions || "",
+                        prescription.status || "",
+                        prescription.date ? new Date(prescription.date).toLocaleDateString() : ""
+                    );
+                }
+
+                if (exportFilters.exportContent.supplements) {
+                    const supplement = appointment.supplements?.[0] || {};
+                    row.push(
+                        supplement.name || "",
+                        supplement.strength || "",
+                        supplement.amount || "",
+                        supplement.frequency || "",
+                        supplement.route || "",
+                        supplement.status || "",
+                        supplement.date ? new Date(supplement.date).toLocaleDateString() : ""
                     );
                 }
                 
@@ -801,6 +885,8 @@ export default function AppointmentsTable() {
                                   patientInfo: !!checked,
                                   clinicianInfo: !!checked,
                                   vitals: !!checked,
+                                  prescriptions: !!checked,
+                                  supplements: !!checked,
                                 },
                               })
                             }
@@ -870,6 +956,38 @@ export default function AppointmentsTable() {
                             }
                           />
                           <Label htmlFor="vitals">Vitals</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="prescriptions"
+                            checked={exportFilters.exportContent.prescriptions}
+                            onCheckedChange={(checked) =>
+                              setExportFilters({
+                                ...exportFilters,
+                                exportContent: {
+                                  ...exportFilters.exportContent,
+                                  prescriptions: !!checked,
+                                },
+                              })
+                            }
+                          />
+                          <Label htmlFor="prescriptions">Prescriptions</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="supplements"
+                            checked={exportFilters.exportContent.supplements}
+                            onCheckedChange={(checked) =>
+                              setExportFilters({
+                                ...exportFilters,
+                                exportContent: {
+                                  ...exportFilters.exportContent,
+                                  supplements: !!checked,
+                                },
+                              })
+                            }
+                          />
+                          <Label htmlFor="supplements">Supplements</Label>
                         </div>
                       </div>
                     </div>

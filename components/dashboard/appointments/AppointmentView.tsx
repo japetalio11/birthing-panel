@@ -31,6 +31,9 @@ import VitalsForm from "./VitalsForm";
 import UpdateAppointmentForm from "./UpdateAppointmentForm";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import Prescriptions from "../person/Prescriptions";
+import SupplementRecommendation from "../person/SupplementRecommendation";
 
 interface Person {
   id: number;
@@ -100,10 +103,13 @@ export default function AppointmentView() {
     appointmentInfo: true,
     patientInfo: false,
     clinicianInfo: false,
-    vitals: false
+    vitals: false,
+    prescriptions: false,
+    supplements: false
   });
   const [exportFormat, setExportFormat] = useState("pdf");
   const [isExporting, setIsExporting] = useState(false);
+  const { userData } = useCurrentUser();
 
   // Fetch appointment data from Supabase
   useEffect(() => {
@@ -376,13 +382,48 @@ export default function AppointmentView() {
     try {
       console.log("Preparing export data with options:", exportOptions);
 
-      // Include vitals data in the export
+      // Fetch prescriptions if selected
+      let prescriptionsData = null;
+      if (exportOptions.prescriptions) {
+        const { data: prescriptions, error: prescriptionsError } = await supabase
+          .from("prescriptions")
+          .select("*")
+          .eq("appointment_id", appointment.id);
+
+        if (prescriptionsError) {
+          console.error("Error fetching prescriptions:", prescriptionsError);
+          toast.error("Failed to fetch prescriptions data");
+        } else {
+          prescriptionsData = prescriptions;
+        }
+      }
+
+      // Fetch supplements if selected
+      let supplementsData = null;
+      if (exportOptions.supplements) {
+        const { data: supplements, error: supplementsError } = await supabase
+          .from("supplements")
+          .select("*")
+          .eq("appointment_id", appointment.id);
+
+        if (supplementsError) {
+          console.error("Error fetching supplements:", supplementsError);
+          toast.error("Failed to fetch supplements data");
+        } else {
+          supplementsData = supplements;
+        }
+      }
+
+      // Include vitals data and the newly fetched data in the export
       const exportData = {
         appointment: {
           ...appointment,
-          vitals: vitals[0] || null  // Include the first vitals record if it exists
+          vitals: vitals[0] || null,
+          prescriptions: prescriptionsData || null,
+          supplements: supplementsData || null
         },
-        exportOptions
+        exportOptions,
+        exportFormat
       };
 
       console.log("Sending request to /api/export/appointment...");
@@ -398,7 +439,7 @@ export default function AppointmentView() {
         throw new Error(errorData.error || `API request failed with status ${response.status}`);
       }
 
-      console.log("Processing PDF download...");
+      console.log("Processing download...");
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const patientName = appointment.patient ? 
@@ -406,7 +447,7 @@ export default function AppointmentView() {
         "Unknown";
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Appointment_Report_${patientName}_${new Date(appointment.date).toISOString().split('T')[0]}.pdf`;
+      a.download = `Appointment_Report_${patientName}_${new Date(appointment.date).toISOString().split('T')[0]}.${exportFormat}`;
       a.click();
       window.URL.revokeObjectURL(url);
 
@@ -556,6 +597,10 @@ export default function AppointmentView() {
             <TabsList>
               <TabsTrigger value="overview">Appointment Overview</TabsTrigger>
               <TabsTrigger value="vitals">Vitals</TabsTrigger>
+              <TabsTrigger value="supplements">Supplements</TabsTrigger>
+              {(userData?.isAdmin || userData?.isDoctor) && (
+                <TabsTrigger value="prescriptions">Prescriptions</TabsTrigger>
+              )}
             </TabsList>
             <div className="ml-auto flex items-center gap-2">
               <Dialog open={openExportDialog} onOpenChange={setOpenExportDialog}>
@@ -613,6 +658,26 @@ export default function AppointmentView() {
                       />
                       <Label htmlFor="vitals">Vitals</Label>
                     </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="prescriptions"
+                        checked={exportOptions.prescriptions}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, prescriptions: !!checked })
+                        }
+                      />
+                      <Label htmlFor="prescriptions">Prescriptions</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="supplements"
+                        checked={exportOptions.supplements}
+                        onCheckedChange={(checked) =>
+                          setExportOptions({ ...exportOptions, supplements: !!checked })
+                        }
+                      />
+                      <Label htmlFor="supplements">Supplements</Label>
+                    </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                       <Label htmlFor="format" className="text-right">
                         Format
@@ -623,6 +688,7 @@ export default function AppointmentView() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="pdf">PDF</SelectItem>
+                          <SelectItem value="csv">CSV</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -774,6 +840,24 @@ export default function AppointmentView() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="supplements">
+            <SupplementRecommendation 
+              context="patient" 
+              id={appointment?.patient_id || null} 
+              appointment_id={id}
+            />
+          </TabsContent>
+
+          {(userData?.isAdmin || userData?.isDoctor) && (
+            <TabsContent value="prescriptions">
+              <Prescriptions 
+                context="patient" 
+                id={appointment?.patient_id || null} 
+                appointment_id={id}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 

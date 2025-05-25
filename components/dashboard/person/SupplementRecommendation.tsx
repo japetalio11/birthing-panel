@@ -27,6 +27,7 @@ import {
     SelectItem,
     SelectTrigger,
     SelectValue,
+    SelectSeparator,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -52,6 +53,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { supabase } from "@/lib/supabase/client";
 import { Separator } from "@radix-ui/react-dropdown-menu";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 type Props = {
     context: "patient" | "clinician";
@@ -59,6 +61,7 @@ type Props = {
     fields?: any[];
     append?: (supplement: any) => void;
     remove?: (index: number) => void;
+    appointment_id?: string | null;
 };
 
 const formSchema = z.object({
@@ -77,12 +80,32 @@ type Clinician = {
     full_name: string;
 };
 
+type ClinicianData = {
+    id: string;
+    person: {
+        first_name: string;
+        middle_name: string | null;
+        last_name: string;
+    };
+};
+
+// Add common supplement options
+const COMMON_SUPPLEMENTS = [
+    { name: "Prenatal Multivitamin", strength: "Multiple", amount: "1 tablet", frequency: "Once daily", route: "Oral" },
+    { name: "Omega-3 DHA", strength: "200mg", amount: "1 capsule", frequency: "Once daily", route: "Oral" },
+    { name: "Vitamin B12", strength: "1000mcg", amount: "1 tablet", frequency: "Once daily", route: "Oral" },
+    { name: "Vitamin C", strength: "500mg", amount: "1 tablet", frequency: "Once daily", route: "Oral" },
+    { name: "Zinc", strength: "15mg", amount: "1 tablet", frequency: "Once daily", route: "Oral" },
+    { name: "Probiotics", strength: "Multiple strains", amount: "1 capsule", frequency: "Once daily", route: "Oral" },
+];
+
 export default function SupplementRecommendation({
     context,
     id,
     fields = [],
     append,
     remove,
+    appointment_id,
 }: Props) {
     const [openDialog, setOpenDialog] = useState(false);
     const [supplementsData, setSupplementsData] = useState<any[]>([]);
@@ -92,6 +115,15 @@ export default function SupplementRecommendation({
     const [statusFilter, setStatusFilter] = useState<string>("all");
     const [dateFilter, setDateFilter] = useState<string>("");
     const { isAdmin } = useIsAdmin();
+    const { userData } = useCurrentUser();
+
+    // Add console logs to check user data
+    useEffect(() => {
+        console.log("=== Supplement Recommendation Component - User Authentication State ===");
+        console.log("Current User Data:", userData);
+        console.log("Is Admin?", userData?.isAdmin);
+        console.log("Clinician ID:", userData?.clinicianId);
+    }, [userData]);
 
     const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
@@ -108,55 +140,89 @@ export default function SupplementRecommendation({
     // Fetch clinicians
     useEffect(() => {
         async function fetchClinicians() {
+            console.log("=== Supplement Recommendation Component - Fetching Clinicians ===");
+            console.log("User Role:", userData?.isAdmin ? "Admin" : "Clinician");
+            console.log("User Name:", userData?.name);
+
             try {
-                const { data, error } = await supabase
-                    .from("clinicians")
-                    .select(`
-                        id,
-                        person (
-                            first_name,
-                            middle_name,
-                            last_name
-                        )
-                    `);
+                // If not admin, only show current clinician
+                if (!userData?.isAdmin && userData?.name) {
+                    console.log("Fetching single clinician data for name:", userData.name);
+                    
+                    // Split the name into parts
+                    const nameParts = userData.name.split(' ');
+                    const firstName = nameParts[0];
+                    const lastName = nameParts[nameParts.length - 1];
+                    
+                    const { data: cliniciansData, error: clinicianError } = await supabase
+                        .from("clinicians")
+                        .select(`
+                            id,
+                            person!inner (
+                                first_name,
+                                middle_name,
+                                last_name
+                            )
+                        `)
+                        .eq('person.first_name', firstName)
+                        .eq('person.last_name', lastName);
 
-                if (error) {
-                    console.error("Clinician fetch error:", error);
-                    toast("Error", {
-                        description: "Failed to fetch clinicians.",
-                    });
-                    return;
-                }
+                    if (clinicianError) throw clinicianError;
 
-                const clinicianList: Clinician[] = data.map((clinician: any) => {
-                    const nameParts = [
-                        clinician.person?.first_name,
-                        clinician.person?.middle_name,
-                        clinician.person?.last_name,
-                    ].filter((part) => part != null && part !== "");
-                    const full_name = nameParts.length > 0 ? nameParts.join(" ") : "Unknown Clinician";
+                    if (cliniciansData && cliniciansData.length > 0) {
+                        const clinicianList = [{
+                            id: cliniciansData[0].id.toString(),
+                            full_name: [
+                                cliniciansData[0].person.first_name,
+                                cliniciansData[0].person.middle_name,
+                                cliniciansData[0].person.last_name,
+                            ]
+                                .filter(Boolean)
+                                .join(" "),
+                        }];
 
-                    if (!clinician.person?.first_name || !clinician.person?.last_name) {
-                        console.warn(`Missing name data for clinician ID ${clinician.id}:`, clinician.person);
+                        console.log("Single Clinician Data:", clinicianList);
+                        setClinicians(clinicianList);
+                        form.setValue("clinician_id", cliniciansData[0].id.toString());
                     }
+                } else {
+                    console.log("Fetching all clinicians (Admin view)");
+                    // Admin can see all clinicians
+                    const { data, error } = await supabase
+                        .from("clinicians")
+                        .select(`
+                            id,
+                            person (
+                                first_name,
+                                middle_name,
+                                last_name
+                            )
+                        `);
 
-                    return {
+                    if (error) throw error;
+
+                    const clinicianList = (data as unknown as ClinicianData[]).map((clinician) => ({
                         id: clinician.id.toString(),
-                        full_name,
-                    };
-                });
+                        full_name: [
+                            clinician.person.first_name,
+                            clinician.person.middle_name,
+                            clinician.person.last_name,
+                        ]
+                            .filter(Boolean)
+                            .join(" "),
+                    }));
 
-                setClinicians(clinicianList);
+                    console.log("All Clinicians Data:", clinicianList);
+                    setClinicians(clinicianList);
+                }
             } catch (err) {
-                console.error("Unexpected error fetching clinicians:", err);
-                toast("Error", {
-                    description: "Unexpected error fetching clinicians.",
-                });
+                console.error("Error fetching clinicians:", err);
+                toast.error("Failed to fetch clinicians");
             }
         }
 
         fetchClinicians();
-    }, []);
+    }, [userData, form]);
 
     // Fetch supplements
     useEffect(() => {
@@ -265,38 +331,40 @@ export default function SupplementRecommendation({
 
     const onSubmitSupplement = async (data: FormValues) => {
         if (!id && !append) {
-            toast("Error", {
-                description: "Cannot add supplement without form integration.",
-            });
+            toast.error("Cannot add supplement without form integration.");
             return;
         }
 
         try {
             if (id) {
+                const supplementData = {
+                    patient_id: id,
+                    clinician_id: parseInt(data.clinician_id),
+                    appointment_id: appointment_id,
+                    name: data.name,
+                    strength: data.strength,
+                    amount: data.amount,
+                    frequency: data.frequency,
+                    route: data.route,
+                    status: "Active",
+                    date: new Date().toISOString(),
+                };
+
                 const { data: newSupplement, error } = await supabase
                     .from("supplements")
-                    .insert([
-                        {
-                            patient_id: id,
-                            name: data.name,
-                            strength: data.strength,
-                            amount: data.amount,
-                            frequency: data.frequency,
-                            route: data.route,
-                            clinician_id: parseInt(data.clinician_id),
-                            status: "Active",
-                            date: new Date().toISOString(),
-                        },
-                    ])
+                    .insert([supplementData])
                     .select()
                     .single();
 
                 if (error) {
-                    console.error("Supplement insert error:", error);
-                    toast("Error", {
-                        description: `Failed to add supplement: ${error.message}`,
-                    });
+                    console.error("Error adding supplement:", error);
+                    toast.error(`Failed to add supplement: ${error.message}`);
                     return;
+                }
+
+                const clinicianName = clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown Clinician";
+                if (clinicianName === "Unknown Clinician") {
+                    console.warn(`No clinician found for clinician_id ${data.clinician_id} during supplement insert`);
                 }
 
                 if (append) {
@@ -308,25 +376,38 @@ export default function SupplementRecommendation({
                         frequency: data.frequency,
                         route: data.route,
                         clinician_id: data.clinician_id,
-                        clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown Clinician",
-                        status: "Active",
-                        date: new Date().toLocaleDateString(),
+                        clinician: clinicianName,
+                        appointment_id: appointment_id,
+                        status: newSupplement.status,
+                        date: new Date(newSupplement.date).toLocaleDateString(),
                     });
                 } else {
                     setSupplementsData((prev) => [
                         ...prev,
                         {
-                            ...newSupplement,
-                            clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown Clinician",
-                            status: "Active",
-                            date: new Date().toLocaleDateString(),
+                            id: newSupplement.id,
+                            name: data.name,
+                            strength: data.strength,
+                            amount: data.amount,
+                            frequency: data.frequency,
+                            route: data.route,
+                            clinician_id: data.clinician_id,
+                            clinician: clinicianName,
+                            appointment_id: appointment_id,
+                            status: newSupplement.status,
+                            date: new Date(newSupplement.date).toLocaleDateString(),
                         },
                     ]);
                 }
-                toast("Supplement Added", {
+                toast.success("Supplement Added", {
                     description: "New supplement has been added successfully.",
                 });
             } else if (append) {
+                const clinicianName = clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown Clinician";
+                if (clinicianName === "Unknown Clinician") {
+                    console.warn(`No clinician found for clinician_id ${data.clinician_id} during supplement append`);
+                }
+
                 append({
                     name: data.name,
                     strength: data.strength,
@@ -334,11 +415,12 @@ export default function SupplementRecommendation({
                     frequency: data.frequency,
                     route: data.route,
                     clinician_id: data.clinician_id,
-                    clinician: clinicians.find((c) => c.id === data.clinician_id)?.full_name || "Unknown Clinician",
+                    clinician: clinicianName,
+                    appointment_id: appointment_id,
                     status: "Active",
                     date: new Date().toLocaleDateString(),
                 });
-                toast("Supplement Added", {
+                toast.success("Supplement Added", {
                     description: "New supplement has been added successfully.",
                 });
             }
@@ -352,11 +434,9 @@ export default function SupplementRecommendation({
                 clinician_id: "",
             });
             setOpenDialog(false);
-        } catch (err) {
-            console.error("Unexpected error:", err);
-            toast("Error", {
-                description: "An unexpected error occurred while saving the supplement.",
-            });
+        } catch (err: any) {
+            console.error("Error saving supplement:", err);
+            toast.error(`Failed to save supplement: ${err.message || 'Unknown error'}`);
         }
     };
 
@@ -498,16 +578,55 @@ export default function SupplementRecommendation({
                                 </DialogHeader>
                                 <Form {...form}>
                                     <form onSubmit={form.handleSubmit(onSubmitSupplement)}>
-                                        <div className="grid gap-4">
+                                        <div className="grid grid-cols-3 gap-4">
                                             <FormField
                                                 control={form.control}
                                                 name="name"
                                                 render={({ field }) => (
                                                     <FormItem>
-                                                        <FormLabel>Supplement Name</FormLabel>
-                                                        <FormControl>
-                                                            <Input {...field} />
-                                                        </FormControl>
+                                                        <FormLabel>Supplement</FormLabel>
+                                                        <Select
+                                                            value={field.value}
+                                                            onValueChange={(value) => {
+                                                                const supplement = COMMON_SUPPLEMENTS.find(s => s.name === value);
+                                                                if (supplement) {
+                                                                    form.setValue("name", supplement.name);
+                                                                    form.setValue("strength", supplement.strength);
+                                                                    form.setValue("amount", supplement.amount);
+                                                                    form.setValue("frequency", supplement.frequency);
+                                                                    form.setValue("route", supplement.route);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <FormControl>
+                                                                <SelectTrigger>
+                                                                    <SelectValue>
+                                                                        {field.value || "Select or type supplement"}
+                                                                    </SelectValue>
+                                                                </SelectTrigger>
+                                                            </FormControl>
+                                                            <SelectContent>
+                                                                <input
+                                                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 mb-2"
+                                                                    placeholder="Type custom supplement..."
+                                                                    value={field.value}
+                                                                    onChange={(e) => {
+                                                                        field.onChange(e.target.value);
+                                                                        // Clear other fields when typing custom
+                                                                        form.setValue("strength", "");
+                                                                        form.setValue("amount", "");
+                                                                        form.setValue("frequency", "");
+                                                                        form.setValue("route", "");
+                                                                    }}
+                                                                />
+                                                                <SelectSeparator className="my-2" />
+                                                                {COMMON_SUPPLEMENTS.map((supplement) => (
+                                                                    <SelectItem key={supplement.name} value={supplement.name}>
+                                                                        {supplement.name}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
                                                         <FormMessage />
                                                     </FormItem>
                                                 )}
@@ -570,16 +689,31 @@ export default function SupplementRecommendation({
                                                 render={({ field }) => (
                                                     <FormItem>
                                                         <FormLabel>Clinician</FormLabel>
-                                                        <FormControl>
-                                                            <Select {...field} />
-                                                        </FormControl>
+                                                        <Select 
+                                                            value={field.value} 
+                                                            onValueChange={field.onChange}
+                                                            disabled={!userData?.isAdmin}
+                                                        >
+                                                            <FormControl>
+                                                                <SelectTrigger>
+                                                                    <SelectValue placeholder="Select clinician" />
+                                                                </SelectTrigger>
+                                                            </FormControl>
+                                                            <SelectContent>
+                                                                {clinicians.map((clinician) => (
+                                                                    <SelectItem key={clinician.id} value={clinician.id}>
+                                                                        {clinician.full_name}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
                                                         <FormMessage />
                                                     </FormItem>
                                                 )}
                                             />
                                         </div>
                                         <DialogFooter>
-                                            <Button type="submit">Save</Button>
+                                            <Button type="submit">Save supplement</Button>
                                         </DialogFooter>
                                     </form>
                                 </Form>

@@ -61,7 +61,8 @@ export async function POST(request: Request) {
           avatar: null,
           userType: 'admin',
           isAdmin: true,
-          isDoctor: false
+          isDoctor: false,
+          clinicianId: null
         }
       });
 
@@ -104,7 +105,7 @@ export async function POST(request: Request) {
     // Get clinician details
     const { data: clinicianData, error: clinicianError } = await supabase
       .from('clinicians')
-      .select('role, password')
+      .select('id, role, password')
       .eq('id', person.id)
       .single();
 
@@ -132,7 +133,8 @@ export async function POST(request: Request) {
         avatar: person.fileurl,
         userType: 'clinician',
         isAdmin: false,
-        isDoctor: clinicianData.role.toLowerCase().includes('doctor')
+        isDoctor: clinicianData.role.toLowerCase().includes('doctor'),
+        clinicianId: clinicianData.id.toString()
       }
     });
 

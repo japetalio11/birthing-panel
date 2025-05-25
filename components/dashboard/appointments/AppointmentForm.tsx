@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/lib/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 const appointmentFormSchema = z.object({
   patient_id: z.coerce.string().min(1, "Patient is required"),
@@ -21,106 +22,174 @@ const appointmentFormSchema = z.object({
   service: z.string().min(1, "Service is required"),
 });
 
-type AppointmentFormValues = z.infer<typeof appointmentFormSchema>;
-
 interface Person {
   id: string;
   first_name: string;
-  middle_name?: string;
+  middle_name: string | null;
   last_name: string;
 }
+
+interface ClinicianResponse {
+  id: string;
+  person: {
+    first_name: string;
+    middle_name: string | null;
+    last_name: string;
+  };
+}
+
+type AppointmentFormValues = z.infer<typeof appointmentFormSchema>;
 
 interface AppointmentFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  defaultPatientId?: string;
+  defaultClinicianId?: string;
 }
 
 // Add a utility class for consistent input/select height and width
 const inputClass = "h-10 w-full min-w-[140px]"; // adjust min-w as needed
 
-export default function AppointmentForm({ open, onOpenChange, onSuccess }: AppointmentFormProps) {
+export default function AppointmentForm({ open, onOpenChange, onSuccess, defaultPatientId, defaultClinicianId }: AppointmentFormProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [patients, setPatients] = React.useState<Person[]>([]);
   const [clinicians, setClinicians] = React.useState<Person[]>([]);
+  const { userData } = useCurrentUser();
 
   const services = ["Prenatal Care", "Postpartum Care", "Consultation", "Ultrasound", "Lab Test"];
 
   const form = useForm<AppointmentFormValues>({
     resolver: zodResolver(appointmentFormSchema),
     defaultValues: {
-      patient_id: "",
-      clinician_id: "",
+      patient_id: defaultPatientId || "",
+      clinician_id: defaultClinicianId || "",
       date: new Date(),
       service: "",
     },
   });
 
+  // Add console logs to check user data
+  React.useEffect(() => {
+    console.log("=== Add Appointment Form - User Authentication State ===");
+    console.log("Current User Data:", userData);
+    console.log("Is Admin?", userData?.isAdmin);
+    console.log("Current User Name:", userData?.name);
+  }, [userData]);
+
   React.useEffect(() => {
     const fetchData = async () => {
-      const { data: patientsData, error: patientsError } = await supabase
-        .from("patients")
-        .select(`
-          id,
-          person (
-            first_name,
-            middle_name,
-            last_name
-          )
-        `);
+      try {
+        // Fetch patients
+        const { data: patientsData, error: patientsError } = await supabase
+          .from("patients")
+          .select(`
+            id,
+            person (
+              first_name,
+              middle_name,
+              last_name
+            )
+          `);
 
-      if (patientsError) {
-        console.error("Patients fetch error:", patientsError);
-        toast.error("Error fetching patients");
-      }
+        if (patientsError) {
+          console.error("Patients fetch error:", patientsError);
+          toast.error("Error fetching patients");
+          return;
+        }
 
-      if (patientsData) {
-        setPatients(
-          patientsData.map((p: any) => ({
-            id: p.id.toString(),
-            first_name: p.person.first_name || "",
-            middle_name: p.person.middle_name || "",
-            last_name: p.person.last_name || "",
-          }))
-        );
-      }
+        if (patientsData) {
+          setPatients(
+            patientsData.map((p: any) => ({
+              id: p.id.toString(),
+              first_name: p.person.first_name || "",
+              middle_name: p.person.middle_name || null,
+              last_name: p.person.last_name || "",
+            }))
+          );
+        }
 
-      const { data: cliniciansData, error: cliniciansError } = await supabase
-        .from("clinicians")
-        .select(`
-          id,
-          role,
-          specialization,
-          person (
-            first_name,
-            middle_name,
-            last_name
-          )
-        `);
+        // If not admin, only show current clinician
+        if (!userData?.isAdmin && userData?.name) {
+          console.log("Fetching single clinician data for name:", userData.name);
+          
+          // Split the name into parts
+          const nameParts = userData.name.split(' ');
+          const firstName = nameParts[0];
+          const lastName = nameParts[nameParts.length - 1];
+          
+          const { data: cliniciansData, error: clinicianError } = await supabase
+            .from("clinicians")
+            .select(`
+              id,
+              person!inner (
+                first_name,
+                middle_name,
+                last_name
+              )
+            `)
+            .eq('person.first_name', firstName)
+            .eq('person.last_name', lastName)
+            .single();
 
-      if (cliniciansError) {
-        console.error("Clinicians fetch error:", cliniciansError);
-        toast.error("Error fetching clinicians");
-      }
+          if (clinicianError) {
+            console.error("Clinician fetch error:", clinicianError);
+            toast.error("Error fetching clinician");
+            return;
+          }
 
-      if (cliniciansData) {
-        setClinicians(
-          cliniciansData.map((c: any) => ({
-            id: c.id.toString(),
-            first_name: c.person.first_name || "",
-            middle_name: c.person.middle_name || "",
-            last_name: c.person.last_name || "",
-            role: c.role,
-            specialization: c.specialization
-          }))
-        );
+          if (cliniciansData) {
+            const clinician: Person = {
+              id: cliniciansData.id.toString(),
+              first_name: cliniciansData.person.first_name || "",
+              middle_name: cliniciansData.person.middle_name || null,
+              last_name: cliniciansData.person.last_name || "",
+            };
+            console.log("Single Clinician Data:", clinician);
+            setClinicians([clinician]);
+            form.setValue("clinician_id", cliniciansData.id.toString());
+          }
+        } else {
+          console.log("Fetching all clinicians (Admin view)");
+          // Admin can see all clinicians
+          const { data: cliniciansData, error: cliniciansError } = await supabase
+            .from("clinicians")
+            .select(`
+              id,
+              person (
+                first_name,
+                middle_name,
+                last_name
+              )
+            `);
+
+          if (cliniciansError) {
+            console.error("Clinicians fetch error:", cliniciansError);
+            toast.error("Error fetching clinicians");
+            return;
+          }
+
+          if (cliniciansData) {
+            const formattedClinicians = cliniciansData.map((c: any) => ({
+              id: c.id.toString(),
+              first_name: c.person.first_name || "",
+              middle_name: c.person.middle_name || null,
+              last_name: c.person.last_name || "",
+            }));
+            console.log("All Clinicians Data:", formattedClinicians);
+            setClinicians(formattedClinicians);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching data:", err);
+        toast.error("Failed to fetch data");
       }
     };
 
     if (open) {
       fetchData();
     }
-  }, [open]);
+  }, [open, userData, form]);
 
   const onSubmit = async (data: AppointmentFormValues) => {
     try {
@@ -220,10 +289,16 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Clinician</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger className={inputClass}>
-                        <SelectValue placeholder="Select clinician" />
-                      </SelectTrigger>
+                    <Select 
+                      value={field.value} 
+                      onValueChange={field.onChange}
+                      disabled={!userData?.isAdmin}
+                    >
+                      <FormControl>
+                        <SelectTrigger className={inputClass}>
+                          <SelectValue placeholder="Select clinician" />
+                        </SelectTrigger>
+                      </FormControl>
                       <SelectContent>
                         {clinicians.map((c) => (
                           <SelectItem key={c.id} value={c.id}>

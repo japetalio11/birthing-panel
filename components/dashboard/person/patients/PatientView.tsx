@@ -34,6 +34,8 @@ import {
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import AppointmentForm from "../../appointments/AppointmentForm";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 // Define combined patient data type
 interface Patient {
@@ -67,6 +69,13 @@ interface Patient {
   last_visit?: string | null;
 }
 
+interface AppointmentFormProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
+  defaultPatientId?: string;
+}
+
 export default function PatientView() {
   const router = useRouter();
   const [patient, setPatient] = useState<Patient | null>(null);
@@ -89,6 +98,7 @@ export default function PatientView() {
   const [isExporting, setIsExporting] = useState(false);
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
+  const [showAppointmentForm, setShowAppointmentForm] = useState(false);
 
   useEffect(() => {
     // Get user data from session storage
@@ -388,6 +398,7 @@ export default function PatientView() {
       const exportData = {
         patient,
         exportOptions,
+        exportFormat,
         allergies,
         supplements,
         labRecords,
@@ -409,13 +420,13 @@ export default function PatientView() {
         throw new Error(errorData.error || `API request failed with status ${response.status}`);
       }
 
-      console.log("Processing PDF download...");
+      console.log("Processing download...");
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const fullName = `${patient.first_name} ${patient.middle_name ? patient.middle_name + " " : ""}${patient.last_name}`;
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Patient_Report_${fullName}.pdf`;
+      a.download = `Patient_Report_${fullName}.${exportFormat}`;
       a.click();
       window.URL.revokeObjectURL(url);
 
@@ -527,7 +538,10 @@ export default function PatientView() {
 
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-col gap-2">
-                    <Button variant="outline">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowAppointmentForm(true)}
+                    >
                       <Mail className="h-4 w-4" />
                       Set Appointment
                     </Button>
@@ -699,6 +713,7 @@ export default function PatientView() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="pdf">PDF</SelectItem>
+                          <SelectItem value="csv">CSV</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -821,6 +836,97 @@ export default function PatientView() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Add AppointmentForm */}
+      {patient && (
+        <AppointmentForm
+          open={showAppointmentForm}
+          onOpenChange={setShowAppointmentForm}
+          onSuccess={() => {
+            setShowAppointmentForm(false);
+            // Refresh patient data
+            const fetchPatient = async () => {
+              try {
+                const { data, error } = await supabase
+                  .from("patients")
+                  .select(`
+                    *,
+                    person (
+                      id,
+                      first_name,
+                      middle_name,
+                      last_name,
+                      birth_date,
+                      age,
+                      contact_number,
+                      citizenship,
+                      address,
+                      fileurl,
+                      religion,
+                      status,
+                      ec_first_name,
+                      ec_middle_name,
+                      ec_last_name,
+                      ec_contact_number,
+                      ec_relationship
+                    )
+                  `)
+                  .eq("id", id)
+                  .single();
+
+                if (error) throw error;
+
+                const combinedData: Patient = {
+                  id: data.person.id,
+                  first_name: data.person.first_name,
+                  middle_name: data.person.middle_name,
+                  last_name: data.person.last_name,
+                  birth_date: data.person.birth_date,
+                  age: data.person.age,
+                  contact_number: data.person.contact_number,
+                  citizenship: data.person.citizenship,
+                  address: data.person.address,
+                  fileurl: data.person.fileurl,
+                  religion: data.person.religion,
+                  status: data.person.status,
+                  marital_status: data.marital_status,
+                  ec_first_name: data.person.ec_first_name,
+                  ec_middle_name: data.person.ec_middle_name,
+                  ec_last_name: data.person.ec_last_name,
+                  ec_contact_number: data.person.ec_contact_number,
+                  ec_relationship: data.person.ec_relationship,
+                  expected_date_of_confinement: data.expected_date_of_confinement || null,
+                  last_menstrual_cycle: data.last_menstrual_cycle || null,
+                  gravidity: data.gravidity || null,
+                  parity: data.parity || null,
+                  occupation: data.occupation || null,
+                  ssn: data.ssn || null,
+                  member: data.member || null,
+                  allergy_id: data.allergy_id || null,
+                };
+
+                setPatient(combinedData);
+                setIsDeactivated(combinedData.status === "Inactive");
+
+                if (combinedData.fileurl) {
+                  const signedUrl = await getProfileImageUrl(combinedData.fileurl);
+                  setProfileImageSignedUrl(signedUrl);
+                }
+              } catch (err) {
+                console.error("Unexpected error fetching patient:", err);
+                toast("Error", {
+                  description: "An unexpected error occurred while fetching patient data.",
+                });
+                setLoading(false);
+                return router.push("/Patients");
+              }
+              setLoading(false);
+            };
+            fetchPatient();
+          }}
+          defaultPatientId={patient.id.toString()}
+        />
+      )}
     </main>
   );
 }
