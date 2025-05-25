@@ -202,9 +202,12 @@ export default function Dashboard() {
               oxygen_saturation
             )
           `)
-          .eq("date", today);
+          .gte("date", `${today}T00:00:00.000Z`)
+          .lte("date", `${today}T23:59:59.999Z`);
 
         if (todayAppointmentsError) throw new Error(`Today's appointments query error: ${todayAppointmentsError.message}`);
+
+        console.log("Today's appointments:", appointmentsData); // Debug log
 
         const formattedAppointments: Appointment[] = appointmentsData?.map((appointment: any) => {
           const patient = appointment.patient?.person || {};
@@ -543,130 +546,6 @@ export default function Dashboard() {
     onRowSelectionChange: setRowSelection,
     state: { sorting, rowSelection },
   });
-
-  async function fetchDashboardData() {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Fetch active patients
-      const { data: patientsData, error: patientsError } = await supabase
-        .from("person")
-        .select("id")
-        .eq("status", "Active")
-        .in("id", (await supabase.from("patients").select("id")).data?.map(p => p.id) || []);
-
-      if (patientsError) throw new Error(`Patients query error: ${patientsError.message}`);
-      setActivePatients(patientsData?.length || 0);
-
-      // Fetch active clinicians
-      const { data: cliniciansData, error: cliniciansError } = await supabase
-        .from("person")
-        .select("id")
-        .eq("status", "Active")
-        .in("id", (await supabase.from("clinicians").select("id")).data?.map(c => c.id) || []);
-
-      if (cliniciansError) throw new Error(`Clinicians query error: ${cliniciansError.message}`);
-      setActiveClinicians(cliniciansData?.length || 0);
-
-      // Fetch total appointments count
-      const { count: appointmentsCount, error: appointmentsError } = await supabase
-        .from("appointment")
-        .select("*", { count: "exact", head: true });
-
-      if (appointmentsError) throw new Error(`Appointments query error: ${appointmentsError.message}`);
-      setTotalAppointments(appointmentsCount || 0);
-
-      // Fetch patient age distribution
-      const { data: ageData, error: ageError } = await supabase
-        .from("person")
-        .select("age")
-        .not("age", "is", null)
-        .in("id", (await supabase.from("patients").select("id")).data?.map(p => p.id) || []);
-
-      if (ageError) throw new Error(`Age distribution query error: ${ageError.message}`);
-      if (!ageData || ageData.length === 0) {
-        setChartData([]);
-        setError("No patient data found");
-      } else {
-        // Aggregate age data
-        const ageCounts = ageData.reduce((acc: { [key: string]: number }, row) => {
-          const age = row.age.toString();
-          acc[age] = (acc[age] || 0) + 1;
-          return acc;
-        }, {});
-
-        // Convert to chart data format and sort
-        const formattedData = Object.entries(ageCounts)
-          .map(([age, count]) => ({
-            age,
-            numberOfPatients: count,
-          }))
-          .sort((a, b) => a.age.localeCompare(b.age, undefined, { numeric: true }));
-
-        setChartData(formattedData);
-      }
-
-      // Fetch today's appointments
-      const today = new Date().toISOString().split('T')[0];
-      const { data: appointmentsData, error: todayAppointmentsError } = await supabase
-        .from("appointment")
-        .select(`
-          *,
-          patient:patient_id (
-            person (
-              first_name,
-              middle_name,
-              last_name
-            )
-          ),
-          clinician:clinician_id (
-            person (
-              first_name,
-              middle_name,
-              last_name
-            )
-          ),
-          vitals (
-            temperature,
-            pulse_rate,
-            blood_pressure,
-            respiration_rate,
-            oxygen_saturation
-          )
-        `)
-        .eq("date", today);
-
-      if (todayAppointmentsError) throw new Error(`Today's appointments query error: ${todayAppointmentsError.message}`);
-
-      const formattedAppointments: Appointment[] = appointmentsData?.map((appointment: any) => {
-        const patient = appointment.patient?.person || {};
-        const clinician = appointment.clinician?.person || {};
-        return {
-          id: appointment.id,
-          patient_id: appointment.patient_id,
-          clinician_id: appointment.clinician_id,
-          date: appointment.date,
-          service: appointment.service,
-          weight: appointment.weight,
-          vitals: appointment.vitals,
-          gestational_age: appointment.gestational_age,
-          status: appointment.status,
-          payment_status: appointment.payment_status,
-          patient_name: `${patient.first_name || ""} ${patient.middle_name || ""} ${patient.last_name || ""}`.trim(),
-          clinician_name: `${clinician.first_name || ""} ${clinician.middle_name || ""} ${clinician.last_name || ""}`.trim(),
-        };
-      }) || [];
-
-      setTodayAppointments(formattedAppointments);
-
-    } catch (err: any) {
-      console.error("Failed to fetch dashboard data:", err);
-      setError(`Failed to load dashboard data: ${err.message || "Unknown error"}`);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   return (
     <main className="grid flex-1 gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">

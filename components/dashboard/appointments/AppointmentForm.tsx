@@ -5,9 +5,8 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { FormControl, FormField, FormItem, FormLabel, FormMessage, Form } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 const appointmentFormSchema = z.object({
   patient_id: z.coerce.string().min(1, "Patient is required"),
   clinician_id: z.coerce.string().min(1, "Clinician is required"),
-  date: z.coerce.date(),
+  date: z.string().min(1, "A valid date is required"), // Changed to string
   service: z.string().min(1, "Service is required"),
 });
 
@@ -36,11 +35,11 @@ interface AppointmentFormProps {
   onSuccess?: () => void;
 }
 
-// Add a utility class for consistent input/select height and width
-const inputClass = "h-10 w-full min-w-[140px]"; // adjust min-w as needed
+const inputClass = "h-10 w-full min-w-[140px]";
 
 export default function AppointmentForm({ open, onOpenChange, onSuccess }: AppointmentFormProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(false);
   const [patients, setPatients] = React.useState<Person[]>([]);
   const [clinicians, setClinicians] = React.useState<Person[]>([]);
 
@@ -51,30 +50,21 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
     defaultValues: {
       patient_id: "",
       clinician_id: "",
-      date: new Date(),
+      date: new Date().toISOString().split("T")[0], // Initialize with today's date as string
       service: "",
     },
   });
 
   React.useEffect(() => {
     const fetchData = async () => {
-      const { data: patientsData, error: patientsError } = await supabase
-        .from("patients")
-        .select(`
-          id,
-          person (
-            first_name,
-            middle_name,
-            last_name
-          )
-        `);
+      setIsLoading(true);
+      try {
+        const { data: patientsData, error: patientsError } = await supabase
+          .from("patients")
+          .select("id, person (first_name, middle_name, last_name)");
 
-      if (patientsError) {
-        console.error("Patients fetch error:", patientsError);
-        toast.error("Error fetching patients");
-      }
+        if (patientsError) throw new Error("Error fetching patients");
 
-      if (patientsData) {
         setPatients(
           patientsData.map((p: any) => ({
             id: p.id.toString(),
@@ -83,27 +73,13 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
             last_name: p.person.last_name || "",
           }))
         );
-      }
 
-      const { data: cliniciansData, error: cliniciansError } = await supabase
-        .from("clinicians")
-        .select(`
-          id,
-          role,
-          specialization,
-          person (
-            first_name,
-            middle_name,
-            last_name
-          )
-        `);
+        const { data: cliniciansData, error: cliniciansError } = await supabase
+          .from("clinicians")
+          .select("id, role, specialization, person (first_name, middle_name, last_name)");
 
-      if (cliniciansError) {
-        console.error("Clinicians fetch error:", cliniciansError);
-        toast.error("Error fetching clinicians");
-      }
+        if (cliniciansError) throw new Error("Error fetching clinicians");
 
-      if (cliniciansData) {
         setClinicians(
           cliniciansData.map((c: any) => ({
             id: c.id.toString(),
@@ -111,22 +87,36 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
             middle_name: c.person.middle_name || "",
             last_name: c.person.last_name || "",
             role: c.role,
-            specialization: c.specialization
+            specialization: c.specialization,
           }))
         );
+      } catch (error) {
+        toast.error("Error fetching data");
+      } finally {
+        setIsLoading(false);
       }
     };
 
     if (open) {
+      form.reset({
+        patient_id: "",
+        clinician_id: "",
+        date: new Date().toISOString().split("T")[0], // Reset to today's date as string
+        service: "",
+      });
       fetchData();
     }
-  }, [open]);
+  }, [open, form]);
 
   const onSubmit = async (data: AppointmentFormValues) => {
     try {
       setIsSubmitting(true);
 
+      // Convert string date to Date object for Supabase
       const appointmentDate = new Date(data.date);
+      if (isNaN(appointmentDate.getTime())) {
+        throw new Error("Invalid date provided");
+      }
       appointmentDate.setHours(0, 0, 0, 0);
 
       const { data: existingAppointment, error: checkError } = await supabase
@@ -138,7 +128,6 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
         .single();
 
       if (checkError && checkError.code !== "PGRST116") {
-        console.error("Check error:", checkError);
         throw new Error("Error checking for existing appointment");
       }
 
@@ -163,12 +152,16 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
       toast.success("Appointment created successfully", {
         description: `Appointment for ${patient?.first_name} ${patient?.last_name} on ${appointmentDate.toLocaleDateString()}`,
       });
-      
-      form.reset();
+
+      form.reset({
+        patient_id: "",
+        clinician_id: "",
+        date: new Date().toISOString().split("T")[0],
+        service: "",
+      });
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
-      console.error("Create error:", error);
       toast.error("Failed to create appointment", {
         description: error instanceof Error ? error.message : "Unknown error occurred",
       });
@@ -186,10 +179,9 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
             Create a new appointment by filling in the basic details below.
           </DialogDescription>
         </DialogHeader>
-        
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
-            {/* First Row: Patient and Clinician */}
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -238,7 +230,6 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
               />
             </div>
 
-            {/* Second Row: Date and Service */}
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -247,9 +238,11 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
                   <FormItem>
                     <FormLabel>Date</FormLabel>
                     <FormControl>
-                      <div className={inputClass}>
-                        <DatePicker value={field.value} onChange={field.onChange} />
-                      </div>
+                      <DatePicker
+                        value={field.value ? new Date(field.value) : new Date()}
+                        onChange={(date) => field.onChange(date.toISOString().split("T")[0])}
+                        className={inputClass}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -282,7 +275,7 @@ export default function AppointmentForm({ open, onOpenChange, onSuccess }: Appoi
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting || isLoading}>
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
