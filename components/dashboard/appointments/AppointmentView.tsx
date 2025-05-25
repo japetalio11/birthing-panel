@@ -376,8 +376,12 @@ export default function AppointmentView() {
     try {
       console.log("Preparing export data with options:", exportOptions);
 
+      // Include vitals data in the export
       const exportData = {
-        appointment,
+        appointment: {
+          ...appointment,
+          vitals: vitals[0] || null  // Include the first vitals record if it exists
+        },
         exportOptions
       };
 
@@ -785,11 +789,58 @@ export default function AppointmentView() {
             gestational_age: appointment.gestational_age ? Number(appointment.gestational_age) : null,
           } : null}
           onSuccess={() => {
-            // Refresh vitals data after successful submission
-            const fetchVitals = async () => {
-              console.log("Starting vitals refresh for appointment:", id);
-              
+            // Refresh both vitals and appointment data after successful submission
+            const refreshData = async () => {
               try {
+                // Fetch updated appointment data
+                const { data: appointmentData, error: appointmentError } = await supabase
+                  .from("appointment")
+                  .select(`
+                    *,
+                    patient:patient_id (
+                      person (
+                        id,
+                        first_name,
+                        middle_name,
+                        last_name,
+                        birth_date,
+                        age,
+                        contact_number,
+                        address
+                      )
+                    ),
+                    clinician:clinician_id (
+                      role,
+                      specialization,
+                      person (
+                        first_name,
+                        middle_name,
+                        last_name
+                      )
+                    )
+                  `)
+                  .eq("id", id)
+                  .single();
+
+                if (appointmentError) throw appointmentError;
+
+                // Transform and update appointment state
+                const transformedData = {
+                  ...appointmentData,
+                  patient: appointmentData.patient ? {
+                    id: appointmentData.patient.id,
+                    person: appointmentData.patient.person
+                  } : undefined,
+                  clinician: appointmentData.clinician ? {
+                    role: appointmentData.clinician.role,
+                    specialization: appointmentData.clinician.specialization,
+                    person: appointmentData.clinician.person
+                  } : undefined
+                };
+
+                setAppointment(transformedData);
+
+                // Fetch updated vitals data
                 const { data: vitalsData, error: vitalsError } = await supabase
                   .from("vitals")
                   .select(`
@@ -808,11 +859,12 @@ export default function AppointmentView() {
                 setHasExistingVitals(vitalsData && vitalsData.length > 0);
 
               } catch (error: any) {
-                console.error("Detailed vitals refresh error:", error);
-                toast.error("Failed to refresh vitals data");
+                console.error("Error refreshing data:", error);
+                toast.error("Failed to refresh data");
               }
             };
-            fetchVitals();
+
+            refreshData();
           }}
         />
       )}

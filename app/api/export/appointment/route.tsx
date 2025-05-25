@@ -141,6 +141,8 @@ export async function POST(req: NextRequest) {
 
       doc.setFontSize(12);
       const vitalsInfo = [
+        ["Weight", appointment.weight ? `${appointment.weight} kg` : "Not recorded"],
+        ["Gestational Age", appointment.gestational_age ? `${appointment.gestational_age} weeks` : "Not recorded"],
         ["Temperature", appointment.vitals.temperature ? `${appointment.vitals.temperature} °C` : "Not recorded"],
         ["Pulse Rate", appointment.vitals.pulse_rate ? `${appointment.vitals.pulse_rate} bpm` : "Not recorded"],
         ["Blood Pressure", appointment.vitals.blood_pressure || "Not recorded"],
