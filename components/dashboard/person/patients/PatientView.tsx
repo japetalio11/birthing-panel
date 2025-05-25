@@ -585,20 +585,24 @@ export default function PatientView() {
                                 value={deleteInput}
                                 onChange={(e) => setDeleteInput(e.target.value)}
                               />
+                              <p className="text-sm text-muted-foreground">
+                                {isDeleteEnabled ? 
+                                  "✓ Name matches, you can delete now" : 
+                                  "Enter the full name exactly as shown above to enable deletion"}
+                              </p>
                             </div>
                           </DialogHeader>
                           <DialogFooter>
-                            <DialogPrimitive.Close>
-                              <Button variant="outline">
-                                Cancel
-                              </Button>
+                            <DialogPrimitive.Close asChild>
+                              <Button variant="outline">Cancel</Button>
                             </DialogPrimitive.Close>
                             <Button
                               variant="destructive"
                               onClick={() => handleDelete(patient.id)}
                               disabled={!isDeleteEnabled}
+                              className={!isDeleteEnabled ? "opacity-50 cursor-not-allowed" : ""}
                             >
-                              Yes, delete this patient.
+                              Yes, delete this patient
                             </Button>
                           </DialogFooter>
                         </DialogContent>
@@ -859,7 +863,6 @@ export default function PatientView() {
         <AppointmentForm
           open={showAppointmentForm}
           onOpenChange={setShowAppointmentForm}
-          defaultPatientId={patient.id.toString()}
           onSuccess={() => {
             setShowAppointmentForm(false);
             setAppointmentRefreshCounter(prev => prev + 1);

@@ -266,7 +266,11 @@ export default function ClinicianView() {
         }
     };
 
-    const fullName = `${clinician.first_name} ${clinician.middle_name ? clinician.middle_name + " " : ""}${clinician.last_name}`;
+    const getClinicianFullName = (clinician: Clinician) => {
+        return `${clinician.first_name}${clinician.middle_name ? ` ${clinician.middle_name}` : ""} ${clinician.last_name}`;
+    };
+
+    const fullName = getClinicianFullName(clinician);
     const ecFullName = clinician.ec_first_name
         ? `${clinician.ec_first_name} ${clinician.ec_middle_name ? clinician.ec_middle_name + " " : ""}${clinician.ec_last_name}`
         : "Not provided";
@@ -397,7 +401,6 @@ export default function ClinicianView() {
 
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
-            const fullName = `${clinician.first_name} ${clinician.middle_name ? clinician.middle_name + " " : ""}${clinician.last_name}`;
             const a = document.createElement("a");
             a.href = url;
             a.download = `Clinician_Report_${fullName}.${exportFormat}`;
@@ -514,52 +517,58 @@ export default function ClinicianView() {
                                 Set Appointment
                             </Button>
                             
-                            <Button variant="outline" onClick={() => router.push(`/Dashboard/Clinicians/Update-Clinician-Form?id=${clinician?.id}`)}>
-                                <RefreshCcw className="h-4 w-4" />
-                                Update Clinician
-                            </Button>
-
                             {userData?.isAdmin && (
-                                <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                                    <DialogTrigger asChild>
-                                        <Button variant="outline">
-                                            <Trash2 className="h-4 w-4" />
-                                            Delete Clinician
-                                        </Button>
-                                    </DialogTrigger>
-                                    <DialogContent>
-                                        <DialogHeader>
-                                            <DialogTitle>Delete Clinician</DialogTitle>
-                                            <DialogDescription>
-                                                Are you sure you want to delete this clinician? This action cannot be undone.
-                                            </DialogDescription>
-                                            <div className="grid gap-2 py-4">
-                                                <Label htmlFor="reason">Type "{fullName}" to confirm deletion</Label>
-                                                <Input 
-                                                    id="reason" 
-                                                    className="focus:border-red-500 focus:ring-red-500" 
-                                                    placeholder={`Enter clinician name`} 
-                                                    value={deleteInput}
-                                                    onChange={(e) => setDeleteInput(e.target.value)}
-                                                />
-                                            </div>
-                                        </DialogHeader>
-                                        <DialogFooter>
-                                            <DialogPrimitive.Close>
-                                                <Button variant="outline">
-                                                    Cancel
-                                                </Button>
-                                            </DialogPrimitive.Close>
-                                            <Button 
-                                                variant="destructive" 
-                                                onClick={() => handleDelete(clinician.id)}
-                                                disabled={!isDeleteEnabled}
-                                            >
-                                                Yes, delete this clinician.
+                                <>
+                                    <Button variant="outline" onClick={() => router.push(`/Dashboard/Clinicians/Update-Clinician-Form?id=${clinician?.id}`)}>
+                                        <RefreshCcw className="h-4 w-4" />
+                                        Update Clinician
+                                    </Button>
+
+                                    <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+                                        <DialogTrigger asChild>
+                                            <Button variant="outline">
+                                                <Trash2 className="h-4 w-4" />
+                                                Delete Clinician
                                             </Button>
-                                        </DialogFooter>
-                                    </DialogContent>
-                                </Dialog>
+                                        </DialogTrigger>
+                                        <DialogContent>
+                                            <DialogHeader>
+                                                <DialogTitle>Delete Clinician</DialogTitle>
+                                                <DialogDescription>
+                                                    Are you sure you want to delete this clinician? This action cannot be undone.
+                                                </DialogDescription>
+                                                <div className="grid gap-2 py-4">
+                                                    <Label htmlFor="reason">Type "{fullName}" to confirm deletion</Label>
+                                                    <Input 
+                                                        id="reason" 
+                                                        className="focus:border-red-500 focus:ring-red-500" 
+                                                        placeholder={`Enter clinician name`} 
+                                                        value={deleteInput}
+                                                        onChange={(e) => setDeleteInput(e.target.value)}
+                                                    />
+                                                    <p className="text-sm text-muted-foreground">
+                                                        {isDeleteEnabled ? 
+                                                            "✓ Name matches, you can delete now" : 
+                                                            "Enter the full name exactly as shown above to enable deletion"}
+                                                    </p>
+                                                </div>
+                                            </DialogHeader>
+                                            <DialogFooter>
+                                                <DialogPrimitive.Close asChild>
+                                                    <Button variant="outline">Cancel</Button>
+                                                </DialogPrimitive.Close>
+                                                <Button 
+                                                    variant="destructive" 
+                                                    onClick={() => handleDelete(clinician.id)}
+                                                    disabled={!isDeleteEnabled}
+                                                    className={!isDeleteEnabled ? "opacity-50 cursor-not-allowed" : ""}
+                                                >
+                                                    Yes, delete this clinician
+                                                </Button>
+                                            </DialogFooter>
+                                        </DialogContent>
+                                    </Dialog>
+                                </>
                             )}
                         </div>
                     </div>

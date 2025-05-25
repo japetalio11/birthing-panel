@@ -584,17 +584,19 @@ export default function AppointmentView() {
                             />
                           </div>
                         </DialogHeader>
-
-                        {isDeleteEnabled && (
-                          <DialogFooter>
-                            <Button
-                              variant="destructive"
-                              onClick={() => appointment && handleDelete(appointment.id)}
-                            >
-                              Confirm Delete
-                            </Button>
-                          </DialogFooter>
-                        )}
+                        <DialogFooter>
+                          <DialogClose asChild>
+                            <Button variant="outline">Cancel</Button>
+                          </DialogClose>
+                          <Button
+                            variant="destructive"
+                            onClick={() => appointment && handleDelete(appointment.id)}
+                            disabled={!isDeleteEnabled}
+                            className={!isDeleteEnabled ? "opacity-50" : ""}
+                          >
+                            Yes, delete this appointment.
+                          </Button>
+                        </DialogFooter>
                       </DialogContent>
                     </Dialog>
                   )}

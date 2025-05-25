@@ -72,7 +72,8 @@ import {
     getCoreRowModel,
     getSortedRowModel,
     useReactTable,
-    flexRender
+    flexRender,
+    getPaginationRowModel,
 } from "@tanstack/react-table";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
@@ -268,8 +269,8 @@ export default function PatientsTable() {
         address: "",
     });
     const [tab, setTab] = React.useState("all");
-    const [sorting, setSorting] = React.useState<SortingState>([]);
-    const [rowSelection, setRowSelection] = React.useState({});
+    const [sorting, setSorting] = useState<SortingState>([]);
+    const [rowSelection, setRowSelection] = useState({});
     const [exportFilters, setExportFilters] = React.useState({
         startDate: undefined as Date | undefined,
         endDate: undefined as Date | undefined,
@@ -289,6 +290,10 @@ export default function PatientsTable() {
         }
     });
     const [openExportDialog, setOpenExportDialog] = useState(false);
+    const [pagination, setPagination] = useState({
+        pageIndex: 0,
+        pageSize: 10,
+    });
 
     // Expose update function to window for column access
     React.useEffect(() => {
@@ -939,9 +944,12 @@ export default function PatientsTable() {
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         onRowSelectionChange: setRowSelection,
+        getPaginationRowModel: getPaginationRowModel(),
+        onPaginationChange: setPagination,
         state: {
             sorting,
             rowSelection,
+            pagination,
         },
     });
 
@@ -1403,10 +1411,28 @@ export default function PatientsTable() {
                                 </Table>
                             )}
                         </CardContent>
-                        <CardFooter>
+                        <CardFooter className="flex items-center justify-between">
                             <div className="text-xs text-muted-foreground">
-                                Showing <strong>1-{filteredPatients.length}</strong> of{" "}
+                                Showing <strong>{table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}-{Math.min((table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize, filteredPatients.length)}</strong> of{" "}
                                 <strong>{patients.length}</strong> patients
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => table.previousPage()}
+                                    disabled={!table.getCanPreviousPage()}
+                                >
+                                    Previous
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => table.nextPage()}
+                                    disabled={!table.getCanNextPage()}
+                                >
+                                    Next
+                                </Button>
                             </div>
                         </CardFooter>
                     </Card>
